@@ -56,6 +56,9 @@ export async function loadAgents(): Promise<AgentDefinition[]> {
 }
 
 /** Synchronous lookup for the engine. Only valid after `loadAgents` (profileOf awaits it). */
+/** Every saved agent, synchronously. Only valid after `loadAgents`. */
+export const listAgentsSync = (): AgentDefinition[] => cache ?? []
+
 export const getAgentSync = (id: string): AgentDefinition | null => cache?.find((a) => a.id === id) ?? null
 
 async function persist(next: AgentDefinition[]): Promise<AgentDefinition[]> {
@@ -77,7 +80,7 @@ export function saveAgent(raw: unknown, id?: string): Promise<SaveResult> {
     if (id !== undefined) {
       const existing = list.find((a) => a.id === id)
       if (!existing) return { ok: false, reason: 'missing' }
-      const agent: AgentDefinition = { ...existing, ...input, allowedTools: input.allowedTools, defaultModel: input.defaultModel, thinking: input.thinking, updatedAt: now }
+      const agent: AgentDefinition = { ...existing, ...input, allowedTools: input.allowedTools, craft: input.craft, defaultModel: input.defaultModel, thinking: input.thinking, updatedAt: now }
       await persist(list.map((a) => (a.id === id ? agent : a)))
       return { ok: true, agent }
     }

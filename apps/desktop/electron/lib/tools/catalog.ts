@@ -297,6 +297,13 @@ const FAMILIES: readonly FamilyDecl[] = [
     prefixes: ['skill_', 'create_skill'],
   },
   {
+    id: 'agents',
+    label: 'agents',
+    description: 'Propose a new reusable agent (its own prompt and setup) when the person asks for one.',
+    tags: ['agente', 'agent', 'especialista', 'specialist'],
+    prefixes: ['create_agent'],
+  },
+  {
     id: 'memory',
     label: 'memory',
     description: 'Project memory: tree, search, save and link nodes.',

@@ -1,5 +1,7 @@
 import type { ToolSet } from 'ai'
+import type { BuiltinOverride } from '@shared/agents'
 import type { SpecialistProfile } from '@shared/chat'
+import { pinnedSkillsBlock } from '../agents/pinned-skills'
 import { getAppSettings } from '../app-settings'
 import { resolveFfmpeg } from '../video/ffmpeg'
 import { fragmentSystemPrompt, fragmentTurnBlock } from '../fragments/fragment-profile'
@@ -48,6 +50,7 @@ function replyLine(language?: string): string {
 const fragment: ProfileDefinition = {
   id: 'fragment',
   builtin: true,
+  whenToUse: 'Building or changing a small custom screen, panel or widget that lives inside Orbit.',
   systemPrompt: ({ language }) => fragmentSystemPrompt(language),
   tools: (input) => ({ ...createFragmentTools(input.sessionId) }),
   blocks: CRAFT_BLOCKS,
@@ -58,6 +61,7 @@ const fragment: ProfileDefinition = {
 const motion: ProfileDefinition = {
   id: 'motion',
   builtin: true,
+  whenToUse: 'Making or refining an animation, motion graphic or video piece.',
   systemPrompt: ({ language }) => [MOTION_ROLE, '', replyLine(language), '', familyGuide('motion') ?? ''].join('\n').trim(),
   tools: (input, modelVision) => {
     const voice = getAppSettings().voice
@@ -83,6 +87,7 @@ const motion: ProfileDefinition = {
 const design: ProfileDefinition = {
   id: 'design',
   builtin: true,
+  whenToUse: 'Designing a screen, layout, logo or poster on a canvas.',
   systemPrompt: ({ language }) => [DESIGN_ROLE, '', replyLine(language), '', familyGuide('design') ?? ''].join('\n').trim(),
   tools: (input) => ({ ...createDesignTools({ sessionId: input.sessionId }), ...createFontTools() }),
   blocks: CRAFT_BLOCKS,
@@ -91,3 +96,21 @@ const design: ProfileDefinition = {
 }
 
 export const BUILTIN_DEFINITIONS: Record<SpecialistProfile, ProfileDefinition> = { fragment, motion, design }
+
+/**
+ * A built-in with the person's changes layered on. A custom prompt REPLACES the whole shipped
+ * system prompt (the editor starts from it), while the craft's tools and turn context stay as
+ * shipped; pinned skills are appended after it.
+ */
+export function withOverride(base: ProfileDefinition, override: BuiltinOverride | undefined): ProfileDefinition {
+  const pinned = override?.pinnedSkills ?? base.pinnedSkills ?? []
+  const customPrompt = override?.prompt?.trim()
+  if (!override) return { ...base, pinnedSkills: pinned }
+  return {
+    ...base,
+    whenToUse: override.whenToUse ?? base.whenToUse,
+    pinnedSkills: pinned,
+    systemPrompt: (input) =>
+      [customPrompt || base.systemPrompt(input), pinnedSkillsBlock(pinned)].filter(Boolean).join('\n\n'),
+  }
+}

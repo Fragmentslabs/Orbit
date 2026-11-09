@@ -36,6 +36,7 @@ const MACHINERY_TOOLS = [
   'chat_read',
   'work_report',
   'usage_stats',
+  'create_agent',
   'hook_create',
   'hook_list',
   'hook_remove',

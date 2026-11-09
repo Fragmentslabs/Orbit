@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next"
-import { agentIdOf, describeUserAgent, isUserProfileId } from "@shared/agents"
 import type { ProfileId } from "@shared/chat"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAgents, useAgentsStore } from "@/src/stores/agents-store"
@@ -11,9 +10,9 @@ export function ProfileDialog({ profile, open, onOpenChange }: { profile: Profil
   const { t } = useTranslation()
   const agents = useAgents()
   const builtins = useAgentsStore((s) => s.builtins)
+  const described = useAgentsStore((s) => s.described)
   const view = agentView(profile, agents, t)
-  const agent = isUserProfileId(profile) ? agents.find((a) => a.id === agentIdOf(profile)) : undefined
-  const description = agent ? describeUserAgent(agent) : builtins.find((b) => b.id === profile)
+  const description = described[profile] ?? builtins.find((b) => b.id === profile)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent style={{ maxWidth: "44rem" }}>

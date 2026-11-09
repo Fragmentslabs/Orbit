@@ -45,6 +45,9 @@ export const AGENT_LIMITS = {
   prompt: 20_000,
   allowedTools: 200,
   toolName: 80,
+  whenToUse: 300,
+  pinnedSkills: 20,
+  skillSlug: 80,
 } as const
 
 /** The current version of the definition format. Bumped when a field changes meaning. */
@@ -66,6 +69,24 @@ export interface AgentInput {
    * have. It only narrows: a name that is not available in the conversation is ignored.
    */
   allowedTools?: string[]
+  /**
+   * One line saying when this agent is the right one. It drives routing: the chat's suggestion
+   * and, later, the orchestrator read it instead of the prompt. Empty = never suggested.
+   */
+  whenToUse: string
+  /**
+   * Skills fixed on this agent: their full text goes into the system prompt. The agent has no
+   * skills index, so these are the only skills it knows. Costs tokens on every turn — the
+   * weight is shown in the editor.
+   */
+  pinnedSkills: string[]
+  /**
+   * A craft this agent works in (motion, design, fragment). It brings that craft's tools and
+   * the artifact it works on, while the prompt, "when to use" and pinned skills are the agent's
+   * own — so a person can have several agents of one craft (one Motion agent per kind of video).
+   * Absent = a plain agent on the conversation's usual toolset.
+   */
+  craft?: SpecialistProfile
   /** Optional model to start new chats with. Applies only when the person has that model. */
   defaultModel?: { providerId: string; modelId: string }
   /** Optional thinking default for new chats. */
@@ -97,6 +118,8 @@ export function emptyAgentInput(): AgentInput {
     name: '',
     icon: 'bot',
     prompt: '',
+    whenToUse: '',
+    pinnedSkills: [],
     features: { vision: false, subagents: false, orchestra: false, loop: false, memories: false },
   }
 }
@@ -144,6 +167,19 @@ export function agentBlocks(features: AgentInput['features']): ProfileBlocks {
  * Everything a profile injects, for the Specialists page. Built from the same definition the
  * engine runs, so the page cannot drift from what the model really receives.
  */
+/**
+ * How much a profile puts in front of the model on every turn, in characters (a token is
+ * about four). Measured on the real system prompt, so the editor can show what pinning costs.
+ */
+export interface ProfileWeight {
+  prompt: number
+  pinnedSkills: number
+  tools: number
+}
+
+/** The parts of a built-in the person may change. Everything else stays as shipped. */
+export type BuiltinOverride = Partial<Pick<AgentInput, 'prompt' | 'whenToUse' | 'pinnedSkills'>>
+
 export interface ProfileDescription {
   /** `fragment` | `motion` | `design` for built-ins, `agent:<id>` for the person's own. */
   id: string
@@ -156,33 +192,37 @@ export interface ProfileDescription {
   blocks: ProfileBlocks
   /** A one-line description of the block injected at every turn, if any. */
   turnContext?: string
-}
-
-/** What an agent made by the person injects — the same description the built-ins have. */
-export function describeUserAgent(agent: AgentInput & { id: string }): ProfileDescription {
-  return {
-    id: userProfileId(agent.id),
-    builtin: false,
-    systemPrompt: agent.prompt,
-    tools: agent.allowedTools ?? [],
-    generalTools: !agent.allowedTools,
-    blocks: agentBlocks(agent.features),
-  }
+  whenToUse: string
+  pinnedSkills: string[]
+  weight: ProfileWeight
+  /** Built-ins only: the person changed something, so "restore default" applies. */
+  edited?: boolean
 }
 
 /** The list the Specialists page shows. */
 export interface AgentsSnapshot {
   agents: AgentDefinition[]
   builtins: ProfileDescription[]
+  /** What each of the person's agents injects, by profile id (`agent:<id>`). */
+  described: Record<string, ProfileDescription>
+  /** What the person changed in each built-in, by profile id. */
+  overrides: Record<string, BuiltinOverride>
 }
 
 export const AGENT_CHANNELS = {
   snapshot: 'agents:snapshot',
   save: 'agents:save',
   duplicate: 'agents:duplicate',
+  toolNames: 'agents:tool-names',
+  generate: 'agents:generate',
+  saveBuiltin: 'agents:save-builtin',
+  resetBuiltin: 'agents:reset-builtin',
   remove: 'agents:remove',
   changed: 'agents:changed',
 } as const
 
 /** Built-in profiles in the order they are listed. */
 export const BUILTIN_PROFILES: readonly SpecialistProfile[] = ['fragment', 'motion', 'design']
+
+/** What "Ask Orbit" returns: a draft the person reviews in the editor, never a saved agent. */
+export type AgentGenerationResult = { ok: true; suggestion: AgentInput } | { ok: false; error: string }

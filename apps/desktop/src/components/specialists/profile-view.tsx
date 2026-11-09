@@ -48,6 +48,15 @@ export function ProfileView({ description }: { description: ProfileDescription }
         )}
       </Section>
 
+      <Section title={t("specialists.view.weight")} hint={t("specialists.view.weightHint")}>
+        <p className="text-xs text-muted-foreground">
+          {t("specialists.view.weightLine", {
+            prompt: Math.ceil(description.weight.prompt / 4),
+            pinned: Math.ceil(description.weight.pinnedSkills / 4),
+          })}
+        </p>
+      </Section>
+
       <Section title={t("specialists.view.tools")}>
         {tools.length > 0 ? (
           <div className="flex flex-wrap gap-1">

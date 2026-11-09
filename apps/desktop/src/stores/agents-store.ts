@@ -10,6 +10,7 @@ import { agentsApi } from "@/src/lib/ipc"
 interface AgentsState {
   agents: AgentDefinition[]
   builtins: ProfileDescription[]
+  described: Record<string, ProfileDescription>
   loaded: boolean
   /** Loads once and starts listening; later calls are free. */
   ensure: () => void
@@ -21,10 +22,11 @@ let listening = false
 export const useAgentsStore = create<AgentsState>((set, get) => ({
   agents: [],
   builtins: [],
+  described: {},
   loaded: false,
   refresh: async () => {
     const snapshot = await agentsApi.snapshot()
-    set({ agents: snapshot.agents, builtins: snapshot.builtins, loaded: true })
+    set({ agents: snapshot.agents, builtins: snapshot.builtins, described: snapshot.described, loaded: true })
   },
   ensure: () => {
     if (listening) return

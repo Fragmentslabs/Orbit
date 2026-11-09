@@ -23,6 +23,10 @@ export interface ProfileDefinition {
   /** Narrows the toolset to these names. Absent = no narrowing. */
   allowedTools?: string[]
   blocks: ProfileBlocks
+  /** When this agent is the right one (drives suggestions and, later, the orchestrator). */
+  whenToUse?: string
+  /** Skills whose full text is part of the system prompt. */
+  pinnedSkills?: string[]
   /** The state of the artifact being worked on, injected at every turn (user message). */
   turnBlock?(sessionId: string): Promise<string>
   /** One line saying what `turnBlock` carries, for the Specialists page. */

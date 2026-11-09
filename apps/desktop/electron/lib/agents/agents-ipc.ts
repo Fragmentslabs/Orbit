@@ -1,11 +1,20 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { AGENT_CHANNELS as CH, type AgentsSnapshot } from '@shared/agents'
-import { describeBuiltins } from '../profiles/describe'
+import { CORE } from '../tools/catalog'
+import type { RoutineModel } from '@shared/routines'
+import { generateAgent } from './generator'
+import { describeAgents, describeBuiltins } from '../profiles/describe'
+import { refreshPinnedSkills } from './pinned-skills'
+import { loadOverrides, resetOverride, saveOverride } from './overrides'
 import { agentEvents, duplicateAgent, loadAgents, removeAgent, saveAgent } from './store'
 
 /** IPC of the Specialists page: the person's agents plus the description of the built-ins. */
 async function snapshot(): Promise<AgentsSnapshot> {
-  return { agents: await loadAgents(), builtins: describeBuiltins() }
+  const [agents, overrides] = await Promise.all([loadAgents(), loadOverrides()])
+  // The weight of pinned skills is measured on their real text.
+  await refreshPinnedSkills(Object.values(overrides).flatMap((o) => o.pinnedSkills ?? []))
+  await refreshPinnedSkills(agents.flatMap((a) => a.pinnedSkills))
+  return { agents, builtins: describeBuiltins(), described: describeAgents(agents), overrides }
 }
 
 export function registerAgentsIpc(): void {
@@ -21,5 +30,11 @@ export function registerAgentsIpc(): void {
   ipcMain.handle(CH.duplicate, (_e, id: string, copyLabel: string) =>
     duplicateAgent(String(id), typeof copyLabel === 'string' ? copyLabel.slice(0, 20) : 'copy'),
   )
+  // The always-on tools: the names an allow-list can reasonably mention. Family tools load on demand.
+  ipcMain.handle(CH.toolNames, () => [...CORE])
+  ipcMain.handle(CH.generate, (_e, description: string, model: RoutineModel, folders: string[], language?: string) =>
+    generateAgent(description, model, folders, language))
+  ipcMain.handle(CH.saveBuiltin, (_e, id: string, override: unknown) => saveOverride(String(id), override))
+  ipcMain.handle(CH.resetBuiltin, (_e, id: string) => resetOverride(String(id)))
   ipcMain.handle(CH.remove, (_e, id: string) => removeAgent(String(id)))
 }

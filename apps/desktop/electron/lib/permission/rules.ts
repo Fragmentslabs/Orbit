@@ -182,6 +182,8 @@ const NATIVE_TOOLS = new Set([
   'describe_image',
   // Skills
   'create_skill',
+  // Agents: only proposes, the person approves on the card
+  'create_agent',
   // Turn state (read, first-party): verify_changes checks what was
   // written in the turn; session_context brings metadata of recent turns.
   // They fell into the MCP catch-all ("verify"/"session") and asked permission on

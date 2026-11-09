@@ -1,16 +1,20 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Copy, Eye, Pencil, PlusIcon, Trash2 } from "lucide-react"
-import { BUILTIN_PROFILES, type AgentDefinition } from "@shared/agents"
+import { Copy, Eye, Pencil, PenLine, Trash2, Wand2 } from "lucide-react"
+import { BUILTIN_PROFILES, type AgentDefinition, type AgentInput } from "@shared/agents"
 import { userProfileId } from "@shared/agents"
 import type { ProfileId } from "@shared/chat"
 import { agentsApi } from "@/src/lib/ipc"
+import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
+import { CreateMenu } from "@/src/components/create-menu"
 import { CardMenu } from "@/src/components/card-menu"
 import { agentView, userAgentView, type AgentView } from "@/src/components/agent-meta"
-import { useAgents } from "@/src/stores/agents-store"
+import { useAgents, useAgentsStore } from "@/src/stores/agents-store"
 import { cn } from "@/lib/utils"
 import { AgentEditorDialog } from "./agent-editor-dialog"
 import { ProfileDialog } from "./profile-dialog"
+import { TemplatesMenu } from "./templates-menu"
+import { BuiltinEditorDialog } from "./builtin-editor-dialog"
 
 function AgentCard({ view, badge, description, onOpen, menu }: {
   view: AgentView
@@ -45,6 +49,10 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
   const { t } = useTranslation()
   const agents = useAgents()
   const [editing, setEditing] = useState<AgentDefinition | null | undefined>(undefined)
+  const builtinDescriptions = useAgentsStore((s) => s.builtins)
+  const startCreation = useStartCreationChat()
+  const [draft, setDraft] = useState<AgentInput | undefined>()
+  const [editingBuiltin, setEditingBuiltin] = useState<ProfileId | null>(null)
   const [viewing, setViewing] = useState<ProfileId | null>(null)
   const needle = query.trim().toLowerCase()
   const matches = (...fields: string[]) => !needle || fields.some((f) => f.toLowerCase().includes(needle))
@@ -66,11 +74,16 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
             <AgentCard
               key={id}
               view={view}
-              badge={t("specialists.builtin.badge")}
-              description={view.description}
+              badge={builtinDescriptions.find((b) => b.id === id)?.edited ? t("specialists.builtin.edited") : t("specialists.builtin.badge")}
+              description={builtinDescriptions.find((b) => b.id === id)?.whenToUse || view.description}
               onOpen={() => setViewing(id)}
               menu={
-                <CardMenu items={[{ id: "view", label: t("specialists.menu.view"), icon: Eye, onSelect: () => setViewing(id) }]} />
+                <CardMenu
+                  items={[
+                    { id: "view", label: t("specialists.menu.view"), icon: Eye, onSelect: () => setViewing(id) },
+                    { id: "edit", label: t("common.edit"), icon: Pencil, onSelect: () => setEditingBuiltin(id) },
+                  ]}
+                />
               }
             />
           ))}
@@ -83,14 +96,28 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
             <p className="text-sm font-semibold">{t("specialists.mine.title")}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{t("specialists.mine.description")}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setEditing(null)}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <PlusIcon className="size-3.5" />
-            {t("specialists.mine.new")}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <TemplatesMenu />
+          <CreateMenu
+            label={t("specialists.mine.new")}
+            options={[
+              {
+                id: "ask",
+                icon: Wand2,
+                title: t("askOrbit.menu.agents.title"),
+                description: t("askOrbit.menu.agents.description"),
+                onSelect: () => void startCreation("agent"),
+              },
+              {
+                id: "manual",
+                icon: PenLine,
+                title: t("askOrbit.menu.manual"),
+                description: t("askOrbit.menu.agents.manualDescription"),
+                onSelect: () => { setDraft(undefined); setEditing(null) },
+              },
+            ]}
+          />
+          </div>
         </div>
         {agents.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t("specialists.mine.empty")}</div>
@@ -129,7 +156,16 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
 
       {editing !== undefined && (
         // Remounted per agent so the form always starts from that agent's values.
-        <AgentEditorDialog key={editing?.id ?? "new"} agent={editing} open onOpenChange={(open) => !open && setEditing(undefined)} />
+        <AgentEditorDialog key={editing?.id ?? "new"} agent={editing} draft={draft} open onOpenChange={(open) => { if (!open) { setEditing(undefined); setDraft(undefined) } }} />
+      )}
+      {editingBuiltin && builtinDescriptions.find((b) => b.id === editingBuiltin) && (
+        <BuiltinEditorDialog
+          key={editingBuiltin}
+          description={builtinDescriptions.find((b) => b.id === editingBuiltin)!}
+          name={agentView(editingBuiltin, agents, t)?.name ?? editingBuiltin}
+          open
+          onOpenChange={(open) => !open && setEditingBuiltin(null)}
+        />
       )}
       {viewing && <ProfileDialog profile={viewing} open onOpenChange={(open) => !open && setViewing(null)} />}
     </div>

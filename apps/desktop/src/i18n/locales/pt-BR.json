@@ -4182,6 +4182,11 @@
         "title": "Pedir ao Orbit",
         "description": "Descreva o que deve acontecer e o modelo escreve o comando",
         "manualDescription": "Evento, tool e comando você mesmo"
+      },
+      "agents": {
+        "title": "Descrever no chat",
+        "description": "Diga para que serve o agente; o Orbit escreve",
+        "manualDescription": "Prompt, ferramentas e opções você mesmo"
       }
     },
     "mcp": {
@@ -4201,6 +4206,12 @@
       "description": "Diga o que deve acontecer sozinho em volta das tools do agente. O modelo escreve o comando — você confere na etapa seguinte.",
       "placeholder": "Ex.: toda vez que o agente editar um arquivo TypeScript, rode o prettier nele.\n\nOu: bloqueie qualquer git push --force antes de ele rodar.",
       "review": "Sugestão do Orbit. O comando roda sozinho na sua máquina, então confira antes de salvar. Tudo pode ser editado."
+    },
+    "agents": {
+      "title": "Pedir um agente ao Orbit",
+      "description": "Diga para que serve o agente e como ele deve trabalhar. O modelo escreve o nome, a linha \"quando usar\" e o prompt — você revisa tudo no próximo passo.",
+      "placeholder": "Ex.: um agente que revisa contratos: aponta cláusulas de risco, nunca edita arquivos e responde em tópicos curtos.\n\nOu: um agente de Motion para vinhetas de logo de 10 segundos, em estilo limpo e minimalista.",
+      "review": "Sugerido pelo Orbit. Leia o prompt antes de salvar: ele fala com o modelo com autoridade de sistema."
     }
   },
   "viewScope": {
@@ -4250,7 +4261,8 @@
     "builtin": {
       "title": "Especialistas nativos",
       "description": "Agentes enxutos para um ofício. Cada um substitui a configuração geral na conversa inteira. Somente leitura.",
-      "badge": "Nativo"
+      "badge": "Nativo",
+      "edited": "Editado"
     },
     "mine": {
       "title": "Meus agentes",
@@ -4275,7 +4287,25 @@
       "promptPlaceholder": "Deixe vazio para não injetar nada.",
       "promptHint": "Este é todo o prompt de sistema do chat",
       "features": "Recursos do Orbit",
-      "featuresHint": "Todos desligados por padrão. Ligar um só deixa o agente usá-lo; suas configurações e as capacidades do modelo continuam valendo."
+      "featuresHint": "Todos desligados por padrão. Ligar um só deixa o agente usá-lo; suas configurações e as capacidades do modelo continuam valendo.",
+      "whenToUse": "Quando usar",
+      "whenToUsePlaceholder": "Revisar uma mudança em busca de problemas de segurança antes do merge",
+      "whenToUseHint": "Uma linha. Os chats a leem para sugerir este agente, então diga como é a tarefa. Vazio = nunca sugerido.",
+      "pinned": "Skills fixas",
+      "pinnedHint": "O texto completo entra no system prompt, em todo turno. O agente não conhece outras skills.",
+      "pinnedNone": "Você ainda não tem skills.",
+      "pinnedWeight": "{{count}} fixas, cerca de {{tokens}} tokens em todo turno.",
+      "editBuiltin": "Editar {{name}}",
+      "builtinDescription": "Você muda as instruções; as ferramentas e o que ele lê a cada turno continuam como vieram.",
+      "restore": "Restaurar padrão",
+      "craft": "Ofício",
+      "craftNone": "Nenhum",
+      "craftHint": "Um agente comum usa as ferramentas de sempre do chat.",
+      "craftOn": "Trabalha no artefato desse ofício com as ferramentas dele. As funções do Orbit seguem o ofício.",
+      "toolLimit": "Limitar ferramentas",
+      "toolLimitOff": "Todas as ferramentas que o chat teria.",
+      "toolLimitOn": "Só as escolhidas, e só se o chat as tiver.",
+      "toolLimitAdd": "Outro nome de ferramenta, depois Enter"
     },
     "block": {
       "memories": {
@@ -4328,12 +4358,100 @@
       "on": "Ligado",
       "off": "Desligado",
       "turn": "Adicionado a cada turno",
-      "noTurn": "Nada."
+      "noTurn": "Nada.",
+      "weight": "Peso",
+      "weightHint": "Aproximadamente o que isso soma a cada turno (tokens estimados em quatro caracteres).",
+      "weightLine": "Prompt ~{{prompt}} tokens · skills fixas ~{{pinned}} tokens"
     },
     "error": {
       "name": "Dê um nome ao agente.",
       "limit": "Você chegou ao limite de agentes. Remova um antes.",
       "missing": "Este agente não existe mais."
+    },
+    "templates": {
+      "add": "Adicionar agente pronto",
+      "review": {
+        "name": "Revisor de código",
+        "description": "Lê uma mudança atrás de bugs e regressões."
+      },
+      "security": {
+        "name": "Revisor de segurança",
+        "description": "Procura jeitos de abusar do código."
+      },
+      "infra": {
+        "name": "Infraestrutura",
+        "description": "Build, deploy, CI e ambientes."
+      },
+      "validation": {
+        "name": "Validador",
+        "description": "Confere o trabalho pronto rodando."
+      },
+      "research": {
+        "name": "Pesquisador",
+        "description": "Responde uma pergunta a partir de fontes."
+      }
+    }
+  },
+  "agentProposal": {
+    "building": "Escrevendo o agente…",
+    "prompt": "Ler o prompt",
+    "skills": "Skills fixas: {{skills}}",
+    "add": "Adicionar agente",
+    "discard": "Descartar",
+    "added": "Agente adicionado — está em Ferramentas → Especialistas",
+    "discarded": "Proposta descartada."
+  },
+  "proposal": {
+    "proposed": "Proposta · {{kind}}",
+    "kind": {
+      "routine": "Rotina",
+      "agent": "Agente",
+      "skill": "Skill",
+      "mcp": "Servidor MCP",
+      "hook": "Hook"
+    },
+    "state": {
+      "pending": "Aguardando você",
+      "created": "Criado",
+      "discarded": "Descartado"
+    },
+    "details": "Ver detalhes",
+    "discard": "Descartar",
+    "when": "Quando",
+    "whatItDoes": "O que faz",
+    "folders": "Pastas",
+    "noFolder": "Nenhuma · roda como chat",
+    "routineCodeNote": "Com pasta, a rotina roda sozinha e pode ler e editar arquivos nela, sem perguntar.",
+    "whenToUse": "Quando usar",
+    "pinnedSkills": "Skills fixas",
+    "weight": "Peso",
+    "weightValue": "{{tokens}} tokens em cada conversa",
+    "agentNote": "O prompt do agente vale como instrução do sistema. Leia antes de criar.",
+    "invoke": "Chamar com",
+    "files": "Arquivos",
+    "skillScriptsNote": "Esta skill vem com scripts que podem rodar no seu computador quando ela for usada.",
+    "routineScriptNote": "Esta rotina leva scripts. Criar a rotina aprova exatamente o código mostrado aqui, que roda no seu computador, em segundo plano, enquanto o Orbit estiver aberto."
+  },
+  "creation": {
+    "routine": {
+      "title": "Nova rotina",
+      "starter": "Quero uma rotina que [o que ela faz], [quando: dias e horários, ou o que deve disparar]."
+    },
+    "agent": {
+      "title": "Novo agente",
+      "starter": "Quero um agente para [no que ele deve ser bom]. Ele deve [como trabalha ou o que deve evitar]."
+    },
+    "skill": {
+      "title": "Nova skill",
+      "starter": "Quero uma skill que ensine [o que ela deve saber ou fazer], para usar quando [quando se aplica]."
+    },
+    "mcp": {
+      "title": "Conectar um servidor",
+      "starter": "Quero conectar [o serviço ou ferramenta] ao Orbit por MCP."
+    },
+    "hook": {
+      "title": "Novo hook",
+      "starter": "Quero um hook que, [antes ou depois de qual ação], [o que deve fazer]."
     }
   }
 }

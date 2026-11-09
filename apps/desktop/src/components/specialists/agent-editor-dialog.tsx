@@ -16,20 +16,30 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { agentsApi } from "@/src/lib/ipc"
 import { AGENT_ICON_COMPONENTS } from "@/src/components/agent-meta"
+import { CraftField } from "./craft-field"
+import { ToolLimitField } from "./tool-limit-field"
+import { PinnedSkillsPicker } from "./pinned-skills-picker"
+import { WhenToUseField } from "./when-to-use-field"
 
 /** The editable part of a saved agent. */
 function inputOf(agent: AgentDefinition): AgentInput {
-  const { name, icon, prompt, features, allowedTools, defaultModel, thinking } = agent
-  return { name, icon, prompt, features: { ...features }, allowedTools, defaultModel, thinking }
+  const { name, icon, prompt, whenToUse, pinnedSkills, features, allowedTools, craft, defaultModel, thinking } = agent
+  return { name, icon, prompt, whenToUse, pinnedSkills: [...pinnedSkills], features: { ...features }, allowedTools, craft, defaultModel, thinking }
 }
 
 /**
  * Create or edit an agent. A new one starts empty — no prompt, every switch off — and the
  * form says what each switch gives, so nothing is on by surprise.
  */
-export function AgentEditorDialog({ agent, open, onOpenChange }: { agent: AgentDefinition | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function AgentEditorDialog({ agent, draft: initial, open, onOpenChange }: {
+  agent: AgentDefinition | null
+  /** A new agent that starts from this draft (what Ask Orbit wrote), to be reviewed and saved. */
+  draft?: AgentInput
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const { t } = useTranslation()
-  const [draft, setDraft] = useState<AgentInput>(() => (agent ? inputOf(agent) : emptyAgentInput()))
+  const [draft, setDraft] = useState<AgentInput>(() => (agent ? inputOf(agent) : (initial ?? emptyAgentInput())))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
@@ -99,10 +109,17 @@ export function AgentEditorDialog({ agent, open, onOpenChange }: { agent: AgentD
               className="min-h-40 font-mono text-xs"
             />
             <span className="text-[11px] font-normal text-muted-foreground">
-              {t("specialists.editor.promptHint")} · {draft.prompt.length}/{AGENT_LIMITS.prompt}
+              {t("specialists.editor.promptHint")} · ~{Math.ceil(draft.prompt.length / 4)} tok · {draft.prompt.length}/{AGENT_LIMITS.prompt}
             </span>
           </label>
 
+          <CraftField value={draft.craft} onChange={(craft) => setDraft({ ...draft, craft })} />
+          <WhenToUseField value={draft.whenToUse} onChange={(whenToUse) => setDraft({ ...draft, whenToUse })} />
+          <PinnedSkillsPicker value={draft.pinnedSkills} onChange={(pinnedSkills) => setDraft({ ...draft, pinnedSkills })} />
+
+          <ToolLimitField value={draft.allowedTools} onChange={(allowedTools) => setDraft({ ...draft, allowedTools })} />
+
+          {!draft.craft && (
           <div className="flex flex-col gap-1.5">
             <div>
               <span className="text-xs font-medium">{t("specialists.editor.features")}</span>
@@ -124,6 +141,7 @@ export function AgentEditorDialog({ agent, open, onOpenChange }: { agent: AgentD
               ))}
             </ul>
           </div>
+          )}
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">

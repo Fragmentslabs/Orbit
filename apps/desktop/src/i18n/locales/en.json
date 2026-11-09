@@ -4182,6 +4182,11 @@
         "title": "Ask Orbit",
         "description": "Describe what should happen and the model writes the command",
         "manualDescription": "Event, tool and command yourself"
+      },
+      "agents": {
+        "title": "Describe it in a chat",
+        "description": "Say what the agent is for; Orbit writes it",
+        "manualDescription": "Prompt, tools and switches yourself"
       }
     },
     "mcp": {
@@ -4201,6 +4206,12 @@
       "description": "Say what should happen on its own around the agent's tools. The model writes the command — you check it in the next step.",
       "placeholder": "E.g.: every time the agent edits a TypeScript file, run prettier on it.\n\nOr: block any git push --force before it runs.",
       "review": "Suggested by Orbit. The command runs on its own on your machine, so check it before saving. Everything is editable."
+    },
+    "agents": {
+      "title": "Ask Orbit for an agent",
+      "description": "Say what the agent is for and how it should work. The model writes the name, the \"when to use\" line and the prompt — you review everything in the next step.",
+      "placeholder": "E.g.: an agent that reviews contracts: points out risky clauses, never edits files, answers in short bullets.\n\nOr: a Motion agent for 10-second logo stings with a clean, minimal style.",
+      "review": "Suggested by Orbit. Read the prompt before saving: it speaks to the model with system authority."
     }
   },
   "viewScope": {
@@ -4250,7 +4261,8 @@
     "builtin": {
       "title": "Built-in specialists",
       "description": "Lean agents for one craft. Each replaces the general setup for the whole conversation. Read-only.",
-      "badge": "Built-in"
+      "badge": "Built-in",
+      "edited": "Edited"
     },
     "mine": {
       "title": "My agents",
@@ -4275,7 +4287,25 @@
       "promptPlaceholder": "Leave empty to inject nothing.",
       "promptHint": "This is the whole system prompt of the chat",
       "features": "Orbit features",
-      "featuresHint": "All off by default. Turning one on only lets the agent use it; your own settings and the model's abilities still apply."
+      "featuresHint": "All off by default. Turning one on only lets the agent use it; your own settings and the model's abilities still apply.",
+      "whenToUse": "When to use",
+      "whenToUsePlaceholder": "Reviewing a change for security problems before it merges",
+      "whenToUseHint": "One line. Chats read it to suggest this agent, so say what the task looks like. Empty = never suggested.",
+      "pinned": "Pinned skills",
+      "pinnedHint": "Their full text is part of the system prompt, on every turn. The agent knows no other skills.",
+      "pinnedNone": "You have no skills yet.",
+      "pinnedWeight": "{{count}} pinned, about {{tokens}} tokens on every turn.",
+      "editBuiltin": "Edit {{name}}",
+      "builtinDescription": "You change the instructions; the tools and what it reads each turn stay as shipped.",
+      "restore": "Restore default",
+      "craft": "Craft",
+      "craftNone": "None",
+      "craftHint": "A plain agent uses the usual tools of the chat.",
+      "craftOn": "Works on that craft's artifact with its tools. Its Orbit features follow the craft.",
+      "toolLimit": "Limit tools",
+      "toolLimitOff": "Every tool the chat would have.",
+      "toolLimitOn": "Only the chosen ones, and only if the chat has them.",
+      "toolLimitAdd": "Another tool name, then Enter"
     },
     "block": {
       "memories": {
@@ -4328,12 +4358,100 @@
       "on": "On",
       "off": "Off",
       "turn": "Added at every turn",
-      "noTurn": "Nothing."
+      "noTurn": "Nothing.",
+      "weight": "Weight",
+      "weightHint": "About what this adds to every turn (tokens are estimated at four characters).",
+      "weightLine": "Prompt ~{{prompt}} tokens · pinned skills ~{{pinned}} tokens"
     },
     "error": {
       "name": "Give the agent a name.",
       "limit": "You reached the limit of agents. Remove one first.",
       "missing": "This agent no longer exists."
+    },
+    "templates": {
+      "add": "Add a ready-made agent",
+      "review": {
+        "name": "Code reviewer",
+        "description": "Reads a change for bugs and regressions."
+      },
+      "security": {
+        "name": "Security reviewer",
+        "description": "Looks for ways the code can be abused."
+      },
+      "infra": {
+        "name": "Infrastructure",
+        "description": "Build, deploy, CI and environments."
+      },
+      "validation": {
+        "name": "Validator",
+        "description": "Checks finished work by running it."
+      },
+      "research": {
+        "name": "Researcher",
+        "description": "Answers a question from sources."
+      }
+    }
+  },
+  "agentProposal": {
+    "building": "Writing the agent…",
+    "prompt": "Read the prompt",
+    "skills": "Pinned skills: {{skills}}",
+    "add": "Add agent",
+    "discard": "Discard",
+    "added": "Agent added — find it in Tools → Specialists",
+    "discarded": "Proposal discarded."
+  },
+  "proposal": {
+    "proposed": "Proposal · {{kind}}",
+    "kind": {
+      "routine": "Routine",
+      "agent": "Agent",
+      "skill": "Skill",
+      "mcp": "MCP server",
+      "hook": "Hook"
+    },
+    "state": {
+      "pending": "Waiting for you",
+      "created": "Created",
+      "discarded": "Discarded"
+    },
+    "details": "See details",
+    "discard": "Discard",
+    "when": "When",
+    "whatItDoes": "What it does",
+    "folders": "Folders",
+    "noFolder": "None · runs as a chat",
+    "routineCodeNote": "With a folder, the routine runs on its own and can read and edit files there, without asking.",
+    "whenToUse": "When to use",
+    "pinnedSkills": "Pinned skills",
+    "weight": "Weight",
+    "weightValue": "{{tokens}} tokens in every chat",
+    "agentNote": "The agent's prompt works as a system instruction. Read it before creating.",
+    "invoke": "Invoke with",
+    "files": "Files",
+    "skillScriptsNote": "This skill comes with scripts that can run on your computer when it is used.",
+    "routineScriptNote": "This routine carries scripts. Creating it approves exactly the code shown here, which runs on your computer in the background while Orbit is open."
+  },
+  "creation": {
+    "routine": {
+      "title": "New routine",
+      "starter": "I want a routine that [what it should do], [when: days and times, or what should trigger it]."
+    },
+    "agent": {
+      "title": "New agent",
+      "starter": "I want an agent for [what it should be good at]. It should [how it works or what it must avoid]."
+    },
+    "skill": {
+      "title": "New skill",
+      "starter": "I want a skill that teaches [what it should know or do], to use when [when it applies]."
+    },
+    "mcp": {
+      "title": "Connect a server",
+      "starter": "I want to connect [the service or tool] to Orbit through MCP."
+    },
+    "hook": {
+      "title": "New hook",
+      "starter": "I want a hook that, [before or after which action], [what it should do]."
     }
   }
 }

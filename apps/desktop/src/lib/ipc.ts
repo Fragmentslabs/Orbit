@@ -17,7 +17,7 @@ import type {
   UnrevertResult,
 } from "@shared/chat"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
-import { AGENT_CHANNELS, type AgentDefinition, type AgentInput, type AgentsSnapshot } from "@shared/agents"
+import { AGENT_CHANNELS, type AgentDefinition, type AgentGenerationResult, type AgentInput, type AgentsSnapshot, type BuiltinOverride } from "@shared/agents"
 import { ARTIFACT_CHATS_CHANNELS, type ArtifactChats, type ArtifactChatsEvent, type ArtifactRef } from "@shared/artifacts"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
@@ -868,6 +868,11 @@ export const agentsApi = {
   /** Without `id` creates an agent; with it, replaces the editable part. */
   save: (input: AgentInput, id?: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.save, input, id) as Promise<AgentSaveResult>,
   duplicate: (id: string, copyLabel: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.duplicate, id, copyLabel) as Promise<AgentSaveResult>,
+  generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
+    window.ipcRenderer.invoke(AGENT_CHANNELS.generate, description, model, folders, language) as Promise<AgentGenerationResult>,
+  toolNames: () => window.ipcRenderer.invoke(AGENT_CHANNELS.toolNames) as Promise<string[]>,
+  saveBuiltin: (id: string, override: BuiltinOverride) => window.ipcRenderer.invoke(AGENT_CHANNELS.saveBuiltin, id, override) as Promise<boolean>,
+  resetBuiltin: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.resetBuiltin, id) as Promise<boolean>,
   remove: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.remove, id) as Promise<boolean>,
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on(AGENT_CHANNELS.changed, () => listener())

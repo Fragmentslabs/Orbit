@@ -1,5 +1,7 @@
 import type { AgentDefinition } from '@shared/agents'
 import { agentBlocks, userProfileId } from '@shared/agents'
+import { BUILTIN_DEFINITIONS } from './builtin'
+import { pinnedSkillsBlock } from '../agents/pinned-skills'
 import type { ProfileDefinition } from './types'
 
 /**
@@ -12,12 +14,18 @@ import type { ProfileDefinition } from './types'
  * composer: the agent neither forces them on nor needs to turn them off.
  */
 export function profileOfAgent(agent: AgentDefinition): ProfileDefinition {
+  // A craft agent works on the craft's artifact: its tools, blocks and turn context are the
+  // craft's own; only the words (prompt, when to use, pinned skills) are the agent's.
+  const craft = agent.craft ? BUILTIN_DEFINITIONS[agent.craft] : undefined
   return {
+    ...(craft && { tools: craft.tools, turnBlock: craft.turnBlock, turnContext: craft.turnContext }),
     id: userProfileId(agent.id),
     builtin: false,
-    systemPrompt: () => agent.prompt,
+    systemPrompt: (input) => [agent.prompt || craft?.systemPrompt(input) || '', pinnedSkillsBlock(agent.pinnedSkills)].filter(Boolean).join('\n\n'),
+    whenToUse: agent.whenToUse,
+    pinnedSkills: agent.pinnedSkills,
     allowedTools: agent.allowedTools,
-    blocks: agentBlocks(agent.features),
+    blocks: craft ? craft.blocks : agentBlocks(agent.features),
     defaultModel: agent.defaultModel,
     thinking: agent.thinking,
   }

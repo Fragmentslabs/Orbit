@@ -7,9 +7,11 @@ import {
   type SendMessageInput,
   type SessionInfo,
 } from '@shared/chat'
+import { getOverrideSync, loadOverrides } from '../agents/overrides'
+import { refreshPinnedSkills } from '../agents/pinned-skills'
 import { getAgentSync, loadAgents } from '../agents/store'
 import { readJson } from '../storage'
-import { BUILTIN_DEFINITIONS } from './builtin'
+import { BUILTIN_DEFINITIONS, withOverride } from './builtin'
 import { profileOfAgent } from './user'
 import type { ProfileDefinition } from './types'
 
@@ -32,7 +34,8 @@ export function resolveProfile(id: ProfileId): ProfileDefinition | null {
     const agent = getAgentSync(agentIdOf(id))
     return agent ? profileOfAgent(agent) : null
   }
-  return BUILTIN_DEFINITIONS[id] ?? null
+  const builtin = BUILTIN_DEFINITIONS[id]
+  return builtin ? withOverride(builtin, getOverrideSync(id)) : null
 }
 
 /**
@@ -43,8 +46,11 @@ export async function profileOf(sessionId: string): Promise<ProfileId | null> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   const id = specialistProfileOf(session)
   if (!id) return null
-  if (isUserProfileId(id)) await loadAgents()
-  return resolveProfile(id) ? id : null
+  await Promise.all([loadAgents(), loadOverrides()])
+  const def = resolveProfile(id)
+  if (!def) return null
+  await refreshPinnedSkills(def.pinnedSkills ?? [])
+  return id
 }
 
 /**
