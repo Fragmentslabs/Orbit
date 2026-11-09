@@ -39,6 +39,9 @@ export const BOOT_SOURCE = `(function (bridge, stateJson, inputJson) {
     readFile: function (path) { return call('readFile', { path: String(path) }); },
     readSheet: function (path, sheet) { return call('readSheet', { path: String(path), sheet: sheet === undefined ? undefined : String(sheet) }); },
     listFiles: function (dir) { return call('listFiles', { dir: String(dir === undefined ? '.' : dir) }); },
+    db: {
+      query: function (file, sql, params) { return call('dbQuery', { path: String(file), sql: sql, params: params }); }
+    },
     state: {
       get: function (key) { return store.kv[String(key)]; },
       set: function (key, value) { store.kv[String(key)] = JSON.parse(JSON.stringify(value === undefined ? null : value)); }
@@ -92,7 +95,7 @@ function bridge(op, args) {
   try {
     const main = vm.runInContext(
       '(async function (api) {\\n' +
-        'const { fetch, readFile, readSheet, listFiles, state, seen, fire, log, input } = api;\\n' +
+        'const { fetch, readFile, readSheet, listFiles, db, state, seen, fire, log, input } = api;\\n' +
         workerData.code +
         '\\n})',
       context,

@@ -38,6 +38,17 @@ describe("script approval", () => {
     expect(scriptApproved(script)).toBe(false)
   })
 
+  it("a secret and a database with the same name never share a fingerprint", () => {
+    const secret = scriptFingerprint({ ...script, secrets: ["X"] })
+    const database = scriptFingerprint({ ...script, databases: ["X"] })
+    expect(secret).not.toBe(database)
+    expect(scriptFingerprint({ ...script, secrets: ["X"], databases: ["X"] })).not.toBe(secret)
+  })
+
+  it("scripts approved before secrets and databases existed keep their fingerprint", () => {
+    expect(scriptFingerprint(script)).toBe(JSON.stringify([script.code, ["a.com", "b.com"], false]))
+  })
+
   it("host order does not change the fingerprint", () => {
     expect(scriptFingerprint(script)).toBe(scriptFingerprint({ ...script, hosts: ["a.com", "b.com"] }))
   })

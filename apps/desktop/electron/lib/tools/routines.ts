@@ -10,7 +10,7 @@ import { removeRoutineCompletely, runNow, updateRoutineFields } from '../routine
 import { listRoutines } from '../routines/repo'
 import { listPendingRoutines, newProposalId, proposeRoutine } from '../routines/pending'
 import { buildTeam } from '../routines/team-validate'
-import { cleanHosts, cleanSecretNames, describeOutcome, newScriptId, saveScriptFromAgent, validScriptName } from '../routines/scripts/manage'
+import { cleanDatabases, cleanHosts, cleanSecretNames, describeOutcome, newScriptId, saveScriptFromAgent, validScriptName } from '../routines/scripts/manage'
 import { runScript } from '../routines/scripts/runner'
 import { listSecretNames } from '../routines/scripts/secrets-store'
 import { MAX_SCRIPT_EVERY_MINUTES, MIN_SCRIPT_EVERY_MINUTES, type RoutineScript, type RoutineTrigger } from '@shared/routines'
@@ -61,6 +61,7 @@ const scriptSchema = z.object({
     .describe(
       'Body of an async function (JavaScript). Available: input; await fetch(url, init?) -> {ok,status,text(),json()} (https GET, declared hosts only; init.auth = { secret: "NAME", scheme: "Bearer" | "Basic" | "Token" } adds a stored secret as a header — you never see the value); ' +
         'await readFile(path), await readSheet(path, sheet?) -> {rows,sheets}, await listFiles(dir) (inside the routine folders, only if readFiles); ' +
+        'await db.query(file, sql, params?) -> {columns,rows,truncated} READ-ONLY on a SQLite file listed in databases (SELECT only, max 5000 rows, 5 s; no PRAGMA/ATTACH; ? placeholders for params); ' +
         'state.get(key)/state.set(key,value) to remember between runs; seen(id) -> true if already handled (and remembers it); fire(payload) wakes the routine (trigger scripts); log(...). Return a JSON value.',
     ),
   hosts: z.array(z.string()).max(10).describe('Domains the script may fetch over https, for example ["api.github.com"]. Empty if it fetches nothing.'),
@@ -70,6 +71,11 @@ const scriptSchema = z.object({
     .max(5)
     .optional()
     .describe('Names (UPPER_SNAKE_CASE, for example ["GITHUB_TOKEN"]) of stored secrets the script uses through fetch auth. Only sent to the declared hosts.'),
+  databases: z
+    .array(z.string())
+    .max(5)
+    .optional()
+    .describe('SQLite files inside the routine folders the script may query read-only, as paths relative to the first folder (for example ["data/sales.sqlite"]). Only SQLite files: network databases are not supported.'),
 })
 
 /** Short schedule sentence, for the texts returned to the model. */
@@ -195,12 +201,13 @@ export function createRoutinesTool(input: SendMessageInput) {
         // With a routineId the script is tried against that routine's folders, wherever this chat is.
         const testFolders = routineId ? ((await listRoutines()).find((r) => r.id === routineId)?.folders ?? folders) : folders
         if (script.readFiles && testFolders.length === 0) return 'No folder is available, so a script cannot read files. Pass the routineId of the routine whose folders it should read.'
+        if (script.databases?.length && testFolders.length === 0) return 'No folder is available, so a script cannot open a database. Pass the routineId of the routine whose folders hold it.'
         const secrets = cleanSecretNames(script.secrets)
         const stored = await listSecretNames()
         const missing = (secrets ?? []).filter((n) => !stored.includes(n))
         if (missing.length > 0) return `The secret(s) ${missing.join(', ')} are not stored yet: tell the person to add them on the routine's Scripts tab, then test again.`
         const outcome = await runScript({
-          script: { code: script.code, hosts: cleanHosts(script.hosts), readFiles: script.readFiles, secrets },
+          script: { code: script.code, hosts: cleanHosts(script.hosts), readFiles: script.readFiles, secrets, databases: cleanDatabases(script.databases) },
           folders: testFolders,
         })
         // A test never keeps the script's memory and never wakes the routine.
@@ -217,8 +224,9 @@ export function createRoutinesTool(input: SendMessageInput) {
         const built: RoutineScript[] = []
         for (const s of scripts ?? []) {
           if (!validScriptName(s.name)) return `Invalid script name "${s.name}": use lower case letters, digits and underscores.`
+          if (s.databases?.length && (mode === 'chat' || folders.length === 0)) return 'A script can only open a database in a routine that has a folder.'
           if (s.readFiles && (mode === 'chat' || folders.length === 0)) return 'A script can only read files in a routine that has a folder.'
-          built.push({ id: newScriptId(), name: s.name, summary: s.summary.trim(), code: s.code, hosts: cleanHosts(s.hosts), readFiles: s.readFiles || undefined, secrets: cleanSecretNames(s.secrets) })
+          built.push({ id: newScriptId(), name: s.name, summary: s.summary.trim(), code: s.code, hosts: cleanHosts(s.hosts), readFiles: s.readFiles || undefined, secrets: cleanSecretNames(s.secrets), databases: cleanDatabases(s.databases) })
         }
         await loadAgents()
         const chosen = agent ? listAgentsSync().find((a) => userProfileId(a.id) === agent) : undefined
@@ -268,6 +276,7 @@ export function createRoutinesTool(input: SendMessageInput) {
       if (action === 'save_script') {
         if (!script) return 'Provide the script to save.'
         if (script.readFiles && routine.folders.length === 0) return 'This routine has no folder, so a script cannot read files.'
+        if (script.databases?.length && routine.folders.length === 0) return 'This routine has no folder, so a script cannot open a database.'
         const saved = await saveScriptFromAgent(routineId, { ...script })
         if (!saved.ok) return saved.error
         return `Script "${script.name}" saved on "${routine.title}". It is NOT approved yet and cannot run: tell the person to open the routine and approve it (they see exactly what it does first).`

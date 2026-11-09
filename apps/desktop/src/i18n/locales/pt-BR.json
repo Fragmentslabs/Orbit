@@ -2993,6 +2993,8 @@
       "notApproved": "Ainda não aprovado: não roda até você aprovar.",
       "changed": "Este script mudou depois que você aprovou: não roda até você aprovar esta versão.",
       "readsFiles": "Lê arquivos nas pastas da rotina",
+      "readsDatabase": "Consulta o banco {{file}} (somente leitura)",
+      "databaseHint": "Só consultas SELECT rodam, com limite de linhas e de tempo. O arquivo nunca é alterado.",
       "noAccess": "Não acessa nada fora de si",
       "code": "Código",
       "checks": "Checagens do script",

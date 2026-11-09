@@ -234,15 +234,24 @@ export interface RoutineScript {
    * never reaches the script: the main process adds it to the request, to declared hosts only.
    */
   secrets?: string[]
+  /**
+   * SQLite files (paths inside the routine folders) the script may query, read-only, with
+   * `db.query`. Anything else it asks for is refused.
+   */
+  databases?: string[]
   /** The fingerprint of the version the person approved; absent = never approved. */
   approvedFingerprint?: string
 }
 
 /** Everything that decides what a script can do and does, as one comparable string. */
-export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'secrets'>): string {
+export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'secrets' | 'databases'>): string {
   const base: unknown[] = [script.code, [...script.hosts].sort(), !!script.readFiles]
-  // Added only when present, so scripts approved before secrets existed stay approved.
-  if (script.secrets?.length) base.push([...script.secrets].sort())
+  // Optional abilities go in ONE tagged object, only when present: scripts approved before they
+  // existed stay approved, and a secret named X can never look like a database named X.
+  const extras: Record<string, string[]> = {}
+  if (script.secrets?.length) extras.secrets = [...script.secrets].sort()
+  if (script.databases?.length) extras.databases = [...script.databases].sort()
+  if (Object.keys(extras).length > 0) base.push(extras)
   return JSON.stringify(base)
 }
 

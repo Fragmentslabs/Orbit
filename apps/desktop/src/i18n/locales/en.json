@@ -2993,6 +2993,8 @@
       "notApproved": "Not approved yet: it will not run until you approve it.",
       "changed": "This script changed after you approved it: it will not run until you approve this version.",
       "readsFiles": "Reads files in the routine folders",
+      "readsDatabase": "Reads database {{file}} (read-only)",
+      "databaseHint": "Only SELECT queries run, with limits on rows and time. The file itself is never changed.",
       "noAccess": "Touches nothing outside itself",
       "code": "Code",
       "checks": "Script checks",

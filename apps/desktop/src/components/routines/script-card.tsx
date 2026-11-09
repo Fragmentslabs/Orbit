@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, FileTextIcon, GlobeIcon, KeyRoundIcon, Loader2, PlayIcon, ShieldAlertIcon } from "lucide-react"
+import { CheckIcon, DatabaseIcon, FileTextIcon, GlobeIcon, KeyRoundIcon, Loader2, PlayIcon, ShieldAlertIcon } from "lucide-react"
 import type { RoutineScript, ScriptTestResult } from "@shared/routines"
 import { scriptApproved } from "@shared/routines"
 import { Button } from "@/components/ui/button"
@@ -78,7 +78,13 @@ export function ScriptCard({ script, trigger, onApprove, approving, onTest, onEd
             {secret}
           </span>
         ))}
-        {script.hosts.length === 0 && !script.readFiles && !script.secrets?.length && (
+        {script.databases?.map((file) => (
+          <span key={file} className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-px text-[11px]" title={t("routines.scripts.databaseHint")}>
+            <DatabaseIcon className="size-3" />
+            {t("routines.scripts.readsDatabase", { file })}
+          </span>
+        ))}
+        {script.hosts.length === 0 && !script.readFiles && !script.secrets?.length && !script.databases?.length && (
           <span className="text-[11px] text-muted-foreground">{t("routines.scripts.noAccess")}</span>
         )}
       </div>
