@@ -2792,16 +2792,9 @@
       "my": "My routines"
     },
     "create": {
-      "describeHint": "Describe it in plain words. The model turns it into a title, prompt, schedule and modes — you review everything in the next step.",
-      "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.\n\nOr: every Monday, analyze the project and create improvement tasks in pipeline mode (Orbit's pipeline board).",
       "model": "Model",
-      "generate": "Generate",
-      "generating": "Generating…",
       "noModel": "Pick a model to generate the routine.",
       "title": "New routine",
-      "foldersCodeHint": "With a folder the routine can read and edit its files.",
-      "foldersChatHint": "Folders are optional: without one, the routine runs as a chat.",
-      "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
       "viaChat": "Describe it in a chat",
       "viaChatHint": "Orbit asks what it needs and you confirm in a card",
       "viaForm": "Fill in the form",
@@ -2809,17 +2802,11 @@
     },
     "review": {
       "title": "Review routine",
-      "subtitle": "The agent suggested it — confirm or adjust before creating.",
       "back": "Back",
       "titleField": "Title",
       "promptField": "Routine prompt",
       "promptFieldHint": "This is what the agent receives on every run. It must be self-contained: there is nobody to answer questions.",
       "schedule": "When to run",
-      "modes": "Modes",
-      "modesHint": "The agent suggested these based on the work described. Toggle them freely.",
-      "suggested": "suggested",
-      "folders": "Working folders",
-      "foldersHint": "Optional. With a folder the routine can read and edit files; without one it runs as a chat.",
       "create": "Create routine"
     },
     "schedule": {
@@ -2989,22 +2976,6 @@
     "tab": {
       "notFound": "This routine no longer exists."
     },
-    "team": {
-      "title": "Team",
-      "add": "Add agent",
-      "empty": "No team: a single agent does the whole job. Add agents to split it.",
-      "namePlaceholder": "Name (for example Scriptwriter)",
-      "taskPlaceholder": "What this agent does",
-      "agent": "Agent",
-      "general": "General setup",
-      "remove": "Remove",
-      "after": "Waits for",
-      "unnamed": "(no name)",
-      "parallel": "At the same time",
-      "budget": "Budget",
-      "budgetUnit": "thousand tokens",
-      "note": "The team runs on its own, with no approval. If one agent fails, the others carry on and only the ones waiting for it are dropped."
-    },
     "trigger": {
       "watchingMinutes_one": "Watches every minute",
       "watchingMinutes_other": "Watches every {{count}} minutes",
@@ -3038,6 +3009,49 @@
       "remove": "Remove",
       "editTitle": "Script {{script}}",
       "editStarter": "I want to change the script \"{{script}}\" of the routine \"{{routine}}\" (id: {{id}}): [what to change]."
+    },
+    "form": {
+      "step1": "What and when",
+      "step2": "Review",
+      "next": "Next",
+      "agent": "Agent",
+      "agentGives": "Turned on by this agent:",
+      "noneGiven": "none",
+      "folders": "Folders (optional)",
+      "foldersHint": "Without a folder the routine runs as a chat. With one or more it can read and edit files there.",
+      "whatItDoes": "What the routine does",
+      "whatItDoesHint": "Write it like you would tell a colleague. If something is missing, the chat asks.",
+      "whatPlaceholder": "Every weekday morning, list the open pull requests, highlight the ones stalled for more than 2 days and send me the summary.",
+      "whenSchedule": "On days and times",
+      "whenEvent": "When something happens",
+      "eventExplain": "For a webhook, a deploy, a page that changed or a price, describe it in the chat: Orbit asks what it needs and builds a script that runs in the background.",
+      "eventContinue": "Continue in the chat",
+      "preferChat": "I prefer to chat",
+      "eventStarter": "{{what}}\n\nI want it to run when [what should happen].",
+      "preferStarter": "{{what}}\n\nI want it to run [days and times, or what should trigger it].",
+      "edit": "Edit",
+      "advanced": "Advanced: permissions and abilities"
+    },
+    "agents": {
+      "title": "Agents",
+      "add": "Add agent",
+      "solo": "One agent does the whole job. Add another to split the work.",
+      "needsFolder": "A team works in a folder: attach one to add more agents.",
+      "first": "Agent 1",
+      "namePlaceholder": "Name (for example Scriptwriter)",
+      "taskPlaceholder": "What this agent does",
+      "remove": "Remove",
+      "unnamed": "(no name)",
+      "parallel": "At the same time",
+      "budget": "Budget",
+      "budgetUnit": "thousand tokens",
+      "note": "The agents run on their own, with no approval. If one fails, the others carry on and only the ones waiting for it are dropped.",
+      "count_one": "· {{count}} agent",
+      "count_other": "· {{count}} agents",
+      "stageFirst": "starts first",
+      "stageAfter": "after {{names}}",
+      "waitsNone": "Starts right away",
+      "waitsFor": "Waits for {{names}}"
     }
   },
   "queue": {

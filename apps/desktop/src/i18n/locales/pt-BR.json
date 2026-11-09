@@ -2792,16 +2792,9 @@
       "my": "Minhas rotinas"
     },
     "create": {
-      "describeHint": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
-      "placeholder": "Ex.: todo dia às 9h, revise os commits do dia anterior neste repositório e escreva um resumo do que mudou, com os riscos que você encontrar.\n\nOu: toda segunda, analise o projeto e crie tasks de melhoria no modo pipeline (a esteira do Orbit).",
       "model": "Modelo",
-      "generate": "Gerar",
-      "generating": "Gerando…",
       "noModel": "Escolha um modelo para gerar a rotina.",
       "title": "Nova rotina",
-      "foldersCodeHint": "Com uma pasta, a rotina pode ler e editar os arquivos dela.",
-      "foldersChatHint": "As pastas são opcionais: sem nenhuma, a rotina roda como chat.",
-      "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
       "viaChat": "Descrever no chat",
       "viaChatHint": "O Orbit pergunta o que precisar e você confirma num cartão",
       "viaForm": "Preencher o formulário",
@@ -2809,17 +2802,11 @@
     },
     "review": {
       "title": "Revisar rotina",
-      "subtitle": "O agente sugeriu — confirme ou ajuste antes de criar.",
       "back": "Voltar",
       "titleField": "Título",
       "promptField": "Prompt da rotina",
       "promptFieldHint": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
       "schedule": "Quando executar",
-      "modes": "Modos",
-      "modesHint": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
-      "suggested": "sugerido",
-      "folders": "Pastas de trabalho",
-      "foldersHint": "Opcional. Com pasta, a rotina pode ler e editar arquivos; sem pasta, roda como chat.",
       "create": "Criar rotina"
     },
     "schedule": {
@@ -2989,22 +2976,6 @@
     "tab": {
       "notFound": "Esta rotina não existe mais."
     },
-    "team": {
-      "title": "Equipe",
-      "add": "Adicionar agente",
-      "empty": "Sem equipe: um único agente faz tudo. Adicione agentes para dividir o trabalho.",
-      "namePlaceholder": "Nome (por exemplo Roteirista)",
-      "taskPlaceholder": "O que este agente faz",
-      "agent": "Agente",
-      "general": "Configuração geral",
-      "remove": "Remover",
-      "after": "Espera por",
-      "unnamed": "(sem nome)",
-      "parallel": "Ao mesmo tempo",
-      "budget": "Orçamento",
-      "budgetUnit": "mil tokens",
-      "note": "A equipe roda sozinha, sem aprovação. Se um agente falhar, os outros seguem e só quem esperava por ele é descartado."
-    },
     "trigger": {
       "watchingMinutes_one": "Observa a cada minuto",
       "watchingMinutes_other": "Observa a cada {{count}} minutos",
@@ -3038,6 +3009,49 @@
       "remove": "Remover",
       "editTitle": "Script {{script}}",
       "editStarter": "Quero mudar o script \"{{script}}\" da rotina \"{{routine}}\" (id: {{id}}): [o que mudar]."
+    },
+    "form": {
+      "step1": "O que e quando",
+      "step2": "Revisar",
+      "next": "Próxima",
+      "agent": "Agente",
+      "agentGives": "Ligadas por este agente:",
+      "noneGiven": "nenhuma",
+      "folders": "Pastas (opcional)",
+      "foldersHint": "Sem pasta, a rotina roda como chat. Com uma ou mais, ela pode ler e editar arquivos ali.",
+      "whatItDoes": "O que a rotina faz",
+      "whatItDoesHint": "Escreva como contaria a um colega. Se faltar algo, o chat pergunta.",
+      "whatPlaceholder": "Todo dia útil de manhã, listar os pull requests abertos, destacar os parados há mais de 2 dias e me mandar o resumo.",
+      "whenSchedule": "Em dias e horários",
+      "whenEvent": "Quando algo acontecer",
+      "eventExplain": "Para um webhook, um deploy, uma página que mudou ou um preço, descreva no chat: o Orbit pergunta o que precisar e monta um script que roda em segundo plano.",
+      "eventContinue": "Continuar no chat",
+      "preferChat": "Prefiro conversar no chat",
+      "eventStarter": "{{what}}\n\nQuero que ela rode quando [o que deve acontecer].",
+      "preferStarter": "{{what}}\n\nQuero que ela rode [dias e horários, ou o que deve disparar].",
+      "edit": "Editar",
+      "advanced": "Avançado: permissões e habilidades"
+    },
+    "agents": {
+      "title": "Agentes",
+      "add": "Adicionar agente",
+      "solo": "Um agente cuida de todo o trabalho. Adicione outro para dividir.",
+      "needsFolder": "Uma equipe trabalha numa pasta: anexe uma para adicionar mais agentes.",
+      "first": "Agente 1",
+      "namePlaceholder": "Nome (por exemplo Roteirista)",
+      "taskPlaceholder": "O que este agente faz",
+      "remove": "Remover",
+      "unnamed": "(sem nome)",
+      "parallel": "Ao mesmo tempo",
+      "budget": "Orçamento",
+      "budgetUnit": "mil tokens",
+      "note": "Os agentes rodam sozinhos, sem aprovação. Se um falhar, os outros seguem e só quem esperava por ele é descartado.",
+      "count_one": "· {{count}} agente",
+      "count_other": "· {{count}} agentes",
+      "stageFirst": "etapa 1",
+      "stageAfter": "depois de {{names}}",
+      "waitsNone": "Começa logo",
+      "waitsFor": "Espera por {{names}}"
     }
   },
   "queue": {

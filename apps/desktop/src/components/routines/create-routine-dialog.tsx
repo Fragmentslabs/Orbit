@@ -1,37 +1,50 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircleIcon, ArrowLeftIcon, SparklesIcon } from "lucide-react"
-import type { PendingRoutine, RoutineModes, RoutineSuggestion, Schedule } from "@shared/routines"
-import { DEFAULT_ROUTINE_PERMISSION, parseTime, restrictModesToChat, ROUTINE_CHAT_MODES, routineModeFor } from "@shared/routines"
+import { ArrowLeftIcon } from "lucide-react"
+import { userProfileId } from "@shared/agents"
+import type { PendingRoutine, RoutineModes, Schedule } from "@shared/routines"
+import {
+  applyAgentModes,
+  DEFAULT_ROUTINE_PERMISSION,
+  parseTime,
+  restrictModesToChat,
+  routineModeFor,
+} from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { SegmentedControl } from "@/components/ui/segmented-control"
 import { Textarea } from "@/components/ui/textarea"
-import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { BranchSelector } from "@/src/components/branch-selector"
-import { FolderSelector } from "@/src/components/folder-selector"
 import { ModelPicker } from "@/src/components/model-picker"
-import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
+import { useStartChatWith } from "@/src/hooks/use-creation-chat"
+import { agentsAreValid, draftOf, emptyAgents, isTeam, soloAgent, storedFields, type AgentsDraft } from "@/src/lib/agents-draft"
+import { lastUsedChat } from "@/src/lib/last-chat"
+import { deriveTitle } from "@/src/lib/routine-title"
+import { useAgents } from "@/src/stores/agents-store"
 import type { SelectedModel } from "@/src/stores/provider-store"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { ModesEditor, ReuseChatField, ScheduleEditor } from "./schedule-editor"
+import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
+import { useSessionStore } from "@/src/stores/session-store"
+import { AgentsEditor } from "./agents-editor"
+import { AbilitiesField, Field, FoldersField } from "./form-parts"
 import { describeWhen } from "./schedule"
-import { EMPTY_TEAM, TeamEditor, teamIsValid, type TeamDraft } from "./team-editor"
-import { Truncate } from "@/components/ui/truncated-text"
+import { ScheduleEditor } from "./schedule-editor"
+
+type WhenKind = "schedule" | "event"
 
 /**
- * "New routine" modal, in two steps inside the same dialog:
+ * "New routine" form, in two steps inside the same dialog:
  *
- *   1. Describe  — free text + model, and only that
- *   2. Review    — what the model proposed, everything editable before confirming
+ *   1. What and when — what the routine does, and when: days and times, or "when something happens"
+ *   2. Review — name, instruction, model, folders (optional), the agents and the advanced settings
  *
- * Step 2 is never skipped: the agent SUGGESTS (title, prompt, schedule, modes)
- * and the user decides — nothing from the generator goes straight to disk. The
- * transition enters from the right and the header gains the back button, so
- * moving back and forth between the steps is obvious.
+ * Creating normally happens in a chat; this form is for who prefers to fill it in, and for "See
+ * details" on the card the chat proposed, which opens it already filled in. A trigger that is a
+ * script (a price, a deploy, a page that changed) needs questions and code, so it goes to the chat.
  */
 export function CreateRoutineDialog({
   open,
@@ -43,154 +56,109 @@ export function CreateRoutineDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (routineId: string) => void
-  /** Mode of the page that opened the modal. It only seeds the folders: a code page starts with
-   *  the workspace's folders attached, a chat page with none. The routine's own mode is derived
-   *  from the folders (see `routineModeFor`), so adding or removing one changes it. */
+  /** Mode of the page that opened the form. It only seeds the folders: a code page starts with the
+   *  workspace's folders attached, a chat page with none. The routine's own mode follows its folders. */
   defaultMode: "chat" | "code"
-  /** A routine the chat proposed: the modal opens straight on the review, filled in with it, and
-   *  creating keeps the proposal's id so its card recognises the routine. */
+  /** A routine the chat proposed: the form opens filled in with it, and creating keeps the
+   *  proposal's id so its card recognises the routine. */
   proposal?: PendingRoutine
 }) {
   const { t } = useTranslation()
   const { folders: workspaceFolders } = useWorkspace()
-  const routines = useRoutinesStore((s) => s.routines)
-  const generate = useRoutinesStore((s) => s.generate)
+  const allAgents = useAgents()
   const create = useRoutinesStore((s) => s.create)
-  // Vision model configured in the preferences: it is what the routine stores
-  // when Vision mode is on (the main process does not read localStorage).
+  const sessions = useSessionStore((s) => s.sessions)
+  const startChat = useStartChatWith()
+  // Vision model configured in the preferences: it is what the routine stores when vision is on
+  // (the main process does not read localStorage).
   const visionModel = useProviderStore((s) => s.visionModel)
-  const visionAvailable = !!visionModel
 
-  const [description, setDescription] = useState("")
-  const [model, setModel] = useState<SelectedModel | null>(null)
-  // The folders are optional. The routine's mode follows them: any folder, code; none, chat.
-  // The folder is picked IN STEP 1, together with the model — the generation
-  // already uses those folders as prompt context. Seeded from the current
-  // workspace (the common case is a routine for the repository already open),
-  // but independent from it from then on: switching folders in the chat behind
-  // cannot change the routine being created.
-  const [folders, setFolders] = useState<string[]>([])
-  const [generating, setGenerating] = useState(false)
-  const mode = routineModeFor(folders)
-  const [error, setError] = useState<string | null>(null)
-  const [suggestion, setSuggestion] = useState<RoutineSuggestion | null>(null)
-
-  // Step 2 fields (start from the suggestion, then follow the user's edits)
-  const [title, setTitle] = useState("")
+  const [step, setStep] = useState<1 | 2>(1)
+  const [whenKind, setWhenKind] = useState<WhenKind>("schedule")
   const [prompt, setPrompt] = useState("")
   const [schedule, setSchedule] = useState<Schedule>({ time: "09:00" })
+  const [title, setTitle] = useState("")
+  const [model, setModel] = useState<SelectedModel | null>(null)
+  const [folders, setFolders] = useState<string[]>([])
+  const [agents, setAgents] = useState<AgentsDraft>(emptyAgents)
   const [modes, setModes] = useState<RoutineModes>({ permissionMode: DEFAULT_ROUTINE_PERMISSION })
-  const [reuseChat, setReuseChat] = useState(false)
-  const [teamDraft, setTeamDraft] = useState<TeamDraft>(EMPTY_TEAM)
   const [saving, setSaving] = useState(false)
+  const mode = routineModeFor(folders)
+  const team = isTeam(agents)
 
-  /**
-   * Default model, in this order: the one of the last routine created > the one
-   * of the last chat (rule that already exists in sessionModelFor) > empty. The
-   * previous routine comes first because it is the closest context to what the
-   * user is doing now — whoever builds the second routine wants the same model
-   * as the first.
-   */
-  const fallback = useMemo<SelectedModel | null>(() => {
-    const last = [...routines].sort((a, b) => b.createdAt - a.createdAt)[0]
-    if (last) return last.model
-    return sessionModelFor(null)
+  /** A new routine starts on the model of the last chat used, like any new chat. */
+  const fallback = useMemo<SelectedModel | null>(
+    () => sessionModelFor(lastUsedChat(sessions, defaultMode)?.id ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routines.length])
+    [open],
+  )
 
-  // Every opening starts over — reopening the modal after creating a routine
-  // cannot bring back the previous draft.
+  // Every opening starts over — reopening after creating a routine cannot bring back the draft.
   useEffect(() => {
     if (!open) return
-    setDescription("")
-    setSuggestion(null)
-    setError(null)
-    setGenerating(false)
-    setModel(fallback)
-    setReuseChat(false)
-    setFolders(defaultMode === "chat" ? [] : workspaceFolders)
-    if (proposal) {
-      const filled = { title: proposal.title, prompt: proposal.prompt, schedule: proposal.schedule, modes: proposal.modes }
-      setSuggestion(filled)
-      setTitle(filled.title)
-      setPrompt(filled.prompt)
-      setSchedule(filled.schedule)
-      setModes(filled.modes)
-      setFolders(proposal.folders)
-      setModel(proposal.model)
-    }
+    setStep(1)
+    setWhenKind(proposal?.trigger ? "event" : "schedule")
+    setPrompt(proposal?.prompt ?? "")
+    setSchedule(proposal?.schedule ?? { time: "09:00" })
+    setTitle(proposal?.title ?? "")
+    setModel(proposal?.model ?? fallback)
+    setFolders(proposal ? proposal.folders : defaultMode === "chat" ? [] : workspaceFolders)
+    setAgents(proposal ? draftOf(proposal) : emptyAgents())
+    setModes(proposal?.modes ?? { permissionMode: DEFAULT_ROUTINE_PERMISSION })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fallback])
+  }, [open])
 
-  const canGenerate = description.trim().length > 0 && !!model && !generating
+  // "Something happens" is built in the chat (questions + a script), unless the chat already did it.
+  const needsChat = whenKind === "event" && !proposal?.trigger
+  const watched = !!proposal?.trigger
+  const canContinue = prompt.trim().length > 0 && !needsChat && (watched || !!parseTime(schedule.time))
+  const canCreate = canContinue && !!model && title.trim().length > 0 && agentsAreValid(agents) && !saving
 
-  const handleGenerate = async () => {
-    if (!canGenerate || !model) return
-    setGenerating(true)
-    setError(null)
-    try {
-      const language = LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale]
-      const result = await generate(description.trim(), model, folders, language, mode, visionAvailable)
-      if (!result.ok) {
-        setError(result.error)
-        return
-      }
-      setSuggestion(result.suggestion)
-      setTitle(result.suggestion.title)
-      setPrompt(result.suggestion.prompt)
-      setSchedule(result.suggestion.schedule)
-      setModes(result.suggestion.modes)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setGenerating(false)
-    }
+  const goToChat = (what: "prefer" | "event") => {
+    const text = prompt.trim()
+    const starter =
+      what === "event"
+        ? t("routines.form.eventStarter", { what: text })
+        : text
+          ? t("routines.form.preferStarter", { what: text })
+          : t("creation.routine.starter")
+    onOpenChange(false)
+    void startChat(t("creation.routine.title"), starter)
   }
 
-  // No folder is fine: without one the routine simply runs as a chat.
-  const canCreate =
-    !!model &&
-    title.trim().length > 0 &&
-    prompt.trim().length > 0 &&
-    !!parseTime(schedule.time) &&
-    teamIsValid(teamDraft) &&
-    !saving
+  const goToReview = () => {
+    if (!title.trim()) setTitle(deriveTitle(prompt))
+    setStep(2)
+  }
 
   const handleCreate = async () => {
     if (!canCreate || !model) return
     setSaving(true)
     try {
+      const stored = storedFields(agents)
+      const selected = allAgents.find((a) => userProfileId(a.id) === stored.agent)
+      // The agent decides the abilities; no folders means only the chat abilities exist.
+      const withAgent = selected ? applyAgentModes(modes, selected.features) : modes
+      const effective = mode === "chat" ? restrictModesToChat(withAgent) : withAgent
       const routine = await create({
         title: title.trim(),
         prompt: prompt.trim(),
         schedule,
         model,
-        // Vision only works with the configured vision model — if the user
-        // turned the badge on in the review without one, the mode comes out
-        // disabled from creation (the scheduler would have nothing to send in
-        // `visionModel`).
-        modes: (() => {
-          const base = modes.vision && !visionModel ? { ...modes, vision: undefined } : modes
-          // Folders removed in the review: the code-only modes cannot ride along into a chat routine.
-          return mode === "chat" ? restrictModesToChat(base) : base
-        })(),
+        // Vision only works with the configured vision model: without one it is left off.
+        modes: effective.vision && !visionModel ? { ...effective, vision: undefined } : effective,
         mode,
         folders,
-        visionModel: modes.vision ? (visionModel ?? undefined) : undefined,
-        reuseChat: reuseChat || undefined,
+        // Kept whenever there is one: an agent that allows vision may switch it on later.
+        visionModel: visionModel ?? undefined,
+        // A team needs a folder to work in; without one only a single agent is stored.
+        ...(mode === "code" ? stored : stored.agent ? { agent: stored.agent } : {}),
         // Scripts and their trigger ride along from the agent's proposal (the form has no editor for them).
         ...(proposal?.scripts?.length ? { scripts: proposal.scripts, trigger: proposal.trigger } : {}),
-        // The team only exists in a code routine (its workers need a folder to work in).
-        ...(mode === "code" && teamDraft.team.members.length > 0
-          ? { team: teamDraft.team, tokenBudget: teamDraft.tokenBudget }
-          : {}),
         active: true,
         // The proposal's own id: its card finds the routine and turns into "created".
         ...(proposal ? { id: proposal.id } : {}),
       })
-      // Recents are global and shared with the chats. The model enters the list
-      // here — creating the routine is the moment it starts being used for real
-      // (same criterion as the pipeline modal).
       useSessionModelPrefs.getState().markUsed(model.providerId, model.modelId)
       onOpenChange(false)
       onCreated?.(routine.id)
@@ -199,117 +167,113 @@ export function CreateRoutineDialog({
     }
   }
 
-  const reviewing = !!suggestion
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl overflow-hidden">
-        <div className="flex items-center gap-2">
-          {reviewing && !proposal && (
-            <Button variant="ghost" size="icon-sm" onClick={() => setSuggestion(null)} aria-label={t("routines.review.back")}>
+        <div className="flex items-center gap-3 pr-8">
+          {step === 2 && (
+            <Button variant="ghost" size="icon-sm" onClick={() => setStep(1)} aria-label={t("routines.review.back")}>
               <ArrowLeftIcon className="size-3.5" />
             </Button>
           )}
-          <div className="min-w-0">
-            <DialogTitle>{reviewing ? t("routines.review.title") : t("routines.create.title")}</DialogTitle>
-            <Truncate text={reviewing ? t("routines.review.subtitle") : t("routines.create.describeHint")}>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {reviewing ? t("routines.review.subtitle") : t("routines.create.describeHint")}
-              </p>
-            </Truncate>
-          </div>
+          <DialogTitle className="min-w-0 flex-1 truncate">{t("routines.create.title")}</DialogTitle>
+          <StepPills step={step} labels={[t("routines.form.step1"), t("routines.form.step2")]} />
         </div>
 
-        {reviewing ? (
-          <div
-            // key forces the animation to run again on every trip to the review
-            key="review"
-            className="animate-in slide-in-from-right-8 fade-in-0 duration-200"
-          >
+        {step === 1 ? (
+          <div key="step1" className="animate-in slide-in-from-left-8 fade-in-0 duration-200">
             <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
-              <Field label={t("routines.review.titleField")}>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-sm" />
+              <Field label={t("routines.form.whatItDoes")} hint={t("routines.form.whatItDoesHint")}>
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={t("routines.form.whatPlaceholder")}
+                  className="max-h-56 min-h-28"
+                />
               </Field>
 
-              <Field label={t("routines.review.promptField")} hint={t("routines.review.promptFieldHint")}>
-                <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="max-h-56 min-h-28" />
-              </Field>
-
-              {/* A script decides when this one runs: there is no calendar to edit. */}
               <Field label={t("routines.review.schedule")}>
-                {proposal?.trigger ? (
-                  <p className="text-xs text-muted-foreground">{describeWhen({ schedule, trigger: proposal.trigger }, t)}</p>
-                ) : (
-                  <ScheduleEditor schedule={schedule} onChange={setSchedule} />
-                )}
+                <div className="space-y-2">
+                  <SegmentedControl<WhenKind>
+                    size="sm"
+                    value={whenKind}
+                    onChange={setWhenKind}
+                    options={[
+                      { value: "schedule", label: t("routines.form.whenSchedule") },
+                      { value: "event", label: t("routines.form.whenEvent") },
+                    ]}
+                  />
+                  {whenKind === "schedule" ? (
+                    <ScheduleEditor schedule={schedule} onChange={setSchedule} />
+                  ) : watched ? (
+                    <p className="text-xs text-muted-foreground">{describeWhen({ schedule, trigger: proposal?.trigger }, t)}</p>
+                  ) : (
+                    <div className="space-y-2 rounded-lg border border-dashed p-3">
+                      <p className="text-xs text-muted-foreground">{t("routines.form.eventExplain")}</p>
+                      <Button size="sm" onClick={() => goToChat("event")}>
+                        {t("routines.form.eventContinue")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </Field>
-
-              <Field label={t("routines.review.modes")} hint={t("routines.review.modesHint")}>
-                <ModesEditor modes={modes} onChange={setModes} available={mode === "chat" ? ROUTINE_CHAT_MODES : undefined} />
-              </Field>
-
-              <Field label={t("routines.create.model")}>
-                <ModelPicker value={model} onValueChange={setModel} />
-              </Field>
-
-              <ReuseChatField value={reuseChat} onChange={setReuseChat} />
-
-              <Field label={t("routines.review.folders")} hint={t("routines.review.foldersHint")}>
-                <FolderSelector folders={folders} onFoldersChange={setFolders} />
-              </Field>
-
-              {mode === "code" && <TeamEditor value={teamDraft} onChange={setTeamDraft} />}
             </div>
-
-            <div className="mt-3 flex justify-end gap-2 border-t pt-3">
-              <Button variant="ghost" size="sm" onClick={() => (proposal ? onOpenChange(false) : setSuggestion(null))}>
-                {proposal ? t("common.cancel") : t("routines.review.back")}
+            <div className="mt-3 flex items-center gap-2 border-t pt-3">
+              <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => goToChat("prefer")}>
+                {t("routines.form.preferChat")}
               </Button>
-              <Button size="sm" disabled={!canCreate} onClick={() => void handleCreate()}>
-                {t("routines.review.create")}
+              <span className="flex-1" />
+              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button size="sm" disabled={!canContinue} onClick={goToReview}>
+                {t("routines.form.next")}
               </Button>
             </div>
           </div>
         ) : (
-          <div key="describe" className="animate-in slide-in-from-left-8 fade-in-0 duration-200">
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t(mode === "chat" ? "routines.create.placeholderChat" : "routines.create.placeholder")}
-              className="max-h-64 min-h-36"
-              disabled={generating}
-            />
-
-            {error && (
-              <p className="mt-2 flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
-                <AlertCircleIcon className="mt-px size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1">{error}</span>
-              </p>
-            )}
-
-            {generating && (
-              <div className="mt-2 space-y-2 rounded-lg border bg-card p-3">
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-5/6" />
-                <Skeleton className="h-3 w-2/3" />
+          <div key="step2" className="animate-in slide-in-from-right-8 fade-in-0 duration-200">
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+              {/* What step 1 said, read-only: changing it is a trip back, not a second copy of the form. */}
+              <div className="space-y-1.5 rounded-lg border bg-card p-3">
+                <p className="line-clamp-3 whitespace-pre-wrap text-xs">{prompt}</p>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="min-w-0 flex-1 truncate">{describeWhen({ schedule, trigger: proposal?.trigger }, t)}</span>
+                  <button type="button" onClick={() => setStep(1)} className="shrink-0 hover:text-foreground">
+                    {t("routines.form.edit")}
+                  </button>
+                </div>
               </div>
-            )}
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <FolderSelector folders={folders} onFoldersChange={setFolders} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t("routines.review.titleField")}>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" />
+                </Field>
+                <Field label={t("routines.create.model")}>
+                  <ModelPicker value={model} onValueChange={setModel} />
+                </Field>
+              </div>
+
+              <div className="space-y-1">
+                <FoldersField folders={folders} onChange={setFolders} />
                 {folders[0] && <BranchSelector repoPath={folders[0]} />}
               </div>
-              <ModelPicker value={model} onValueChange={setModel} />
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">{t(folders.length > 0 ? "routines.create.foldersCodeHint" : "routines.create.foldersChatHint")}</p>
-            {!model && <p className="mt-1.5 text-[11px] text-muted-foreground">{t("routines.create.noModel")}</p>}
 
-            <div className="mt-2 flex justify-end">
-              <Button size="sm" disabled={!canGenerate} onClick={() => void handleGenerate()}>
-                <SparklesIcon className="size-3.5" />
-                {generating ? t("routines.create.generating") : t("routines.create.generate")}
+              <AgentsEditor value={agents} onChange={setAgents} canBeTeam={mode === "code"} />
+
+              <details className="rounded-lg border px-3 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("routines.form.advanced")}</summary>
+                <div className="mt-2.5">
+                  <AbilitiesField agent={soloAgent(agents)} team={team} modes={modes} onChange={setModes} chatOnly={mode === "chat"} />
+                </div>
+              </details>
+            </div>
+            <div className="mt-3 flex justify-end gap-2 border-t pt-3">
+              <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
+                {t("routines.review.back")}
+              </Button>
+              <Button size="sm" disabled={!canCreate} onClick={() => void handleCreate()}>
+                {t("routines.review.create")}
               </Button>
             </div>
           </div>
@@ -319,12 +283,31 @@ export function CreateRoutineDialog({
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+/** "1 What and when — 2 Review", the way the design draws the steps. */
+function StepPills({ step, labels }: { step: 1 | 2; labels: [string, string] }) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-foreground">{label}</p>
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-      {children}
+    <div className="flex items-center gap-2 text-[11px]">
+      {labels.map((label, index) => {
+        const number = (index + 1) as 1 | 2
+        const active = step === number
+        const done = step > number
+        return (
+          <span key={label} className="flex items-center gap-2">
+            {index > 0 && <span className="h-px w-5 bg-border" aria-hidden />}
+            <span className={cn("flex items-center gap-1.5", active ? "font-medium text-foreground" : "text-muted-foreground")}>
+              <span
+                className={cn(
+                  "flex size-4 items-center justify-center rounded-full border text-[10px]",
+                  (active || done) && "border-primary bg-primary text-primary-foreground",
+                )}
+              >
+                {number}
+              </span>
+              {label}
+            </span>
+          </span>
+        )
+      })}
     </div>
   )
 }

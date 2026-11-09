@@ -80,6 +80,12 @@ export async function approvePendingRoutine(id: string): Promise<Routine | null>
     mode: proposal.mode,
     folders: proposal.folders,
     visionModel: proposal.visionModel,
+    agent: proposal.agent,
+    team: proposal.team,
+    tokenBudget: proposal.tokenBudget,
+    // Approving the card is what approves the scripts it shows (see createRoutine).
+    scripts: proposal.scripts,
+    trigger: proposal.trigger,
     active: true,
   })
   await fsp.rm(file, { force: true })

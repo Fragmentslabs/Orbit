@@ -2051,13 +2051,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('routines:removeScript', (_e, routineId: string, scriptId: string) => removeScript(routineId, scriptId))
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
-  ipcMain.handle('routines:rotateChat', (_e, id: string) => routines.rotateChat(id))
   ipcMain.handle('routines:pruneRuns', (_e, sessionIds: string[]) => routines.pruneOrphanRuns(sessionIds))
-  ipcMain.handle(
-    'routines:generate',
-    (_e, description: string, model: RoutineModel, folders: string[], language?: string, mode?: 'chat' | 'code', visionAvailable?: boolean) =>
-      routines.generateRoutine(description, model, folders, language, mode, visionAvailable),
-  )
   // Agent proposals (tool routines_manage): the conversation card lists,
   // approves and discards them. Approval creates the actual routine (with the
   // proposal id) and the 'routine' event comes out of it, like any creation.

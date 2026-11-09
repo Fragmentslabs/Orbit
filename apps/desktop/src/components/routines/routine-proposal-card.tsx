@@ -5,8 +5,10 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { ProposalCard, type ProposalFact } from "@/src/components/proposal-card"
 import { describeWhen } from "@/src/components/routines/schedule"
 import { ScriptCard } from "./script-card"
+import { userProfileId } from "@shared/agents"
 import { routineModeFor } from "@shared/routines"
 import type { MessagePart, ToolPart } from "@shared/chat"
+import { useAgents } from "@/src/stores/agents-store"
 import { useRoutineProposalsStore } from "@/src/stores/routine-proposals-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { CreateRoutineDialog } from "./create-routine-dialog"
@@ -39,6 +41,7 @@ export function RoutineProposalCard({ part }: { part: ToolPart }) {
   const approve = useRoutineProposalsStore((s) => s.approve)
   const discard = useRoutineProposalsStore((s) => s.discard)
   const routines = useRoutinesStore((s) => s.routines)
+  const agents = useAgents()
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -66,11 +69,15 @@ export function RoutineProposalCard({ part }: { part: ToolPart }) {
   const folders = proposal?.folders ?? []
   const mode = proposal?.mode ?? routineModeFor(folders)
   const scripts = proposal?.scripts ?? []
+  const agentName = proposal?.agent ? agents.find((a) => userProfileId(a.id) === proposal.agent)?.name : undefined
 
   const facts: ProposalFact[] = []
   if (schedule) facts.push({ label: t("proposal.when"), value: describeWhen({ schedule, trigger: proposal?.trigger }, t) })
   const prompt = (part.input?.prompt as string | undefined) ?? proposal?.prompt
   if (prompt) facts.push({ label: t("proposal.whatItDoes"), value: <span className="line-clamp-3">{prompt}</span> })
+  const teamNames = proposal?.team?.members.map((m) => m.name) ?? []
+  if (teamNames.length > 0) facts.push({ label: t("routines.agents.title"), value: teamNames.join(", ") })
+  else if (agentName) facts.push({ label: t("routines.form.agent"), value: agentName })
   facts.push({
     label: t("proposal.folders"),
     value: folders.length > 0 ? folders.join(", ") : t("proposal.noFolder"),

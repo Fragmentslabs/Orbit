@@ -10,6 +10,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react"
+import { userProfileId } from "@shared/agents"
 import type { SessionInfo } from "@shared/chat"
 import { isScriptTriggered, nextRoutineRun, ROUTINE_CHAT_MODES, scriptApproved, type Routine, type RoutineRun } from "@shared/routines"
 import { Button } from "@/components/ui/button"
@@ -28,6 +29,7 @@ import { routinesApi } from "@/src/lib/ipc"
 import { useStartChatWith } from "@/src/hooks/use-creation-chat"
 import { formatCost, formatDuration, formatWhen } from "@/src/lib/format"
 import { routineStats } from "@/src/lib/routine-stats"
+import { useAgents } from "@/src/stores/agents-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -70,6 +72,8 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const modelName = useProviderStore(
     (s) => s.catalog[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId,
   )
+  const agents = useAgents()
+  const agentName = routine.agent ? agents.find((a) => userProfileId(a.id) === routine.agent)?.name : undefined
   const [tab, setTab] = useState<DetailTab>("overview")
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -244,6 +248,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
           </div>
           <div className="flex flex-col gap-2 rounded-lg border bg-card px-4 py-3.5 text-xs">
             <ConfigRow label={t("routines.detail.when")}>{describeWhen(routine, t)}</ConfigRow>
+            {agentName && <ConfigRow label={t("routines.form.agent")}>{agentName}</ConfigRow>}
             <ConfigRow label={t("routines.detail.model")}>{modelName}</ConfigRow>
             <ConfigRow label={t("routines.detail.folders")}>
               {routine.folders.length === 0 ? (

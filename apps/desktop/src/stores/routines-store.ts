@@ -1,10 +1,8 @@
 import { create } from "zustand"
 import type {
-  GenerationResult,
   NewRoutineInput,
   Routine,
   RoutineEvent,
-  RoutineModel,
   RoutineRun,
   ScriptActivity,
 } from "@shared/routines"
@@ -38,14 +36,6 @@ interface RoutinesState {
   load: () => Promise<void>
   applyEvent: (event: RoutineEvent) => void
 
-  generate: (
-    description: string,
-    model: RoutineModel,
-    folders: string[],
-    language?: string,
-    mode?: "chat" | "code",
-    visionAvailable?: boolean,
-  ) => Promise<GenerationResult>
   create: (input: NewRoutineInput) => Promise<Routine>
   update: (id: string, patch: Partial<Routine>) => Promise<void>
   remove: (id: string) => Promise<void>
@@ -169,9 +159,6 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
         break
     }
   },
-
-  generate: (description, model, folders, language, mode, visionAvailable) =>
-    routinesApi.generate(description, model, folders, language, mode, visionAvailable),
 
   create: async (input) => {
     const routine = await routinesApi.create(input)

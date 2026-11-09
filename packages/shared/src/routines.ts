@@ -20,6 +20,7 @@
  * shows the "Routines" group of the matching mode.
  */
 
+import type { AgentFeature } from './agents'
 import type { PermissionMode, ProfileId, SendMessageOptions } from './chat'
 
 /** Prefix of the session ids created by a routine. */
@@ -129,6 +130,32 @@ export function routineModeFor(folders: readonly string[]): 'chat' | 'code' {
 export function restrictModesToChat(modes: RoutineModes): RoutineModes {
   const out: RoutineModes = { permissionMode: modes.permissionMode }
   for (const key of ROUTINE_CHAT_MODES) if (modes[key]) out[key] = true
+  return out
+}
+
+/**
+ * What an agent lets a routine do. An agent's features say what it does NOT block, so a routine run
+ * by an agent gets exactly those abilities: the routine has no ability switches of its own on top.
+ * (Memories are the Brain mode, orchestra is orchestration.) Abilities the agent never governs
+ * (web, browser, simple, plan) are left to the routine's own modes.
+ */
+export function modesFromAgentFeatures(features: Record<AgentFeature, boolean>): RoutineModes {
+  return {
+    ...(features.vision ? { vision: true } : {}),
+    ...(features.subagents ? { subagents: true } : {}),
+    ...(features.orchestra ? { orchestrate: true } : {}),
+    ...(features.loop ? { loop: true } : {}),
+    ...(features.memories ? { brain: true } : {}),
+  }
+}
+
+const AGENT_GOVERNED: (keyof Omit<RoutineModes, 'permissionMode'>)[] = ['vision', 'subagents', 'orchestrate', 'loop', 'brain']
+
+/** The routine's modes with the ones an agent governs replaced by what that agent allows. */
+export function applyAgentModes(modes: RoutineModes, features: Record<AgentFeature, boolean>): RoutineModes {
+  const allowed = modesFromAgentFeatures(features)
+  const out: RoutineModes = { ...modes }
+  for (const key of AGENT_GOVERNED) out[key] = allowed[key]
   return out
 }
 
@@ -335,6 +362,9 @@ export interface NewRoutineInput {
  * has no createdAt or lastRun, and it only exists while unapproved.
  */
 export interface PendingRoutine {
+  agent?: ProfileId
+  team?: RoutineTeam
+  tokenBudget?: number
   scripts?: RoutineScript[]
   trigger?: RoutineTrigger
   /** Id of the proposal AND of the routine it becomes on approval. */

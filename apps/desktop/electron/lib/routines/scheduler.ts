@@ -2,8 +2,10 @@ import { BrowserWindow, Notification } from 'electron'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Routine, RoutineEvent, RoutineRun } from '@shared/routines'
-import { hasTeam, isScriptTriggered, nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
-import { continuationBrief, getRunningSessionIds, runChat } from '../chat-engine'
+import { listAgentsSync, loadAgents } from '../agents/store'
+import { userProfileId } from '@shared/agents'
+import { applyAgentModes, hasTeam, isScriptTriggered, nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
+import { runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration, runTeam } from '../orchestrator'
 import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
@@ -72,6 +74,8 @@ async function createSession(routine: Routine, when: number): Promise<SessionInf
     directory: chat ? undefined : routine.folders[0],
     extraDirectories: chat ? undefined : routine.folders.slice(1),
     routineId: routine.id,
+    // A routine run by an agent opens its chats as that agent's chats.
+    ...(routine.agent ? { profile: routine.agent } : {}),
     createdAt: when,
     updatedAt: when,
   }
@@ -167,9 +171,14 @@ export async function runRoutine(
   const updated = await updateRoutine(routine.id, (r) => ({ ...r, lastRun: start }))
   if (updated) emit({ type: 'routine', routine: updated })
 
+  // The agent that does the work decides which abilities are on (vision, sub-agents, orchestra,
+  // loop, memories); read now, so editing the agent changes its routines too.
+  await loadAgents()
+  const agent = routine.agent ? listAgentsSync().find((a) => userProfileId(a.id) === routine.agent) : undefined
+  const modes = agent ? applyAgentModes(routine.modes, agent.features) : routine.modes
   // A team makes the routine an orchestration whatever its modes say: the members are the plan.
   const team = hasTeam(routine) ? routine.team : undefined
-  const options = routineOptions(team ? { ...routine.modes, orchestrate: true } : routine.modes, {
+  const options = routineOptions(team ? { ...modes, orchestrate: true } : modes, {
     tokenBudget: routine.tokenBudget,
     maxParallel: team?.maxParallel,
   })
@@ -199,7 +208,7 @@ export async function runRoutine(
     ...(options.subagents || options.orchestrate ? { workerModel: routine.model } : {}),
     // Vision mode: the routine carries the vision model it had at creation time
     // (the main process does not read the renderer's localStorage).
-    ...(routine.modes.vision && routine.visionModel ? { visionModel: routine.visionModel } : {}),
+    ...(modes.vision && routine.visionModel ? { visionModel: routine.visionModel } : {}),
     // Read NOW, not stored in the routine: changing the app language immediately
     // applies to routines that already exist. Without this the agent falls back
     // to "answer in the user's language" and follows the PROMPT's language —

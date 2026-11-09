@@ -41,12 +41,10 @@ import type {
 import type { NodaraStatus } from "@shared/nodara"
 import type { FractaStatus } from "@shared/fracta"
 import type {
-  GenerationResult,
   NewRoutineInput,
   PendingRoutine,
   Routine,
   RoutineEvent,
-  RoutineModel,
   RoutineRun,
   ScriptActivity,
   ScriptTestResult,
@@ -786,15 +784,6 @@ export const routinesApi = {
     window.ipcRenderer.invoke("routines:approvePending", id) as Promise<Routine | null>,
   discardPending: (id: string) =>
     window.ipcRenderer.invoke("routines:discardPending", id) as Promise<void>,
-  generate: (
-    description: string,
-    model: RoutineModel,
-    folders: string[],
-    language?: string,
-    mode?: "chat" | "code",
-    visionAvailable?: boolean,
-  ) =>
-    window.ipcRenderer.invoke("routines:generate", description, model, folders, language, mode, visionAvailable) as Promise<GenerationResult>,
   onEvent: (listener: (event: RoutineEvent) => void) => {
     const wrapper = window.ipcRenderer.on("routines:event", (event) => listener(event as RoutineEvent))
     return () => window.ipcRenderer.off("routines:event", wrapper)
