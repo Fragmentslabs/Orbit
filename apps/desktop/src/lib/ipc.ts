@@ -1730,6 +1730,14 @@ export const peersApi = {
     window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<{ pendingAsks?: unknown[] } | null>,
   send: (sessionId: string, text: string) => window.ipcRenderer.invoke("peers:send", sessionId, text) as Promise<void>,
   abort: (sessionId: string) => window.ipcRenderer.invoke("peers:abort", sessionId) as Promise<void>,
+  /** Any companion request, when the peer granted `control` (folders, session CRUD…). */
+  request: <T = unknown>(peerId: string, payload: { type: string; [key: string]: unknown }) =>
+    window.ipcRenderer.invoke("peers:request", peerId, payload) as Promise<T>,
+  /** The peer's media registry — same shape the phone consumes, with ids resolvable here. */
+  media: (peerId: string) => window.ipcRenderer.invoke("peers:media", peerId) as Promise<MediaEntry[]>,
+  mediaUsage: (peerId: string) => window.ipcRenderer.invoke("peers:mediaUsage", peerId) as Promise<MediaUsage>,
+  deleteMedia: (peerId: string, id: string) =>
+    window.ipcRenderer.invoke("peers:deleteMedia", peerId, id) as Promise<boolean>,
   fsTree: (sessionId: string, root?: number, path?: string) =>
     window.ipcRenderer.invoke("peers:fsTree", sessionId, root, path) as Promise<RemoteFileTree>,
   fsRead: (sessionId: string, root: number, path: string) =>

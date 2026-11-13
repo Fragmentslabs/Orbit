@@ -216,7 +216,7 @@ export class CompanionWebSocket {
       this.handleMessage(event.data)
     }
 
-    this.ws.onclose = (event) => {
+    this.ws.onclose = () => {
       this.cleanup()
       if (this.shouldReconnect) {
         this.scheduleReconnect()
@@ -437,7 +437,7 @@ export class CompanionWebSocket {
     }
 
     // Reject all pending requests
-    for (const [id, pending] of this.pendingRequests) {
+    for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer)
       pending.reject(new Error('Connection closed'))
     }

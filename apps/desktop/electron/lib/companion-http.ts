@@ -447,9 +447,19 @@ async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: str
 // to /api/media/<id>, which only reads the images folder, and that is why artifact,
 // document, video and piece arrived on the phone as a broken tile.
 
+/**
+ * Base of the absolute URLs handed to the client. The companion server is plain
+ * HTTP; the desktop peer server is HTTPS on the same router — reading the socket
+ * keeps the generated URL reachable from the side that asked (the phone and a
+ * paired desktop use different schemes).
+ */
+function requestBaseUrl(req: IncomingMessage): string {
+  const secure = (req.socket as { encrypted?: boolean }).encrypted === true
+  return `${secure ? 'https' : 'http'}://${req.headers.host ?? 'localhost'}`
+}
+
 function mediaUrlFor(req: IncomingMessage, id: string): string {
-  const base = `http://${req.headers.host ?? 'localhost'}`
-  return `${base}/api/media/${id}?t=${createAssetToken('media', id)}`
+  return `${requestBaseUrl(req)}/api/media/${id}?t=${createAssetToken('media', id)}`
 }
 
 /**
@@ -463,7 +473,7 @@ function fileUrlFor(
   id: string,
   relative?: string,
 ): string {
-  const base = `http://${req.headers.host ?? 'localhost'}`
+  const base = requestBaseUrl(req)
   const rel = relative ? `/${relative.split('/').map(encodeURIComponent).join('/')}` : ''
   return `${base}/api/file/${scope}/${encodeURIComponent(id)}/${createAssetToken(scope, id)}${rel}`
 }
@@ -1012,6 +1022,23 @@ function createRouter(
 
     jsonResponse(res, 404, { error: tNow('companion.http.endpointNotFound') })
   }
+}
+
+/**
+ * The same router, for the mutual-TLS peer server (peers/peer-server.ts).
+ *
+ * There the request was already authenticated by the certificate + device token
+ * before reaching here, so the router's own Bearer check is a no-op — a paired
+ * desktop gets exactly the endpoints the phone has (including media listing and
+ * deletion), and the peer server must never expose this router without its own
+ * authentication in front.
+ */
+export function createPeerRouter() {
+  return createRouter(
+    () => false,
+    () => null,
+    async () => true,
+  )
 }
 
 // ─── Server Lifecycle ────────────────────────────────────────────────────────

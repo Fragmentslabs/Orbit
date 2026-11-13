@@ -21,7 +21,9 @@
       "~/*": ["./*"],
       "@shared/*": ["../../packages/shared/src/*"],
       "@orbit/shared": ["../../packages/shared/src/index.ts"],
-      "@orbit/shared/*": ["../../packages/shared/src/*"]
+      "@orbit/shared/*": ["../../packages/shared/src/*"],
+      "@orbit/companion-client": ["../../packages/companion-client/src/index.ts"],
+      "@orbit/companion-client/*": ["../../packages/companion-client/src/*"]
     },
     "strict": true,
     "noUnusedLocals": true,

@@ -16,6 +16,18 @@ export interface ConnectionConfig {
   token?: string
   /** Device name (for display on the desktop). */
   deviceName?: string
+  /**
+   * Absolute HTTP base of the desktop's REST API. Defaults to
+   * `http://<host>:<port + 1>` (the companion server). A desktop peer passes
+   * `https://<host>:<port>` because its REST surface lives on the mutual-TLS
+   * server, on the same port as the WebSocket.
+   */
+  httpUrl?: string
+  /**
+   * Custom fetch — the desktop main process injects one that presents the
+   * pinned client certificate (mutual TLS). Defaults to the global fetch.
+   */
+  fetchImpl?: typeof fetch
 }
 
 /**

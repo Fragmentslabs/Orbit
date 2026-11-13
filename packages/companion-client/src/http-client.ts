@@ -32,16 +32,18 @@ export interface HttpResult<T = unknown> {
 export class CompanionHttp {
   private baseUrl: string
   private token: string
+  private fetchImpl: typeof fetch
 
   constructor(config: ConnectionConfig) {
-    this.baseUrl = `http://${config.host}:${config.port + 1}`
+    this.fetchImpl = config.fetchImpl ?? fetch
+    this.baseUrl = config.httpUrl ?? `http://${config.host}:${config.port + 1}`
     // Uses the persistent token when available (it does not expire like the PIN)
     this.token = config.token ?? config.pin
   }
 
   /** Updates the configuration (host/port/pin) after reconnection. */
   updateConfig(config: ConnectionConfig): void {
-    this.baseUrl = `http://${config.host}:${config.port + 1}`
+    this.baseUrl = config.httpUrl ?? `http://${config.host}:${config.port + 1}`
     this.token = config.token ?? config.pin
   }
 
@@ -286,7 +288,7 @@ export class CompanionHttp {
         init.body = JSON.stringify(body)
       }
 
-      const response = await fetch(`${this.baseUrl}${path}`, init)
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, init)
 
       if (!response.ok) {
         const text = await response.text().catch(() => 'Unknown error')

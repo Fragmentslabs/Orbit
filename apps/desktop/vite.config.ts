@@ -11,6 +11,7 @@ const sharedAliases = {
   '@shared': path.resolve(root, 'packages/shared/src'),
   '@orbit/shared': path.resolve(root, 'packages/shared/src/index.ts'),
   '@orbit/shared/': path.resolve(root, 'packages/shared/src'),
+  '@orbit/companion-client': path.resolve(root, 'packages/companion-client/src/index.ts'),
 }
 
 // https://vitejs.dev/config/

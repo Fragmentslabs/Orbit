@@ -2,7 +2,9 @@ import crypto from 'node:crypto'
 import type { TLSSocket } from 'node:tls'
 import { safeStorage } from 'electron'
 import { WebSocket } from 'ws'
-import type { ChatEvent, SessionInfo } from '@shared/chat'
+import { CompanionHttp } from '@orbit/companion-client'
+import type { ChatEvent, FolderInfo, SessionInfo } from '@shared/chat'
+import type { MediaEntry, MediaUsage } from '@shared/media'
 import {
   PEER_PROTOCOL_VERSION,
   isPeerId,
@@ -20,7 +22,8 @@ import type { PeerIdentity } from './identity'
 import { newNonce, pairingCode, sanitizePeerName } from './pairing'
 import { fingerprintOf } from './identity'
 import { firstContactClientTlsOptions, pinnedClientTlsOptions, remoteCertificatePem, remoteFingerprint } from './tls-options'
-import { forgetPeerAssets, indexRemoteIds } from './remote-index'
+import { forgetPeerAssets, indexRemoteIds, rememberRemoteId } from './remote-index'
+import { peerFetch } from './peer-http'
 
 /**
  * The desktops THIS machine paired with: their pinned certificate, our token for
@@ -55,6 +58,8 @@ let hooks: Hooks | null = null
 let selfName = () => 'Orbit'
 let stored: StoredPeer[] = []
 const connections = new Map<string, PeerConnection>()
+/** REST client per peer — the same `CompanionHttp` the phone uses, over pinned TLS. */
+const httpClients = new Map<string, CompanionHttp>()
 let outgoing: { state: OutgoingPairState; ws: WebSocket | null } | null = null
 
 function encryptToken(token: string): Pick<StoredPeer, 'token' | 'tokenEnc'> {
@@ -94,6 +99,7 @@ class PeerConnection {
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   sessions: SessionInfo[] = []
+  folders: FolderInfo[] = []
   running = new Set<string>()
   /** sessionId → pending request ids (questions/permissions waiting on that machine). */
   waiting = new Map<string, Set<string>>()
@@ -221,13 +227,17 @@ class PeerConnection {
 
   private async loadInitial(): Promise<void> {
     try {
-      const [sessions, running] = await Promise.all([
+      const [sessions, running, folders] = await Promise.all([
         this.request<SessionInfo[]>({ type: 'sessions:list' }),
         this.request<string[]>({ type: 'sessions:running' }),
+        // Read-only pairings refuse this; the list still works, just flat.
+        this.request<FolderInfo[]>({ type: 'folders:list' }).catch(() => [] as FolderInfo[]),
       ])
       this.sessions = Array.isArray(sessions) ? sessions : []
       this.running = new Set(Array.isArray(running) ? running : [])
+      this.folders = Array.isArray(folders) ? folders : []
       this.emitSessions()
+      this.emitFolders()
       await Promise.all(
         [...this.running].map(async (sid) => {
           const state = await this.request<{ pendingAsks?: { requestId?: string }[] }>({ type: 'session:state', sessionId: sid }).catch(() => null)
@@ -304,8 +314,12 @@ class PeerConnection {
       this.queueSessions()
     }
 
-    if (!sid && event.type !== 'folders') return
-    if (event.type === 'folders') return
+    if (event.type === 'folders') {
+      this.folders = Array.isArray(event.folders) ? event.folders : []
+      this.emitFolders()
+      return
+    }
+    if (!sid) return
     const namespaced = remoteSessionId(this.peer.peerId, sid)
     const out = (
       event.type === 'session' ? { ...event, sessionId: namespaced, session: { ...event.session, id: namespaced } } : { ...event, sessionId: namespaced }
@@ -322,10 +336,19 @@ class PeerConnection {
   }
 
   emitSessions(): void {
-    const sessions = this.sessions
-      .filter((s) => !s.archived)
-      .map((s) => ({ ...s, id: remoteSessionId(this.peer.peerId, s.id), parentId: s.parentId ? remoteSessionId(this.peer.peerId, s.parentId) : s.parentId }))
+    // Archived chats travel too: the sidebar shows the same sections as on the
+    // machine that owns them.
+    const sessions = this.sessions.map((s) => ({
+      ...s,
+      id: remoteSessionId(this.peer.peerId, s.id),
+      parentId: s.parentId ? remoteSessionId(this.peer.peerId, s.parentId) : s.parentId,
+      folderId: s.folderId,
+    }))
     hooks?.emit({ type: 'sessions', peerId: this.peer.peerId, sessions })
+  }
+
+  emitFolders(): void {
+    hooks?.emit({ type: 'folders', peerId: this.peer.peerId, folders: this.folders })
   }
 
   emitStatuses(): void {
@@ -402,6 +425,61 @@ export function peerRequest<T = unknown>(peerId: string, payload: { type: string
   return conn.request<T>(payload)
 }
 
+/** The REST client of a peer — the same package class the phone uses. */
+function httpFor(peerId: string): CompanionHttp | null {
+  const peer = stored.find((p) => p.peerId === peerId)
+  if (!peer || !identity) return null
+  const cached = httpClients.get(peerId)
+  if (cached) return cached
+  const token = decryptToken(peer)
+  if (!token) return null
+  const client = new CompanionHttp({
+    host: peer.host,
+    port: peer.port,
+    pin: '',
+    token,
+    httpUrl: `https://${peer.host}:${peer.port}`,
+    fetchImpl: peerFetch(identity, peer.cert),
+  })
+  httpClients.set(peerId, client)
+  return client
+}
+
+/**
+ * The peer's media registry. Every id that comes back is remembered so the
+ * renderer's scheme handlers (`orbit-media://`, `orbit-artifact://`, pieces)
+ * fetch the file from that machine instead of looking for it on this disk.
+ * `path` is blanked: it is the other machine's filesystem layout.
+ */
+export async function peerMediaList(peerId: string): Promise<MediaEntry[]> {
+  const http = httpFor(peerId)
+  if (!http) throw new Error('unknown_peer')
+  const res = await http.listMedia()
+  if (!res.ok || !Array.isArray(res.data)) throw new Error(res.error ?? 'media_list_failed')
+  return res.data.map((entry) => {
+    for (const id of [entry.id, entry.thumb, entry.thumbDark, entry.motionId, entry.designId, entry.slidesId]) {
+      if (typeof id === 'string' && id) rememberRemoteId(id, peerId)
+    }
+    return { ...entry, path: '' }
+  })
+}
+
+export async function peerMediaUsage(peerId: string): Promise<MediaUsage> {
+  const http = httpFor(peerId)
+  if (!http) throw new Error('unknown_peer')
+  const res = await http.mediaUsage()
+  if (!res.ok || !res.data) throw new Error(res.error ?? 'media_usage_failed')
+  return res.data
+}
+
+export async function peerDeleteMedia(peerId: string, id: string): Promise<boolean> {
+  const http = httpFor(peerId)
+  if (!http) throw new Error('unknown_peer')
+  const res = await http.deleteMedia(id)
+  if (!res.ok) throw new Error(res.error ?? 'media_delete_failed')
+  return res.data?.deleted === true
+}
+
 export function peerGrants(peerId: string): PeerGrants {
   return normalizeGrants(stored.find((p) => p.peerId === peerId)?.grants)
 }
@@ -412,6 +490,7 @@ export function resendPeerSessions(peerId?: string): void {
     if (conn.online) {
       conn.emitSessions()
       conn.emitStatuses()
+      conn.emitFolders()
     }
   }
 }
@@ -423,6 +502,7 @@ export function reconnectPeers(): void {
 export async function forgetPeer(peerId: string): Promise<void> {
   connections.get(peerId)?.close()
   connections.delete(peerId)
+  httpClients.delete(peerId)
   stored = stored.filter((p) => p.peerId !== peerId)
   forgetPeerAssets(peerId)
   await persist()
@@ -437,6 +517,8 @@ export function notePeerAddress(peerId: string, host: string, port: number): voi
   if (conn?.online) return
   peer.host = host
   peer.port = port
+  // The REST client embeds the address and the pinned certificate.
+  httpClients.delete(peerId)
   void persist()
   if (conn && !conn.stopped) conn.reconnectNow()
 }
@@ -520,6 +602,7 @@ export function startPairing(host: string, port: number): void {
         pairedAt: Date.now(),
       }
       connections.get(peer.peerId)?.close()
+      httpClients.delete(peer.peerId)
       stored = [...stored.filter((p) => p.peerId !== peer.peerId), peer]
       await persist()
       const conn = new PeerConnection(peer)

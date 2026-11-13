@@ -18,6 +18,7 @@ import { remoteFingerprint, serverTlsOptions } from './tls-options'
 import { attachDesktopClient, registerDesktopDevice, validateDesktopToken } from '../companion-server'
 import { serveAsset } from '../companion-assets'
 import { createAssetToken, isAssetScope } from '../companion-token'
+import { createPeerRouter } from '../companion-http'
 
 /**
  * The mutual-TLS server desktops talk to (HTTPS + WSS on one port).
@@ -180,10 +181,43 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
   })
 }
 
+let peerRouter: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | null = null
+
+/**
+ * `/api/*` — the same REST surface the phone uses (media listing/usage/deletion,
+ * skills, MCP, git, preferences). A paired desktop with `control` is a full
+ * client; without it, only reads.
+ */
+async function handleApi(req: IncomingMessage, res: ServerResponse, ip: string): Promise<void> {
+  if (tooManyFailures(ip)) {
+    res.writeHead(429).end()
+    return
+  }
+  const auth = req.headers.authorization
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+  const device = await validateDesktopToken(token, remoteFingerprint(req.socket as TLSSocket), { touch: false })
+  if (!device) {
+    noteFailure(ip)
+    res.writeHead(401).end()
+    return
+  }
+  const readOnly = req.method === 'GET' || req.method === 'HEAD'
+  if (!readOnly && !device.grants.control) {
+    res.writeHead(403).end()
+    return
+  }
+  peerRouter ??= createPeerRouter()
+  await peerRouter(req, res)
+}
+
 /** `/peer/file/<scope>/<id>/<rest>` — the pieces' and media files, for paired desktops. */
 async function handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const ip = ipOf(req)
   const url = req.url ?? '/'
+  if (url.startsWith('/api/')) {
+    await handleApi(req, res, ip)
+    return
+  }
   const match = /^\/peer\/file\/([a-z]+)\/([^/?#]+)(?:\/([^?#]*))?(?:[?#].*)?$/.exec(url)
   if ((req.method !== 'GET' && req.method !== 'HEAD') || !match || !isAssetScope(match[1])) {
     res.writeHead(404).end()

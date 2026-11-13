@@ -1,8 +1,10 @@
 import os from 'node:os'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import type { ChatMessage } from '@shared/chat'
+import type { MediaEntry, MediaUsage } from '@shared/media'
 import {
   PEER_PORT,
+  isPeerId,
   normalizeGrants,
   parseRemoteSessionId,
   type DiscoveredPeer,
@@ -33,7 +35,10 @@ import {
   knownPeers,
   notePeerAddress,
   outgoingState,
+  peerDeleteMedia,
   peerGrants,
+  peerMediaList,
+  peerMediaUsage,
   peerRequest,
   reconnectPeers,
   resendPeerSessions,
@@ -199,13 +204,42 @@ export function registerPeersIpc(): void {
   })
   ipcMain.handle('peers:send', async (_e, sessionId: string, text: string) => {
     const r = remote(sessionId)
-    if (!peerGrants(r.peerId).send) throw new Error('forbidden')
+    const grants = peerGrants(r.peerId)
+    if (!grants.control && !grants.send) throw new Error('forbidden')
     return peerRequest(r.peerId, { type: 'messages:send', sessionId: r.sessionId, text: String(text ?? '') })
   })
   ipcMain.handle('peers:abort', async (_e, sessionId: string) => {
     const r = remote(sessionId)
-    if (!peerGrants(r.peerId).send) throw new Error('forbidden')
+    const grants = peerGrants(r.peerId)
+    if (!grants.control && !grants.send) throw new Error('forbidden')
     return peerRequest(r.peerId, { type: 'chat:abort', sessionId: r.sessionId })
+  })
+
+  /**
+   * The full companion surface, for a peer with `control` — the renderer uses it
+   * for folders and the session CRUD exactly like the phone does. The remote
+   * machine is the one enforcing the grants; `fs:*` keeps its own IPC below.
+   */
+  ipcMain.handle('peers:request', async (_e, peerId: string, payload: unknown) => {
+    if (!isPeerId(peerId)) throw new Error('invalid_peer')
+    const req = payload as { type?: unknown } | null
+    if (!req || typeof req.type !== 'string' || !req.type) throw new Error('invalid_request')
+    if (req.type === 'fs:tree' || req.type === 'fs:read') throw new Error('forbidden')
+    return peerRequest(peerId, req as { type: string; [key: string]: unknown })
+  })
+
+  ipcMain.handle('peers:media', async (_e, peerId: string) => {
+    if (!isPeerId(peerId)) throw new Error('invalid_peer')
+    return peerMediaList(peerId) satisfies Promise<MediaEntry[]>
+  })
+  ipcMain.handle('peers:mediaUsage', async (_e, peerId: string) => {
+    if (!isPeerId(peerId)) throw new Error('invalid_peer')
+    return peerMediaUsage(peerId) satisfies Promise<MediaUsage>
+  })
+  ipcMain.handle('peers:deleteMedia', async (_e, peerId: string, id: string) => {
+    if (!isPeerId(peerId)) throw new Error('invalid_peer')
+    if (!peerGrants(peerId).control) throw new Error('forbidden')
+    return peerDeleteMedia(peerId, String(id))
   })
   ipcMain.handle('peers:fsTree', async (_e, sessionId: string, root?: number, rel?: string) => {
     const r = remote(sessionId)
