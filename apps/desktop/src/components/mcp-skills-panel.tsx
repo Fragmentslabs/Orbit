@@ -1366,7 +1366,7 @@ export function McpSkillsPanel() {
       </div>
 
       {!stacked && (
-        <nav aria-label={t("toolsPage.navLabel")} className="flex w-52 shrink-0 flex-col gap-0.5 border-l pl-3">
+        <nav aria-label={t("toolsPage.navLabel")} className="flex w-60 shrink-0 flex-col gap-0.5 border-l pl-3">
           {menu(false)}
         </nav>
       )}

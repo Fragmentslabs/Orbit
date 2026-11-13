@@ -57,16 +57,18 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
   return { files, media, sources }
 }
 
-export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
+export function DraftInputBridge({ sessionId, draftKey }: { sessionId?: string; draftKey?: string }) {
   const controller = usePromptInputController()
   const { setTemplate, textareaRef } = controller
-  const key = sessionId ?? "draft"
+  // Same key ChatInputDraft uses for the text: the composer that owns the draft is the only one
+  // that applies it. Keying only by session made the panel's composer pick up the chat's template.
+  const key = draftKey ?? sessionId ?? "draft"
   const draft = useDraftInput((s) => s.drafts[key])
   const pendingInput = usePanelStore((s) => s.pendingInput)
 
   useEffect(() => {
     if (draft === undefined) return
-    const payload = useDraftInput.getState().consume(sessionId)
+    const payload = useDraftInput.getState().consume(key)
     if (payload === null) return
     controller.textInput.setInput(payload.text)
     setTemplate(payload.template ?? null)
@@ -87,7 +89,7 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
         if (files.length > 0) controller.attachments.add(files)
       })
     }
-  }, [draft, controller.textInput, controller.attachments, textareaRef, setTemplate, sessionId])
+  }, [draft, controller.textInput, controller.attachments, textareaRef, setTemplate, key])
 
   useEffect(() => {
     if (!pendingInput) return

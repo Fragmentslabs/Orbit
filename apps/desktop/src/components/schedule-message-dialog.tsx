@@ -120,7 +120,7 @@ export function ScheduleMessageDialog({
                 <Button
                   key={preset.label}
                   variant={selectedPreset === idx ? "default" : "outline"}
-                  size="sm"
+                 
                   className="text-xs"
                   onClick={() => handlePreset(preset, idx)}
                 >
@@ -171,12 +171,12 @@ export function ScheduleMessageDialog({
         <div className="flex justify-end gap-2 pt-2 border-t border-border">
           <Button
             variant="outline"
-            size="sm"
+           
             onClick={() => onOpenChange(false)}
           >
             {t("send.scheduleDialog.cancel")}
           </Button>
-          <Button size="sm" disabled={!canConfirm} onClick={handleConfirm}>
+          <Button disabled={!canConfirm} onClick={handleConfirm}>
             {t("send.scheduleDialog.confirm")}
           </Button>
         </div>

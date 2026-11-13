@@ -1,8 +1,7 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { AudioPlayerCard } from "@/src/components/messages/audio-part"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ArrowDown, ChevronDown, GitBranch, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
+import { ArrowDown, HelpCircle, History, Plug, Sparkles } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -17,8 +16,7 @@ import { useVoiceActivity, voiceActivityState } from "@/src/stores/voice-activit
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
-import { usePanelStore } from "@/src/stores/panel-store"
-import { chatApi, docsApi, mediaApi } from "@/src/lib/ipc"
+import { chatApi, mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import { mediaKind, type MediaKind } from "@shared/media"
 import { CapabilitiesDialog } from "@/src/components/capabilities-dialog"
@@ -26,10 +24,8 @@ import { CapabilityIcon } from "@/src/components/capability-icon"
 import { buildStartSuggestions, type StartSuggestion } from "@/src/lib/start-suggestions"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
-import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
-import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
-import { CodeAssistantMessage } from "@/src/components/messages/code-message"
+import { MessageItem } from "@/src/components/messages/message-item"
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { CompactionSuggestionCard } from "@/src/components/compaction-suggestion-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
@@ -38,25 +34,16 @@ import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { ComputerThumbCard } from "@/src/components/computer-chip"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
-import {
-  AssistantMessageActions,
-  CopyAction,
-  MessageTimestamp,
-  ReplyAction,
-  RevertAction,
-  UserMessageQuote,
-  UserMessageText,
-} from "@/src/components/messages/shared"
 import { MessageReplySelection } from "@/src/components/message-reply-selection"
 import { DateSeparator, isNewDay } from "@/src/components/messages/date-separator"
 import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { useMotionBundleAnchors } from "@/src/stores/motion-bundles-store"
-import { Actions } from "@/src/components/ai/actions"
-import { messageBody, messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { messageBody } from "@/src/lib/message-utils"
 import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
+import { isRoutineSession } from "@/src/lib/last-chat"
 import { sameFolders, sessionFolders } from "@/src/lib/session-folders"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { foldersAfterSwitch, useWorktreeStore } from "@/src/stores/worktree-store"
@@ -66,16 +53,12 @@ import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { pickWelcomeTitle } from "@shared/welcome-title"
-import { HomeWidgets } from "@/src/components/fragments/home-widgets"
 import { VOICE_DEFAULTS } from "@shared/voice"
 
-import { Hint } from "@/components/ui/hint"
 // Stable references for the zustand selectors (avoids the getSnapshot loop)
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
 
-/** Extensions that become a conversation document — it is what decides whether the chip opens. */
-const DOCUMENT_FILE = /\.(pdf|docx|xlsx|xls|ods|csv)$/i
 
 /**
  * Opening of the welcome screen: three lines before the invitation.
@@ -98,227 +81,7 @@ const INTRO_LINE_MS = 1500
 const INTRO_STEPS = 3
 const INTRO_TOTAL_MS = INTRO_START_MS + INTRO_STEP_MS * INTRO_STEPS
 
-/**
- * Chip of the non-image attachment. Clicking opens the file in the panel.
- *
- * The `documentId` comes in the chip since it started being recorded; in attachments
- * older than that it does not exist, and then the document is found again by NAME
- * among the conversation sources. Without that rescue, every old message would be left
- * with a permanently inert attachment.
- *
- * The NAME is also the plan B for an id that no longer resolves: dragging the file
- * to the folder sources swaps doc1 for src1, and the chip keeps the id as it
- * was on the day of sending. The backend follows the trail by itself, but here the name is
- * better proof — it identifies the file even when the conversation promoted
- * two documents and the trail was lost.
- */
-function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string }) {
-  const { t } = useTranslation()
-  // Source attached by reference (dragged from the Sources tab): the id ALREADY is the
-  // address of the document, so the chip opens it directly — without going through the list.
-  const openable =
-    Boolean(sessionId) &&
-    (!!file.sourceId || !!file.documentId || DOCUMENT_FILE.test(file.filename ?? ""))
 
-  const open = async () => {
-    if (!sessionId) return
-    if (file.sourceId) {
-      usePanelStore.getState().openSourceTab(sessionId, {
-        docId: file.sourceId,
-        page: 1,
-        title: file.filename ?? file.sourceId,
-      })
-      return
-    }
-    let docId = file.documentId
-    const { shared, own } = await docsApi.list(sessionId)
-    const docs = [...own, ...shared]
-    if (!docId || !docs.some((d) => d.id === docId)) {
-      docId = docs.find((d) => d.filename === file.filename)?.id ?? docId
-    }
-    if (!docId) return
-    usePanelStore.getState().openSourceTab(sessionId, {
-      docId,
-      page: 1,
-      title: file.filename ?? docId,
-    })
-  }
-
-  return (
-    <Hint label={openable ? t("sources.openInPanel") : ""}>
-      <button
-        type="button"
-        disabled={!openable}
-        onClick={() => void open()}
-        className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
-      >
-        <
-    PaperclipIcon className="size-3 text-muted-foreground" />
-      <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
-    </button>
-    </Hint>
-  )
-}
-
-// Memoized by message reference + flags: in the delta flush only the
-// streaming message changes reference — the others do not re-render.
-// `messages`/`sendMessage` stay out of the comparison on purpose: the retry uses
-// `slice(0, index)`, immune to new messages appended at the end of the list.
-const MessageItem = memo(
-  function MessageItem({ msg, isLast, waiting, finished, isBusy, busyLabel, mode, sessionId, sendMessage, messages, index }: {
-    msg: ChatMessage
-    isLast: boolean
-    waiting: boolean
-    finished: boolean
-    isBusy: boolean
-    busyLabel?: string
-    mode: "chat" | "code"
-    sessionId?: string
-    sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
-    messages: ChatMessage[]
-    index: number
-  }) {
-  const { t } = useTranslation()
-
-  const handleRetry = useCallback(() => {
-    const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
-    if (prevUser && sessionId) {
-      // Redoes the turn IN PLACE: the main process discards this failed reply and reuses
-      // the user message (with its attachments) instead of sending a new one —
-      // no duplicated bubble and no error card left in the history.
-      void sendMessage(mode, messageText(prevUser), { options: {}, sessionId, retryOf: msg.id })
-    }
-  }, [messages, index, mode, sessionId, sendMessage, msg.id])
-
-  // A subchat's result that woke this conversation up: not something the user typed,
-  // so it does not get a user bubble (see electron/lib/subchat-wake.ts).
-  if (msg.role === "user" && msg.origin === "subchat") {
-    return <SubchatResultNotice message={msg} />
-  }
-
-  if (msg.role === "user") {
-    const files = msg.parts.filter((p): p is FilePart => p.type === "file")
-    /** The text the bubble shows — attachment notes, chips and the reply pill are not it.
-     *  A message can arrive with NO text at all (a pasted text becomes an attachment, a
-     *  PDF is sent on its own), and the bubble was then rendered empty: a blank box
-     *  right below the chips, which reads like a broken message. */
-    const text = visibleMessageText(msg)
-    return (
-      <Message from="user" data-user-msg-id={msg.id} data-msg-id={msg.id} data-msg-role="user">
-        <div className="group/user-msg flex flex-col">
-          {files.length > 0 && (
-            // With no text the attachments ARE the message: the row takes the
-            // `data-msg-surface` (target of the jump ring) that the bubble would carry.
-            <MessageAttachments className="mb-1" data-msg-surface={text ? undefined : ""}>
-              {files.map((file) =>
-                file.mime.startsWith("image/") ? (
-                  <MessageAttachment
-                    key={file.id}
-                    // `mediaUrl` goes along: the chip's `url` is only the thumbnail
-                    // of the bubble, and it is what the viewer enlarges and what the
-                    // copy and save buttons hand over. Omitting it here made
-                    // the "save" return a 320px webp instead of the photo.
-                    data={{
-                      type: "file",
-                      mediaType: file.mime,
-                      filename: file.filename,
-                      url: file.url,
-                      mediaUrl: file.mediaUrl,
-                    }}
-                  />
-                ) : file.mime.startsWith("video/") && file.url ? (
-                  // Attached video: the main process stored the file and left a frame as
-                  // a thumbnail in the chip. The bubble shows that frame (the video itself only
-                  // the agent reaches, by reference).
-                  <MessageAttachment
-                    key={file.id}
-                    data={{ type: "file", mediaType: "image/webp", filename: file.filename, url: file.url }}
-                  />
-                ) : file.mime.startsWith("audio/") && file.mediaUrl ? (
-                  // Attached audio: plays in the bubble itself. What it says (if the
-                  // agent transcribes it) stays in the attachment note, not here.
-                  <AudioPlayerCard
-                    key={file.id}
-                    className="w-72 max-w-full"
-                    src={file.mediaUrl}
-                    title={file.filename || t("audio.attachment")}
-                  />
-                ) : (
-                  // An attachment that became a document opens in the panel; the others (loose
-                  // text, browser element) have nothing to open — their
-                  // content is in the message itself.
-                  <DocumentChip key={file.id} file={file} sessionId={sessionId} />
-                ),
-              )}
-            </MessageAttachments>
-          )}
-          {/* Quote of the replied message: a pill ABOVE the bubble, on the chat
-              surface — outside `MessageContent`, so it does not inherit the bubble's
-              background and padding. */}
-          <UserMessageQuote text={text} />
-          {/* `data-msg-surface`: target of the ring of the jump to the message (search,
-              gallery, artifact) — the ring goes on the bubble, which is rounded, and
-              not on the wrapper of the row, which is rectangular (see message-jump).
-              Without text there is no bubble at all (see above). */}
-          {text && (
-            <MessageContent data-msg-surface>
-              <UserMessageText text={text} />
-            </MessageContent>
-          )}
-          <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
-            <MessageTimestamp timestamp={msg.createdAt} />
-            {text && <CopyAction text={text} />}
-            <ReplyAction message={msg} sessionId={sessionId} />
-            {/* Speak reads the assistant's REPLY — the user message does not
-                get the button (nothing of it is read aloud). */}
-            <RevertAction messageId={msg.id} sessionId={sessionId} />
-          </Actions>
-        </div>
-      </Message>
-    )
-  }
-
-  return (
-    <Message from="assistant" data-msg-id={msg.id} data-msg-role="assistant">
-      <MessageContent data-msg-surface>
-        {mode === "chat" ? (
-          <ChatAssistantMessage
-            message={msg}
-            sessionId={sessionId}
-            isLast={isLast}
-            isBusy={isBusy}
-            busyLabel={busyLabel}
-            onRetry={handleRetry}
-          />
-        ) : (
-          // `diffInFooter`: the "+N -N" comes out in the footer of the message, next to the
-          // other actions — and not in the accordion header, which collapses.
-          <CodeAssistantMessage
-            message={msg}
-            sessionId={sessionId}
-            isLast={isLast}
-            isBusy={isBusy}
-            busyLabel={busyLabel}
-            onRetry={handleRetry}
-            diffInFooter
-          />
-        )}
-      </MessageContent>
-      {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
-    </Message>
-  )
-  },
-  (prev, next) =>
-    prev.msg === next.msg &&
-    prev.isLast === next.isLast &&
-    prev.waiting === next.waiting &&
-    prev.finished === next.finished &&
-    prev.isBusy === next.isBusy &&
-    prev.busyLabel === next.busyLabel &&
-    prev.mode === next.mode &&
-    prev.sessionId === next.sessionId &&
-    prev.index === next.index,
-)
 
 function BrokenMessage({ error }: { error: Error }) {
   const { t } = useTranslation()
@@ -382,7 +145,7 @@ function EarlierMessages({ hiddenCount, onLoad, paused }: {
   )
 }
 
-function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer, underVeil }: {
+function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer, underVeil, dateVariant = "pill" }: {
   messages: ChatMessage[]
   /** The session history has not arrived from disk yet. */
   historyPending: boolean
@@ -401,6 +164,8 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
   /** Cards that belong to the conversation (agent request, revert, orchestration)
    *  and therefore scroll with it, instead of taking the fixed strip above the input. */
   footer?: ReactNode
+  /** Date marker between days: the quiet line of the routine chat, or the usual pill. */
+  dateVariant?: "pill" | "line"
 }) {
   const { t } = useTranslation()
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
@@ -609,7 +374,7 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
           if (msg.summary) {
             return (
               <div key={msg.id}>
-                {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
+                {showSeparator && <DateSeparator timestamp={msg.createdAt} variant={dateVariant} />}
                 <SummaryCard message={msg} />
               </div>
             )
@@ -621,7 +386,7 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
 
           return (
             <div key={msg.id}>
-              {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
+              {showSeparator && <DateSeparator timestamp={msg.createdAt} variant={dateVariant} />}
               {/* A message the renderer does not know how to draw — usually
                   data recorded by a previous version — becomes a notice in
                   its place. Before, it erased the whole conversation. */}
@@ -687,7 +452,19 @@ const CAPABILITIES_SEEN_KEY = "orbit-capabilities-seen"
 
 /** `embedded`: the chat is in a tab of the side panel. There the vertical space is
  *  short and the tab already says which chat it is, so the top persona goes away. */
-export function ChatView({ sessionId, embedded = false }: { sessionId?: string; embedded?: boolean } = {}) {
+export function ChatView({ sessionId, embedded = false, startScreen, hideFolders = false, hideInitCard = false, dateSeparator = "pill" }: {
+  sessionId?: string
+  embedded?: boolean
+  /** The start screen of a chat with a meaning of its own (a routine): it replaces the
+   *  generic greeting and its suggestions. */
+  startScreen?: ReactNode
+  /** The working folder belongs to whoever owns this chat (a routine): it is not chosen here. */
+  hideFolders?: boolean
+  /** No "/init" offer: the chat already has a folder and an owner. */
+  hideInitCard?: boolean
+  /** "line" is the quiet date of the routine chat. */
+  dateSeparator?: "pill" | "line"
+} = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
   const explicitSession = useSessionStore((s) =>
@@ -699,6 +476,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   // store update, and object dependencies would fire for nothing.
   const sessionDirectory = session?.directory
   const sessionExtraDirectories = session?.extraDirectories
+  /** The routine's chat (and a run's session): its folder belongs to the routine, not the workspace. */
+  const routineChat = isRoutineSession(session)
   const messages = useSessionStore((s) =>
     session ? s.messages[session.id] ?? NO_MESSAGES : NO_MESSAGES,
   )
@@ -762,6 +541,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     const folderChanged = !trocouChat && session.directory !== prevDirectory.current
     prevSessionId.current = session.id
     prevDirectory.current = session.directory
+    // A routine's chat works in the routine's own folder. It opens with that folder (chatFolders
+    // reads it from the session), but the folder does not go to the workspace: the next NEW chat
+    // keeps the folder of the last chat the person actually worked in.
+    if (routineChat) return
     if (trocouChat) {
       setFolders([session.directory, ...(session.extraDirectories ?? [])])
     } else if (folderChanged && useSessionStore.getState().activeIds.code === session.id) {
@@ -780,7 +563,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     }
     // folders comes in only so the switch reads the current extras; changing only the folders
     // fires nothing (neither the chat nor the main folder of the session changed).
-  }, [embedded, session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
+  }, [embedded, routineChat, session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
 
   // Attaching (or removing) a folder counts right away, and not only on the next send.
   //
@@ -826,26 +609,28 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const personaOnWelcome = showsPersonaOnWelcome(personaVisibility)
   // Folders THIS chat uses. In a panel tab they are the ones of the tab session: the
   // workspace is the main window's, and using it here would send the turn to the
-  // folder of the chat that is on screen.
+  // folder of the chat that is on screen. A routine's chat is the same: its folder belongs
+  // to the routine, and the workspace keeps the folder the next NEW chat starts from.
+  const ownFolders = embedded || routineChat
   const chatFolders = useMemo(
     () =>
-      embedded && sessionDirectory
+      ownFolders && sessionDirectory
         ? sessionFolders({ directory: sessionDirectory, extraDirectories: sessionExtraDirectories })
         : folders,
-    [embedded, folders, sessionDirectory, sessionExtraDirectories],
+    [ownFolders, folders, sessionDirectory, sessionExtraDirectories],
   )
 
   const handleFoldersChange = useCallback(
     (next: string[]) => {
-      if (!embedded) {
+      if (!ownFolders) {
         setFolders(next)
         return
       }
-      // Panel tab: the association belongs to the tab session, and only to it.
+      // Panel tab / routine chat: the association belongs to the session, and only to it.
       if (!session?.id || next.length === 0) return
       useSessionStore.getState().setSessionDirectories(session.id, next[0], next.slice(1))
     },
-    [embedded, session?.id, setFolders],
+    [ownFolders, session?.id, setFolders],
   )
 
   // Target folder of the init card: the session's or the one selected in FolderSelector
@@ -1374,7 +1159,15 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
             centerVisible ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          <div className="flex flex-col items-center gap-4 pt-40">
+          <div
+            className={
+              startScreen
+                ? "flex w-full flex-col items-center pt-24"
+                : "flex flex-col items-center gap-4 pt-40"
+            }
+          >
+            {startScreen ?? (
+              <>
             {personaOnWelcome && (
               <div
                 className="flex justify-center transition-all ease-in-out"
@@ -1509,8 +1302,6 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                   </button>
                 </div>
               )}
-              {/* Widgets the person pinned to the home screen (nothing when there are none). */}
-              {!hasChat && <HomeWidgets />}
               <CapabilitiesDialog
                 open={capabilitiesOpen}
                 onOpenChange={setCapabilitiesOpen}
@@ -1518,6 +1309,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 onPick={handleCapabilityPick}
               />
             </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -1557,6 +1350,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
               plan={plan}
               footer={hasInlineCards ? inlineCards : null}
               underVeil={showTopPersona}
+              dateVariant={dateSeparator}
             />
           </div>
         </div>
@@ -1564,7 +1358,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       {/* New project in code mode: the card offers the automatic /init. It stays in the
           strip, and not in the conversation, because it exists precisely when there is not
           any conversation yet (the list is empty/hidden). */}
-      {viewMode === "code" && initDirectory && (
+      {viewMode === "code" && initDirectory && !hideInitCard && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <InitProjectCard directory={initDirectory} sessionId={session?.id} />
         </div>
@@ -1608,35 +1402,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           onProviderBlocked={() => setProviderHintVisible(true)}
           folders={chatFolders}
           onFoldersChange={handleFoldersChange}
+          showFolders={!hideFolders}
         />
       )}
     </div>
   )
 }
 
-/** The result a subchat sent back: its first line as the title, the rest folded. */
-function SubchatResultNotice({ message }: { message: ChatMessage }) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const text = messageText(message)
-  const [head, ...rest] = text.split("\n")
-  const body = rest.join("\n").trim()
-  return (
-    <div data-msg-id={message.id} data-msg-role="user" className="my-1 flex flex-col gap-1 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs">
-      <button
-        type="button"
-        className="flex items-center gap-2 text-left font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <GitBranch className="size-3.5 shrink-0" />
-        <span className="flex-1">{head}</span>
-        {body && <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />}
-      </button>
-      {body && (
-        <p className={cn("whitespace-pre-wrap break-words text-muted-foreground", !open && "line-clamp-2")}>{body}</p>
-      )}
-      {!body && <p className="text-muted-foreground">{t("subchat.noResult")}</p>}
-    </div>
-  )
-}

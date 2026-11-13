@@ -7,8 +7,8 @@ import { getAgentSync, listAgentsSync, loadAgents } from './store'
  *
  * The line "when to use" is the switch: an agent without one is never suggested. The chat gets a
  * compact catalog (id, name, when) and rules that keep it quiet — a suggestion is a card the
- * person has to answer, so the default is silence. Built-in crafts are not listed here: they are
- * offered at the gesture that creates their piece (see `withSpecialistOffer`).
+ * person has to answer, so the default is silence. Built-in crafts are not listed here: the prompt
+ * names them directly, and the creation tools are the safety net (see `withSpecialistOffer`).
  */
 
 /** More than this and the catalog stops being a catalog; the newest agents are the ones left out. */

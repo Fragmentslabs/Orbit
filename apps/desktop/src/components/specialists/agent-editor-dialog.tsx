@@ -148,10 +148,10 @@ export function AgentEditorDialog({ agent, draft: initial, open, onOpenChange }:
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" disabled={saving || !draft.name.trim()} onClick={() => void save()}>
+          <Button disabled={saving || !draft.name.trim()} onClick={() => void save()}>
             {t("common.save")}
           </Button>
         </div>

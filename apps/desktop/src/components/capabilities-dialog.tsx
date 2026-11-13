@@ -136,7 +136,7 @@ export function CapabilitiesDialog({
                         </div>
                         {off && capability.requires ? (
                           <Button
-                            size="sm"
+                           
                             className="mt-0.5 shrink-0"
                             onClick={() => enable(capability.requires!)}
                           >
@@ -145,7 +145,7 @@ export function CapabilitiesDialog({
                         ) : example ? (
                           <Button
                             variant="secondary"
-                            size="sm"
+                           
                             className="mt-0.5 shrink-0"
                             onClick={() => onPick(example)}
                           >

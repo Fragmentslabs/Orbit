@@ -13,8 +13,16 @@ export function dayKey(timestamp: number): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
 
-/** WhatsApp-style date badge: "Today" / "Yesterday" / full date. */
-export function DateSeparator({ timestamp }: { timestamp: number }) {
+/**
+ * The date between two days of the conversation.
+ *
+ * "pill" is the WhatsApp-style badge the chats use; "line" is the quiet line of the routine
+ * chat — the full date between two hairlines, which reads as the title of the execution.
+ */
+export function DateSeparator({ timestamp, variant = "pill" }: {
+  timestamp: number
+  variant?: "pill" | "line"
+}) {
   const { t, i18n } = useTranslation()
 
   const date = new Date(timestamp)
@@ -24,6 +32,18 @@ export function DateSeparator({ timestamp }: { timestamp: number }) {
 
   const isToday = isNewDay(now.getTime(), timestamp) === false
   const isYesterday = !isToday && isNewDay(yesterday.getTime(), timestamp) === false
+
+  if (variant === "line") {
+    const full = date.toLocaleDateString(i18n.language, { weekday: "long", day: "numeric", month: "long" })
+    const label = full.charAt(0).toUpperCase() + full.slice(1)
+    return (
+      <div className="my-4 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+        <span className="h-px flex-1 bg-border/60" />
+        <span className="select-none whitespace-nowrap">{label}</span>
+        <span className="h-px flex-1 bg-border/60" />
+      </div>
+    )
+  }
 
   const label = isToday
     ? t("dateSeparator.today")

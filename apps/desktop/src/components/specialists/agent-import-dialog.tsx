@@ -163,10 +163,10 @@ export function AgentImportDialog({
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
+              <Button variant="outline" onClick={onCancel} disabled={busy}>
                 {t("common.cancel")}
               </Button>
-              <Button size="sm" onClick={onConfirm} disabled={busy}>
+              <Button onClick={onConfirm} disabled={busy}>
                 {t("specialists.share.import")}
               </Button>
             </DialogFooter>

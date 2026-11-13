@@ -40,10 +40,13 @@ function useHoverSubmenu() {
 /**
  * Quick settings menu of the input: agent mode (permission, code mode only),
  * thinking level and model — the options open as submenus on hover,
- * and the model item opens the selection dialog. It appears next to the
- * "+" button only in narrow containers (`@xl:hidden` on the trigger) — where
- * the individual selectors (ReasoningPicker, ModelPicker) leave the row and the
- * send button would overflow the input.
+ * and the model item opens the selection dialog. It is the LAST step of the
+ * composer collapsing: with no room left the individual selectors (ReasoningPicker,
+ * ModelPicker) leave the row and this single button takes their place, glued to
+ * the left of Send. Who decides that is the composer itself (useComposerLayout), not
+ * a container-query class — so the button is rendered only when it is the one in use.
+ * "showPermission" is likewise decided by the composer: the autonomy item only comes
+ * in once the row no longer has room for the PermissionModePicker.
  */
 export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: string; showPermission?: boolean }) {
   const { t } = useTranslation()
@@ -74,7 +77,7 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
       <DropdownMenu>
         <DropdownMenuTrigger
           title={t("input.quickSettings")}
-          className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground @xl:hidden"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
         >
           <Settings2 className="size-4" />
         </DropdownMenuTrigger>

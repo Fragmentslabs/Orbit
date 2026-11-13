@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import type { ChatMessage } from "@shared/chat"
-import { Message, MessageContent } from "@/src/components/ai/message"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
-import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { UserMessageQuote, UserMessageText } from "@/src/components/messages/shared"
-import { visibleMessageText } from "@/src/lib/message-utils"
+import { MessageItem } from "@/src/components/messages/message-item"
 import { useSessionStatus, useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 
 /** Stable lists for the zustand selectors (they avoid a re-render for a new reference). */
@@ -34,6 +31,11 @@ export function ConversationBody({
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)
   const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
+  const sendMessage = useSessionStore((s) => s.sendMessage)
+  // The mode the conversation was created with — "chat" draws the chat cards, "code" the
+  // tool steps and diffs, exactly as the same session appears in the middle of the app.
+  const sessionMode = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId)?.mode : undefined))
+  const mode = sessionMode ?? "chat"
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const hasAsks = pendingAsks.length > 0
@@ -140,28 +142,24 @@ export function ConversationBody({
             <div className="flex flex-col gap-3">
             {rendered.map((msg) => {
               if (msg.summary) return null
-              if (msg.role === "user") {
-                return (
-                  <Message from="user" key={msg.id} data-msg-id={msg.id}>
-                    {/* Same as the main chat: the quote of the replied message
-                        comes out as a pill above the bubble (never as raw
-                        text, `> [assistant] …`). */}
-                    <UserMessageQuote text={visibleMessageText(msg)} />
-                    <MessageContent>
-                      <div className="text-sm">
-                        <UserMessageText text={visibleMessageText(msg)} />
-                      </div>
-                    </MessageContent>
-                  </Message>
-                )
-              }
+              // The same row the main chat draws: attachments and reply actions on the
+              // question, whatever the answer brought inline (cards, tool steps, media)
+              // and the reading footer under it (copy, speak, time, cost, retry).
               const isLast = msg.id === lastAssistantId
               return (
-                <Message from="assistant" key={msg.id} data-msg-id={msg.id}>
-                  <MessageContent>
-                    <CodeAssistantMessage message={msg} sessionId={sessionId} isLast={isLast} isBusy={isBusy} />
-                  </MessageContent>
-                </Message>
+                <MessageItem
+                  key={msg.id}
+                  msg={msg}
+                  isLast={isLast}
+                  waiting={msg.role === "assistant" && isLast && isBusy && msg.parts.length === 0}
+                  finished={msg.role !== "assistant" || !(isLast && isBusy)}
+                  isBusy={isBusy}
+                  mode={mode}
+                  sessionId={sessionId}
+                  sendMessage={sendMessage}
+                  messages={messages}
+                  index={messages.indexOf(msg)}
+                />
               )
             })}
             {/* Tool permission requests / questions waiting for an answer —

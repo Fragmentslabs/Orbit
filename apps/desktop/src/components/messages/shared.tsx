@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { parseMessageReply, replyExcerpt, replySnippet } from "@shared/chat"
-import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, ToolPart } from "@shared/chat"
+import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, RoutineRunPart, ToolPart } from "@shared/chat"
 import { useMessageReply } from "@/src/stores/message-reply"
 import { useReplyLabel } from "@/src/components/reply-bar"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
@@ -51,6 +51,7 @@ import {
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
 import { OrbitUiHostContext } from "@/src/components/ai/generative-ui"
+import { AgentAvatars } from "@/src/components/routines/agent-avatars"
 import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { MemoryCitation, MemoryIdText } from "@/src/components/messages/memory-citation"
 import { MessageUsage } from "@/src/components/messages/message-usage"
@@ -574,6 +575,10 @@ export function ReplyAction({ message, sessionId }: { message: ChatMessage; sess
  * accordion hides precisely the balance of what changed on disk.
  */
 export function AssistantMessageActions({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
+  const { t, i18n } = useTranslation()
+  const openChatTab = usePanelStore((s) => s.openChatTab)
+  const execution = message.parts.find((part): part is RoutineRunPart => part.type === "routine-run")
+  const agents = execution?.agents ?? []
   return (
     <Actions className="mt-1 w-full items-center justify-between">
       <div className="flex items-center gap-1">
@@ -586,7 +591,26 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
         {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
         {message.tokens && <MessageUsage tokens={message.tokens} />}
       </div>
-      <DiffBadge patch={message.snapshot?.patch} parts={message.parts} sessionId={sessionId} messageId={message.id} />
+      {/* The team of the execution, at the right end of the reading row. The stack is the way
+          into the execution's own trace (tools, workers), which stays detail — never the answer. */}
+      {execution && agents.length > 0 ? (
+        <button
+          type="button"
+          title={t("routines.card.details")}
+          aria-label={t("routines.card.details")}
+          onClick={() =>
+            openChatTab(
+              execution.sessionId,
+              `${t("routines.card.execution")} ${formatTime(execution.startedAt, i18n.language)}`,
+            )
+          }
+          className="rounded-full opacity-80 transition-opacity hover:opacity-100"
+        >
+          <AgentAvatars names={agents} size={18} max={4} ring="border-background" />
+        </button>
+      ) : (
+        <DiffBadge patch={message.snapshot?.patch} parts={message.parts} sessionId={sessionId} messageId={message.id} />
+      )}
     </Actions>
   )
 }

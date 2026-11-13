@@ -10,6 +10,7 @@ import { createAudioGenerateTool, createSfxGenerateTool } from '../tools/audio'
 import { createDesignTools } from '../tools/design'
 import { createFontTools } from '../tools/fonts'
 import { createFragmentTools } from '../tools/fragment'
+import { createQuestionTool } from '../tools/question'
 import { createMotionTools } from '../tools/motion'
 import { designTurnBlock, motionTurnBlock } from './turn-blocks'
 import { CRAFT_BLOCKS, type ProfileDefinition } from './types'
@@ -50,9 +51,9 @@ function replyLine(language?: string): string {
 const fragment: ProfileDefinition = {
   id: 'fragment',
   builtin: true,
-  whenToUse: 'Building or changing a small custom screen, panel or widget that lives inside Orbit.',
+  whenToUse: 'Building or changing a small custom screen or panel that lives inside Orbit.',
   systemPrompt: ({ language }) => fragmentSystemPrompt(language),
-  tools: (input) => ({ ...createFragmentTools(input.sessionId) }),
+  tools: (input) => ({ ...createFragmentTools(input.sessionId), question: createQuestionTool(input) }),
   blocks: CRAFT_BLOCKS,
   turnBlock: fragmentTurnBlock,
   turnContext: 'The fragment being worked on: name, id, kind, revision, files and what it asked for.',

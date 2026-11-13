@@ -38,6 +38,60 @@ function AgentItem({ view, selected, onSelect }: { view: AgentView; selected: bo
 }
 
 /**
+ * The list inside an agent selector: the built-in setups, the person's own agents and the way
+ * into managing them. Shared so the chat header's selector and the routine team's badge are
+ * literally the same menu — groups, descriptions and the "Manage agents" entry included.
+ */
+export function AgentChoiceMenu({ value, onSelect, onManage, builtins, excludeCraft }: {
+  value: AgentChoice
+  onSelect: (next: AgentChoice) => void
+  /** Runs before the navigation: the routine form closes itself so the screen is visible. */
+  onManage?: () => void
+  /** Which built-in setups to list — a pipeline phase only takes the general one. */
+  builtins?: AgentChoice[]
+  /** Leaves out the craft agents (motion, design, fragment): they are their tools, not a persona. */
+  excludeCraft?: boolean
+}) {
+  const { t } = useTranslation()
+  const saved = useAgents()
+  const agents = excludeCraft ? saved.filter((agent) => !agent.craft) : saved
+  const { setView } = useWorkspace()
+  const requestSection = useToolsNavStore((s) => s.request)
+  const manage = () => {
+    onManage?.()
+    requestSection("specialists")
+    setView("tools")
+  }
+  return (
+    <>
+      {/* A group label must live inside a group (Base UI throws otherwise). */}
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>{t("agent.group.builtin")}</DropdownMenuLabel>
+        {(builtins ?? BUILTIN_CHOICES).map((choice) => (
+          <AgentItem key={choice} view={agentView(choice, agents, t)!} selected={value === choice} onSelect={() => onSelect(choice)} />
+        ))}
+      </DropdownMenuGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>{t("agent.group.mine")}</DropdownMenuLabel>
+        {agents.map((agent) => (
+          <AgentItem
+            key={agent.id}
+            view={userAgentView(agent, t)}
+            selected={value === userProfileId(agent.id)}
+            onSelect={() => onSelect(userProfileId(agent.id))}
+          />
+        ))}
+      </DropdownMenuGroup>
+      <DropdownMenuItem onClick={manage}>
+        {agents.length === 0 ? <Plus className="size-4" /> : <Settings2 className="size-4" />}
+        <span className="text-sm">{agents.length === 0 ? t("agent.create") : t("agent.manage")}</span>
+      </DropdownMenuItem>
+    </>
+  )
+}
+
+/**
  * Which agent a conversation runs with. The agent is fixed for the life of a conversation
  * (changing it mid-chat would break the prompt cache and mix instructions), so this is a
  * selector only for a NEW chat; once the chat exists it becomes a badge that opens a view of
@@ -49,15 +103,8 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
   const lookup = useAgentLookup()
   const pending = useSessionStore((s) => s.pendingProfile)
   const setPending = useSessionStore((s) => s.setPendingProfile)
-  const { setView } = useWorkspace()
-  const requestSection = useToolsNavStore((s) => s.request)
   const [inspecting, setInspecting] = useState(false)
   const temporary = useIsTemporary(session ? specialistProfileOf(session) ?? undefined : undefined)
-
-  const manage = () => {
-    requestSection("specialists")
-    setView("tools")
-  }
 
   if (session) {
     // A general chat shows nothing — and neither does one whose agent has since been deleted,
@@ -97,34 +144,7 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
         <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        {/* A group label must live inside a group (Base UI throws otherwise). */}
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("agent.group.builtin")}</DropdownMenuLabel>
-          {BUILTIN_CHOICES.map((choice) => (
-            <AgentItem
-              key={choice}
-              view={agentView(choice, agents, t)!}
-              selected={value === choice}
-              onSelect={() => setPending(choice === "general" ? null : choice)}
-            />
-          ))}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("agent.group.mine")}</DropdownMenuLabel>
-          {agents.map((agent) => (
-            <AgentItem
-              key={agent.id}
-              view={userAgentView(agent, t)}
-              selected={value === userProfileId(agent.id)}
-              onSelect={() => setPending(userProfileId(agent.id))}
-            />
-          ))}
-        </DropdownMenuGroup>
-        <DropdownMenuItem onClick={manage}>
-          {agents.length === 0 ? <Plus className="size-4" /> : <Settings2 className="size-4" />}
-          <span className="text-sm">{agents.length === 0 ? t("agent.create") : t("agent.manage")}</span>
-        </DropdownMenuItem>
+        <AgentChoiceMenu value={value} onSelect={(next) => setPending(next === "general" ? null : next)} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

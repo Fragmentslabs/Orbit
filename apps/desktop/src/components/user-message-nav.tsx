@@ -28,7 +28,7 @@ export function UserMessageNav({ items, activeId, onSelect, planIds }: UserMessa
   if (items.length < 2) return null
 
   return (
-    <nav className="group pointer-events-auto absolute right-3 top-4 z-30 flex flex-col items-end gap-1.5">
+    <nav className="group pointer-events-auto absolute left-3 top-4 z-30 flex flex-col items-start gap-1.5">
       <TooltipProvider delay={300}>
         {items.map((item) => {
           const isPlan = planIds?.has(item.id)
@@ -58,7 +58,7 @@ export function UserMessageNav({ items, activeId, onSelect, planIds }: UserMessa
                   />
                 }
               />
-              <TooltipContent side="left" align="center" sideOffset={8} className="bg-popover text-popover-foreground">
+              <TooltipContent side="right" align="center" sideOffset={8} className="bg-popover text-popover-foreground">
                 <span className="line-clamp-2 max-w-40 text-xs">{item.text}</span>
                 <span className="mt-1 block text-[10px] tabular-nums text-muted-foreground/70">
                   {formattedTime}

@@ -49,7 +49,7 @@ export function LoopConfigDialog({ open, onOpenChange }: {
 
         </div>
         <DialogFooter showCloseButton>
-          <Button size="sm" onClick={() => onOpenChange(false)}>
+          <Button onClick={() => onOpenChange(false)}>
             {t("loopConfig.done")}
           </Button>
         </DialogFooter>

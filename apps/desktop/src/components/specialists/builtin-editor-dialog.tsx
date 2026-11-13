@@ -59,14 +59,14 @@ export function BuiltinEditorDialog({ description, name, open, onOpenChange }: {
           <PinnedSkillsPicker value={draft.pinnedSkills} onChange={(pinnedSkills) => setDraft({ ...draft, pinnedSkills })} />
         </div>
         <div className="flex justify-between gap-2">
-          <Button variant="ghost" size="sm" disabled={!description.edited} onClick={() => void restore()}>
+          <Button variant="ghost" disabled={!description.edited} onClick={() => void restore()}>
             {t("specialists.editor.restore")}
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button size="sm" onClick={() => void save()}>
+            <Button onClick={() => void save()}>
               {t("common.save")}
             </Button>
           </div>

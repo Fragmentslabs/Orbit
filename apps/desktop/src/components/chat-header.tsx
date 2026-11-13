@@ -50,6 +50,8 @@ interface ChatHeaderProps {
   onFoldersChange?: (folders: string[]) => void
   /** Extra content to the left of the panel button (e.g. the pipeline model) */
   extra?: React.ReactNode
+  /** Rightmost control, between the menu and the panel button (the screen's own settings). */
+  endActions?: React.ReactNode
 }
 
 function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
@@ -92,7 +94,7 @@ function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
   )
 }
 
-export function ChatHeader({ title, titleSlot, hasMenu, showAgent, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
+export function ChatHeader({ title, titleSlot, hasMenu, showAgent, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra, endActions }: ChatHeaderProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -218,6 +220,7 @@ export function ChatHeader({ title, titleSlot, hasMenu, showAgent, session, sess
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      {endActions}
       {onToggleRightPanel && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleRightPanel}>
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}

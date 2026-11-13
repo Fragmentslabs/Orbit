@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { DOCUMENT_QUOTE_MIME, formatMotionQuoteText, type MotionQuotePayload } from "@shared/chat"
-import type { DocumentQuote, MotionQuote } from "@/src/stores/panel-store"
+import { DOCUMENT_QUOTE_MIME, formatMotionQuoteText, formatWidgetQuoteText, type MotionQuotePayload } from "@shared/chat"
+import type { DocumentQuote, MotionQuote, WidgetQuote } from "@/src/stores/panel-store"
 import { locateLines, quoteChipLabel, quoteLocationLabel, quotesToFileParts } from "./document-quote"
 
 /**
@@ -163,6 +163,66 @@ describe("formatMotionQuoteText", () => {
     expect(text).not.toMatch(/\b(page|line|página|linha)\b/i)
     expect(text).not.toContain("undefined")
     expect(text).not.toContain("null")
+  })
+})
+
+const widget: WidgetQuote = {
+  id: "w1",
+  kind: "widget",
+  fragmentId: "frag-financas",
+  fragmentName: "Finanças",
+  widgetId: "resumo",
+  name: "Resumo do mês",
+  size: "2x1",
+  sizes: ["2x2", "2x1", "1x1"],
+}
+
+describe("quotesToFileParts of a widget", () => {
+  it("carries the fragment and the widget — and no page/line key", () => {
+    const [part] = quotesToFileParts([widget])
+    expect(part.mime).toBe(DOCUMENT_QUOTE_MIME)
+    expect(part.filename).toBe("Widget · Resumo do mês · 2x1")
+
+    // The widget citation addresses a fragment, not a document: leaking page/docId here
+    // would send the agent looking for a file that does not exist.
+    const payload = JSON.parse(decodeURIComponent(part.url.split(",")[1]))
+    expect(payload).toEqual({
+      kind: "widget",
+      fragmentId: "frag-financas",
+      fragmentName: "Finanças",
+      widgetId: "resumo",
+      name: "Resumo do mês",
+      size: "2x1",
+      sizes: ["2x2", "2x1", "1x1"],
+    })
+    expect("page" in payload).toBe(false)
+    expect("docId" in payload).toBe(false)
+  })
+})
+
+describe("formatWidgetQuoteText", () => {
+  const payload = {
+    kind: "widget" as const,
+    fragmentId: "frag-financas",
+    fragmentName: "Finanças",
+    widgetId: "resumo",
+    name: "Resumo do mês",
+    size: "2x1",
+    sizes: ["2x2", "2x1", "1x1"],
+  }
+
+  it("names the widget, its size and the fragment it belongs to", () => {
+    const text = formatWidgetQuoteText(payload, "cabe em 1x1?")
+    expect(text).toContain('[Fragment widget — "Resumo do mês" at 2x1, from the fragment "Finanças"]')
+    expect(text).toContain("Fragment id: frag-financas")
+    expect(text).toContain("2x2, 2x1, 1x1")
+    expect(text.endsWith("---\ncabe em 1x1?")).toBe(true)
+  })
+
+  it("with the user writing nothing, the text ends clean", () => {
+    const text = formatWidgetQuoteText(payload)
+    expect(text).not.toContain("---")
+    expect(text.trim()).toBe(text)
   })
 })
 

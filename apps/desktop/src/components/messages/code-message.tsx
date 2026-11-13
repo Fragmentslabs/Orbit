@@ -30,6 +30,7 @@ import { TodoList } from "@/src/components/ai/todo-list"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { AgentProposalCard } from "@/src/components/agent-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
+import { RoutineRunCard } from "@/src/components/routines/run-card"
 import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskTrigger } from "@/src/components/ai/task"
@@ -294,6 +295,12 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   // 'todo' = closing line of the checklist; 'internal' is the nudge that
   // ended as "nothing to fix" and does not even appear.
   const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
+  // The execution is written as a message: when its answer came as text, the routine-run part
+  // is only metadata and draws nothing (it is the text that is read).
+  const hasAnswerText = useMemo(
+    () => message.parts.some((part) => part.type === "text" && !!part.text.trim()),
+    [message.parts],
+  )
 
   // Only the last todowrite is the live checklist; previous ones become a single line
   const lastTodoId = [...message.parts]
@@ -335,6 +342,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <ReasoningPartView key={segment.id} part={segment.part} flat={flat} />
         ) : segment.part.type === "agent" ? (
           <AgentPartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "routine-run" ? (
+          <RoutineRunCard key={segment.id} part={segment.part} solo={!hasAnswerText} />
         ) : segment.part.type === "file" ? null : segment.part.type === "tool" && segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" && segment.part.tool === "todowrite" ? (

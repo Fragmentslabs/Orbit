@@ -30,6 +30,7 @@ import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { AgentProposalCard } from "@/src/components/agent-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
+import { RoutineRunCard } from "@/src/components/routines/run-card"
 import {
   AgentPartView,
   AssistantMarkdown,
@@ -244,6 +245,12 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   // of the checklist) stay faded; 'internal' ("nothing to fix") does not
   // render.
   const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
+  // The execution is written as a message: when its answer came as text, the routine-run part
+  // is only metadata and draws nothing (it is the text that is read).
+  const hasAnswerText = useMemo(
+    () => message.parts.some((part) => part.type === "text" && !!part.text.trim()),
+    [message.parts],
+  )
 
   return (
     <div className="flex w-full flex-col gap-1">
@@ -281,6 +288,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <AudioPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "video" ? (
           <VideoPartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "routine-run" ? (
+          <RoutineRunCard key={segment.id} part={segment.part} solo={!hasAnswerText} />
         ) : segment.part.type === "file" ? null : segment.part.type === "image" ? (
           // It never happens in fact — segmentParts always routes "image" to
           // an "image-group" segment — but TS does not know that statically.

@@ -1,5 +1,12 @@
-import { Brain } from "lucide-react"
+import { Brain, Settings2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -23,6 +30,7 @@ export function ReasoningPicker({
   selected,
   onSelect,
   className,
+  compact,
 }: {
   variants: ModelVariant[]
   enabled: boolean
@@ -31,11 +39,57 @@ export function ReasoningPicker({
   selected: string | undefined
   onSelect: (variantId: string | null) => void
   className?: string
+  /**
+   * Narrow container: the trigger loses the label and becomes an icon button
+   * (the level stays one click away, in the same place). It is the middle step
+   * between the full selector and the single "everything" button of the footer,
+   * so it looks exactly like that button: same Settings2 icon, same muted color,
+   * same size. When the model is absorbed, the button keeps its identity.
+   */
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   if (variants.length === 0) return null
 
   const value = canDisable && !enabled ? "off" : (selected ?? null)
+  const variantLabel = (id: string) =>
+    id === "off"
+      ? t("reasoning.off")
+      : t(`reasoning.variants.${id}`, { defaultValue: variants.find((v) => v.id === id)?.label ?? id })
+
+  if (compact) {
+    const title = value == null ? t("reasoning.placeholder") : variantLabel(value)
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={title}
+          title={title}
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+            className,
+          )}
+        >
+          <Settings2 className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" sideOffset={4} align="start" className="min-w-40 p-1">
+          <DropdownMenuRadioGroup
+            value={value ?? ""}
+            onValueChange={(next) => {
+              if (!next) return
+              onSelect(next === "off" ? null : next)
+            }}
+          >
+            {canDisable && <DropdownMenuRadioItem value="off">{t("reasoning.off")}</DropdownMenuRadioItem>}
+            {variants.map((variant) => (
+              <DropdownMenuRadioItem key={variant.id} value={variant.id}>
+                {variantLabel(variant.id)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   return (
     <Select
@@ -58,14 +112,10 @@ export function ReasoningPicker({
       >
         <Brain className="size-3 text-foreground" />
         <SelectValue placeholder={t("reasoning.placeholder")}>
-          {(value) => {
+          {(shown) => {
             // Base UI renders the raw value in the trigger; here we format it with the translated label
-            if (value == null) return t("reasoning.placeholder")
-            if (value === "off") return t("reasoning.off")
-            const variant = variants.find((v) => v.id === value)
-            return variant
-              ? t(`reasoning.variants.${variant.id}`, { defaultValue: variant.label })
-              : String(value)
+            if (shown == null) return t("reasoning.placeholder")
+            return variantLabel(String(shown))
           }}
         </SelectValue>
       </SelectTrigger>

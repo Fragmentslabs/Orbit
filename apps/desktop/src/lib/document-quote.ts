@@ -27,6 +27,7 @@ const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
  *  "Motion" is the product name (the same label as the tab), not a word to
  *  translate. */
 export function quoteChipLabel(quote: PanelQuote): string {
+  if (quote.kind === "widget") return `Widget · ${quote.name} · ${quote.size}`
   if (quote.kind === "design") {
     const what = quote.elementPath?.length ? `<${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""}` : (quote.boardTitle ?? quote.file)
     return `Design · ${quote.file} · ${what}`
@@ -44,6 +45,7 @@ export function quoteChipLabel(quote: PanelQuote): string {
 /** What the cursor stopped over the chip shows: the quoted stretch or the
  *  composition path — what the person needs to know WHAT is attached. */
 export function quoteChipTitle(quote: PanelQuote): string {
+  if (quote.kind === "widget") return quote.fragmentName ? `${quote.name} — ${quote.fragmentName}` : quote.name
   if (quote.kind === "design") return quote.text || quote.html || quote.file
   return quote.kind === "motion" ? quote.file : quote.text
 }
@@ -52,6 +54,17 @@ export function quoteChipTitle(quote: PanelQuote): string {
  *  motion citation has no page or line, and emitting the empty keys would make
  *  the model text be born with orphan fields. */
 function quotePayload(quote: PanelQuote): QuotePayload {
+  if (quote.kind === "widget") {
+    return {
+      kind: "widget",
+      fragmentId: quote.fragmentId,
+      ...(quote.fragmentName ? { fragmentName: quote.fragmentName } : {}),
+      widgetId: quote.widgetId,
+      name: quote.name,
+      size: quote.size,
+      ...(quote.sizes?.length ? { sizes: quote.sizes } : {}),
+    }
+  }
   if (quote.kind === "design") {
     return {
       kind: "design",

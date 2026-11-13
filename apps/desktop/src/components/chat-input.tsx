@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, Monitor, PlusIcon, Quote, X } from "lucide-react"
 import {
@@ -26,6 +26,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
+import { useComposerLayout } from "@/src/hooks/use-composer-layout"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { TemplateBadge } from "@/src/components/template-badge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
@@ -135,6 +136,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   // Controlled "+" menu so it can CLOSE before opening a settings
   // modal: the menu popup lives above the modals and would cover them.
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  // The selectors collapse in three steps measured from the composer's own width.
+  const composerRef = useRef<HTMLDivElement>(null)
+  const { band } = useComposerLayout(composerRef)
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -258,10 +262,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     <PromptInputProvider>
     <ReferencePalette servers={toolsServers}>
     <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
-    <DraftInputBridge sessionId={sessionId} />
+    <DraftInputBridge sessionId={sessionId} draftKey={draftKey} />
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
     <PendingAttachmentSync sessionId={sessionId} draftKey={draftKey} />
-    <div className="w-full max-w-2xl mx-auto pb-4 @container">
+    <div ref={composerRef} className="w-full max-w-2xl mx-auto pb-4 @container">
       <BrowserSelectionChips selections={selections} onRemove={removeSelection} />
       {quotes.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
@@ -275,7 +279,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                   document or an instant of a composition. */}
               {q.kind === "motion" ? (
                 <Clapperboard className="size-3" />
-              ) : q.kind === "design" ? (
+              ) : q.kind === "design" || q.kind === "widget" ? (
                 <LayoutGrid className="size-3" />
               ) : (
                 <Quote className="size-3" />
@@ -295,6 +299,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         </div>
       )}
       <QueueIndicator sessionId={sessionId} />
+      <TemplateBadge />
       <PromptInput
         multiple
         onSubmitCapture={noProvider ? (e) => {
@@ -370,7 +375,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           {/* The microphone is anchored to the LINE of the textarea, and not to the top of the
               box: that way it follows the text where it starts, even if some
               line comes in above the box. */}
-          <TemplateBadge />
           <div className="relative w-full">
             {/* TOP right corner, at the level of the first line of the text:
                 absolute so it does not push the content, with the slack on the right
@@ -399,21 +403,27 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                 <PromptInputActionAddAttachments label={t("input.attachFiles")} />
               </DropdownMenuContent>
             </DropdownMenu>
-            <QuickSettingsMenu sessionId={sessionId} />
           </div>
           <div className="flex items-center gap-1">
-            <div className="hidden @xl:flex items-center gap-1">
-              {model?.variants && model.variants.length > 0 && (
-                <ReasoningPicker
-                  variants={model.variants}
-                  enabled={thinking}
-                  canDisable={!model.reasoningAlwaysOn}
-                  selected={variantId}
-                  onSelect={(id) => update({ enabled: id != null, variantId: id ?? undefined })}
-                />
-              )}
-              <ModelPicker sessionId={sessionId} />
-            </div>
+            {/* Two selectors while they fit: with room the thinking keeps its label,
+                with less room it becomes an icon and the model keeps its name. */}
+            {band !== "narrow" && (
+              <div className="flex items-center gap-1">
+                {model?.variants && model.variants.length > 0 && (
+                  <ReasoningPicker
+                    compact={band === "medium"}
+                    variants={model.variants}
+                    enabled={thinking}
+                    canDisable={!model.reasoningAlwaysOn}
+                    selected={variantId}
+                    onSelect={(id) => update({ enabled: id != null, variantId: id ?? undefined })}
+                  />
+                )}
+                <ModelPicker sessionId={sessionId} />
+              </div>
+            )}
+            {/* With no room left, one button opens everything — glued to the left of Send. */}
+            {band === "narrow" && <QuickSettingsMenu sessionId={sessionId} />}
             <SendButtonGroup
               emptySlot={
                 // The panel's new chat creates the session in a tab without activating it; the
