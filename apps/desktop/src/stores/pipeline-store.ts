@@ -32,6 +32,13 @@ interface PipelineState {
   openPipelineId: string | null
   setOpenPipeline: (id: string | null) => void
 
+  /** The settings, floating over the board of the open pipeline. */
+  settingsOpen: boolean
+  setSettingsOpen: (open: boolean) => void
+  /** The "new task" plan dialog of the open pipeline — opened from the window header. */
+  planOpen: boolean
+  setPlanOpen: (open: boolean) => void
+
   load: () => Promise<void>
   applyEvent: (event: PipelineEvent) => void
 
@@ -93,7 +100,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   activity: {},
   loaded: false,
   openPipelineId: null,
-  setOpenPipeline: (id) => set({ openPipelineId: id }),
+  setOpenPipeline: (id) =>
+    set(id ? { openPipelineId: id } : { openPipelineId: null, settingsOpen: false, planOpen: false }),
+  settingsOpen: false,
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  planOpen: false,
+  setPlanOpen: (open) => set({ planOpen: open }),
 
   load: async () => {
     const [data, templates] = await Promise.all([pipelineApi.load(), pipelineApi.templates()])

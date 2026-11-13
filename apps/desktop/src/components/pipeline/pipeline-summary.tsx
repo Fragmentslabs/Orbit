@@ -12,13 +12,13 @@ const MAX_DONE = 30
 /** Tasks of the pipeline board, not the ones that are a delivery of the merge flow. */
 export const realTasks = (tasks: Task[]) => tasks.filter((t) => !t.deliveryId)
 
-function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+/** A block of the right rail: a quiet label and its rows — no card inside a 240px column. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border bg-card p-3.5">
-      <p className="text-[13px] font-semibold">{title}</p>
-      {subtitle && <p className="mb-1 hidden text-[11px] text-muted-foreground @[24rem]:block">{subtitle}</p>}
-      <div className={cn(!subtitle && "mt-1")}>{children}</div>
-    </div>
+    <section>
+      <p className="px-0.5 pb-1 text-[11px] font-medium text-muted-foreground">{title}</p>
+      <div className="flex flex-col gap-0.5">{children}</div>
+    </section>
   )
 }
 
@@ -27,19 +27,23 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
     <button
       type="button"
       onClick={onClick}
-      className="-mx-2 flex w-[calc(100%+1rem)] flex-col gap-1.5 rounded-lg px-2 py-[9px] text-left text-xs transition-colors hover:bg-muted/50"
+      className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/50"
     >
       {children}
     </button>
   )
 }
 
+function Empty({ text }: { text: string }) {
+  return <p className="px-2 py-1 text-[11px] text-muted-foreground">{text}</p>
+}
+
 const label = (task: Task) => (task.number ? `#${task.number}` : "")
 
 /**
- * What the pipeline page shows beside the list: what is running now, what needs the user (a
- * failure or a pause) and what was finished lately, across all the pipelines; every row opens
- * that pipeline's board.
+ * The right rail of the pipeline page, the same width and shape as the menu of the Tools and
+ * Usage pages: what is running now, what needs the user (a failure or a pause) and what was
+ * finished lately, across all the pipelines. Every row opens that pipeline's board.
  */
 export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
   pipelines: Pipeline[]
@@ -68,10 +72,10 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
   const showPipeline = pipelines.length > 1
 
   return (
-    <div className="flex flex-col gap-3">
-      <Card title={t("pipeline.summary.running")} subtitle={t("pipeline.summary.runningHint")}>
+    <div className="flex flex-col gap-4">
+      <Section title={t("pipeline.summary.running")}>
         {summary.running.length === 0 ? (
-          <p className="py-2 text-[11px] text-muted-foreground">{t("pipeline.summary.nothingRunning")}</p>
+          <Empty text={t("pipeline.summary.nothingRunning")} />
         ) : (
           summary.running.map(({ pipeline, task, phase }) => (
             <Row key={task.id} onClick={() => onOpen(pipeline.id)}>
@@ -80,28 +84,19 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
                 <span className="min-w-0 flex-1 truncate">
                   <span className="text-muted-foreground">{label(task)}</span> {task.title}
                 </span>
-                <span className="hidden shrink-0 text-[11px] text-muted-foreground @[24rem]:inline">{formatDuration(task.workTimeMs)}</span>
               </span>
-              <span className="flex w-full items-center gap-2 pl-5">
-                <span className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="block h-full rounded-full bg-blue-400"
-                    style={{ width: `${Math.round(((phase.index - 0.5) / Math.max(phase.of, 1)) * 100)}%` }}
-                  />
-                </span>
-                <span className="shrink-0 text-right text-[11px] text-muted-foreground">
-                  {phase.name} ({phase.index}/{phase.of})
-                </span>
+              <span className="truncate pl-5 text-[11px] text-muted-foreground">
+                {phase.name} ({phase.index}/{phase.of}) · {formatDuration(task.workTimeMs)}
               </span>
-              {showPipeline && <span className="pl-5 text-[11px] text-muted-foreground">{pipeline.name}</span>}
+              {showPipeline && <span className="truncate pl-5 text-[11px] text-muted-foreground">{pipeline.name}</span>}
             </Row>
           ))
         )}
-      </Card>
+      </Section>
 
-      <Card title={t("pipeline.summary.attention")}>
+      <Section title={t("pipeline.summary.attention")}>
         {summary.attention.length === 0 ? (
-          <p className="py-2 text-[11px] text-muted-foreground">{t("pipeline.summary.nothingStuck")}</p>
+          <Empty text={t("pipeline.summary.nothingStuck")} />
         ) : (
           summary.attention.map(({ pipeline, task, phase }) => {
             const failed = task.pauseReason === "error"
@@ -109,26 +104,24 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
               <Row key={task.id} onClick={() => onOpen(pipeline.id)}>
                 <span className="flex w-full items-center gap-2">
                   <span className={cn("size-2 shrink-0 rounded-full", failed ? "bg-destructive" : "bg-amber-400")} aria-hidden />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">
-                      <span className="text-muted-foreground">{label(task)}</span> {task.title}
-                    </span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {failed
-                        ? t("pipeline.summary.failedIn", { phase: phase.name, reason: task.error ?? "" })
-                        : t("pipeline.summary.pausedIn", { phase: phase.name })}
-                    </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-muted-foreground">{label(task)}</span> {task.title}
                   </span>
+                </span>
+                <span className="truncate pl-4 text-[11px] text-muted-foreground">
+                  {failed
+                    ? t("pipeline.summary.failedIn", { phase: phase.name, reason: task.error ?? "" })
+                    : t("pipeline.summary.pausedIn", { phase: phase.name })}
                 </span>
               </Row>
             )
           })
         )}
-      </Card>
+      </Section>
 
-      <Card title={t("pipeline.summary.done")}>
+      <Section title={t("pipeline.summary.done")}>
         {summary.done.length === 0 ? (
-          <p className="py-2 text-[11px] text-muted-foreground">{t("pipeline.summary.nothingDone")}</p>
+          <Empty text={t("pipeline.summary.nothingDone")} />
         ) : (
           summary.done.map(({ pipeline, task }) => (
             <Row key={task.id} onClick={() => onOpen(pipeline.id)}>
@@ -137,14 +130,12 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
                 <span className="min-w-0 flex-1 truncate">
                   <span className="text-muted-foreground">{label(task)}</span> {task.title}
                 </span>
-                <span className="hidden shrink-0 text-[11px] tabular-nums text-muted-foreground @[24rem]:inline">
-                  {formatWhen(Date.parse(task.completedAt!), locale)}
-                </span>
               </span>
+              <span className="pl-4 text-[11px] text-muted-foreground">{formatWhen(Date.parse(task.completedAt!), locale)}</span>
             </Row>
           ))
         )}
-      </Card>
+      </Section>
     </div>
   )
 }

@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react'
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useTranslation } from 'react-i18next'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AlertTriangle, Check, Loader2, Pause, Play, RotateCcw, Search, Terminal, Trash2, X } from 'lucide-react-native'
@@ -34,6 +35,7 @@ export function TaskDetail({
   onClose: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
 
@@ -101,21 +103,16 @@ export function TaskDetail({
     }
   }
 
-  const confirmDeletion = () => {
-    Alert.alert(
-      t('pipeline.confirmTaskDeletion', { title: task.title }),
-      t('pipeline.taskDeletionDescription'),
-      [
-        { text: t('sidebar.cancel'), style: 'cancel' },
-        {
-          text: t('pipeline.deleteTask'),
-          style: 'destructive',
-          onPress: () => {
-            void removeTask(pipeline.id, task.id).then(onClose)
-          },
-        },
-      ],
-    )
+  const confirmDeletion = async () => {
+    const ok = await confirm({
+      title: t('pipeline.confirmTaskDeletion', { title: task.title }),
+      description: t('pipeline.taskDeletionDescription'),
+      confirmLabel: t('pipeline.deleteTask'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    void removeTask(pipeline.id, task.id).then(onClose)
   }
 
   const diffLines = useMemo(() => {

@@ -165,7 +165,6 @@ describe('legacy data migration', () => {
       description: 'Implementa',
       thinkingLevel: 2,
       order: 0,
-      kind: 'development',
       templateId: 'validation',
       tools: ['read', 'memory', 'edit'],
     })
@@ -213,7 +212,6 @@ describe('legacy data migration', () => {
       i18nKey: 'development',
       isDefault: true,
       userCreated: true,
-      kind: 'development',
       tools: ['read'],
     })
   })

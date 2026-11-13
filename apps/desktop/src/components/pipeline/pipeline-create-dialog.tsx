@@ -97,13 +97,12 @@ export function PipelineCreateDialog({
 
   // Built-in phases have translated name/description (the prompt stays in
   // English, like the rest of the app's prompts). The user's use what they wrote.
-  // The label family comes from `kind`: `i18nKey` is the persisted template id,
-  // which only says the phase is a built-in one.
+  // `i18nKey` is the persisted template id, which also names the translation.
   const label = (tpl: PhaseTemplate) =>
     tpl.i18nKey && !tpl.custom
       ? {
-          name: t(`pipeline.phase.${tpl.kind}.name`),
-          description: t(`pipeline.phase.${tpl.kind}.description`),
+          name: t(`pipeline.phase.${tpl.i18nKey}.name`),
+          description: t(`pipeline.phase.${tpl.i18nKey}.description`),
         }
       : { name: tpl.name, description: tpl.description }
 
@@ -111,8 +110,9 @@ export function PipelineCreateDialog({
     templateId: tpl.id,
     ...label(tpl),
     prompt: tpl.prompt,
+    ...(tpl.noteContract ? { noteContract: tpl.noteContract } : {}),
     tools: [...tpl.tools],
-    kind: tpl.kind,
+    agent: tpl.agent,
   })
 
   // Initial state on every open: only the default phases come in; the rest stay
@@ -144,8 +144,9 @@ export function PipelineCreateDialog({
           name: p.name,
           description: p.description,
           prompt: p.prompt,
+          ...(p.noteContract ? { noteContract: p.noteContract } : {}),
           tools: [...p.tools],
-          kind: p.kind ?? "generic",
+          agent: p.agent,
           providerId: p.providerId,
           modelId: p.modelId,
           reasoning: p.reasoning ?? null,
@@ -263,13 +264,14 @@ export function PipelineCreateDialog({
               name: phase.name,
               description: phase.description,
               prompt: phase.prompt,
+              ...(phase.noteContract ? { noteContract: phase.noteContract } : {}),
               providerId: phase.providerId && phase.modelId ? phase.providerId : phasesModel.providerId,
               modelId: phase.providerId && phase.modelId ? phase.modelId : phasesModel.modelId,
               thinkingLevel: previous?.thinkingLevel ?? 0,
               reasoning: phase.providerId && phase.modelId ? (phase.reasoning ?? null) : phasesReasoning,
               ...(phase.templateId ? { templateId: phase.templateId } : {}),
               tools: [...phase.tools],
-              kind: phase.kind,
+              ...(phase.agent ? { agent: phase.agent } : {}),
               order,
             }
           }),
@@ -305,198 +307,239 @@ export function PipelineCreateDialog({
     }
   }
 
+  // One line under the two sections: what is actually about to be created.
+  const summary = [
+    t("pipeline.settings.phasesSummary", { count: phases.length }),
+    worktreePerTask && hasGit !== false ? t("pipeline.settings.worktreeOn") : t("pipeline.settings.worktreeOff"),
+    commitAtEnd ? t("pipeline.settings.commitOn") : t("pipeline.settings.commitOff"),
+    ...(mergeFlow && parallelTasks > 1 ? [t("pipeline.settings.parallel", { count: parallelTasks })] : []),
+  ].join(" · ")
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle>{editingPipeline ? t("pipeline.editPipeline") : t("pipeline.newPipeline")}</DialogTitle>
-
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-            <Field label={t("pipeline.pipelineName")}>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-8 text-sm"
-                placeholder={t("pipeline.nameExample")}
-              />
-            </Field>
-
-            <Field label={t("pipeline.folders")} hint={t("pipeline.foldersHint")}>
-              <div className="flex flex-wrap items-center gap-2">
-                <FolderSelector folders={folders} onFoldersChange={setFolders} />
-                {/* Branch badge only after the folder: before it there is no repo
-                    to list, and the picker would open empty. */}
-                {folders[0] && <BranchSelector repoPath={folders[0]} />}
-              </div>
-              {folders.length > 0 && (
-                
-                  <Truncate>
-                      <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                      {t("pipeline.mainRepository")}: <span className="text-foreground">{folders[0]}</span>
-                    </p>
-                  </Truncate>
-              )}
-            </Field>
-
-            {!editingPipeline && (
-            <Field label={t("pipeline.defaultModel")} hint={t("pipeline.modelHint")}>
-              {/* Trigger that looks like a form field (same visual as the Input),
-                  but opens the real picker — which includes the recents. Next to
-                  it, the reasoning level (as in Preferences). */}
-              <div className="flex items-center gap-1.5">
-                <div className="min-w-0 flex-1">
-                  <ModelPicker
-                    sessionId={MODEL_KEY}
-                    triggerClassName="w-full justify-start gap-1.5 rounded-md border border-input bg-input/20 px-2 text-sm font-normal shadow-none hover:bg-accent/40 dark:bg-input/30 md:text-xs/relaxed"
-                  />
-                </div>
-                <ThinkingMenu model={model ?? null} value={defaultReasoning} onChange={setDefaultReasoning} />
-              </div>
-            </Field>
-            )}
-
-            <Field label={t("pipeline.phases")} hint={t("pipeline.phasesHint")}>
-              <DndContext sensors={sensors} onDragEnd={handleDrop}>
-                <div className="space-y-1">
-                  {phases.map((phase, index) => (
-                    <PhaseRow
-                      key={`${phase.templateId ?? "custom"}-${index}`}
-                      phase={phase}
-                      index={index}
-                      defaultModel={phasesModel}
-                      defaultReasoning={phasesReasoning}
-                      showDefault={!editingPipeline}
-                      onEdit={() => setEditing({ index, phase })}
-                      onRemove={() => setPhases((current) => current.filter((_, i) => i !== index))}
-                    />
-                  ))}
-                </div>
-              </DndContext>
-
-              <div className="mt-1.5">
-                <DropdownMenu open={phaseMenuOpen} onOpenChange={setPhaseMenuOpen}>
-                  <DropdownMenuTrigger
-                    className="flex items-center gap-1 rounded-md border border-dashed px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <PlusIcon className="size-3" />
-                    {t("pipeline.addPhase")}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-56">
-                    {available.map((tpl) => (
-                      <DropdownMenuItem key={tpl.id} onClick={() => setPhases((current) => [...current, fromTemplate(tpl)])}>
-                        <div className="min-w-0 flex-1">
-                          <Truncate text={label(tpl).name}>
-                            <p className="truncate text-xs">{label(tpl).name}</p>
-                          </Truncate>
-                          <Truncate text={label(tpl).description}>
-                            <p className="truncate text-[10px] text-muted-foreground">{label(tpl).description}</p>
-                          </Truncate>
-                        </div>
-                        {/* Only the user-created ones can go; the built-in ones belong to the app. */}
-                        {tpl.userCreated && (
-                          <Hint label={t("pipeline.deletePhase")}>
-                            <button
-                              type="button"
-                              aria-label={t("pipeline.deletePhase")}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                e.preventDefault()
-                                setPhaseMenuOpen(false)
-                                setDeleting(tpl)
-                              }}
-                              className="ml-2 shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <XIcon className="size-3" />
-                            </button>
-                          </Hint>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                    {available.length > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem onClick={() => setEditing({ index: null, phase: null })}>
-                      <PlusIcon className="size-3.5" />
-                      {t("pipeline.createPhase")}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </Field>
-
-            <div className="space-y-2">
-              {/* Worktrees: the flow is built around them (tasks merge into one
-                  integration branch). Without git there is nothing to merge, so the
-                  switch is off and explains why. */}
-              <label className={cn("flex items-start gap-2", hasGit === false ? "opacity-60" : "cursor-pointer")}>
-                <Switch
-                  checked={worktreePerTask && hasGit !== false}
-                  onCheckedChange={setWorktreePerTask}
-                  disabled={hasGit === false}
-                  className="mt-0.5"
-                />
-                <span>
-                  <span className="block text-xs text-foreground">{t("pipeline.worktreePerTask")}</span>
-                  <span className="block text-[11px] text-muted-foreground">{t("pipeline.worktreePerTaskHint")}</span>
-                  {hasGit === false && (
-                    <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
-                      {t("pipeline.noGitNotice")}
-                    </span>
-                  )}
-                  {hasGit !== false && !worktreePerTask && (
-                    <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
-                      {t("pipeline.worktreeOffNotice")}
-                    </span>
-                  )}
-                </span>
-              </label>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
-                  <span className="text-xs text-foreground">{t("pipeline.commit")}</span>
-                  <Hint label={t("pipeline.commitPromptTitle")}>
-                    <button
-                      type="button"
-                      onClick={() => setPromptOpen(true)}
-                      className="cursor-pointer text-muted-foreground hover:text-foreground"
-                    >
-                      <Settings2Icon className="size-3.5" />
-                    </button>
-                  </Hint>
-                </div>
-                {!commitAtEnd && (
-                  <p className="pl-10 text-[11px] text-amber-600 dark:text-amber-400">
-                    {t(worktreePerTask && hasGit !== false ? "pipeline.commitOffSharedNotice" : "pipeline.commitOffNotice")}
-                  </p>
-                )}
-              </div>
-              {mergeFlow && (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={parallelTasks}
-                    onChange={(e) => setParallelTasks(Number(e.target.value))}
-                    className="h-7 rounded-md border bg-background px-1.5 text-xs"
-                  >
-                    {[1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                  <span>
-                    <span className="block text-xs text-foreground">{t("pipeline.parallelTasks")}</span>
-                    <span className="block text-[11px] text-muted-foreground">{t("pipeline.parallelTasksHint")}</span>
-                  </span>
-                </div>
-              )}
+        <DialogContent className="flex max-h-[88vh] max-w-[min(60rem,calc(100%-2rem))] flex-col gap-0 overflow-hidden p-0">
+          <div className="flex items-start justify-between gap-4 border-b py-4 pr-14 pl-5">
+            <div className="min-w-0">
+              <DialogTitle>{editingPipeline ? t("pipeline.editPipeline") : t("pipeline.newPipeline")}</DialogTitle>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{t("pipeline.emptySubtitle")}</p>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t pt-3">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button size="sm" disabled={!canCreate || saving} onClick={() => void create()}>
-              {editingPipeline ? t("pipeline.save") : t("pipeline.create")}
-            </Button>
+          <div className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[22rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
+            {/* 1 · Setup — what the pipeline is and how it runs. */}
+            <section className="flex flex-col border-b md:min-h-0 md:border-r md:border-b-0">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3.5">
+                <Field label={t("pipeline.pipelineName")}>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder={t("pipeline.nameExample")}
+                  />
+                </Field>
+
+                <div className="border-t pt-3.5">
+                  <Field label={t("pipeline.folders")} hint={t("pipeline.foldersHint")}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <FolderSelector folders={folders} onFoldersChange={setFolders} />
+                      {/* Branch badge only after the folder: before it there is no repo
+                          to list, and the picker would open empty. */}
+                      {folders[0] && <BranchSelector repoPath={folders[0]} />}
+                    </div>
+                    {folders.length > 0 && (
+                      <Truncate>
+                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {t("pipeline.mainRepository")}: <span className="text-foreground">{folders[0]}</span>
+                        </p>
+                      </Truncate>
+                    )}
+                  </Field>
+                </div>
+
+                {!editingPipeline && (
+                  <div className="border-t pt-3.5">
+                    <Field label={t("pipeline.defaultModel")} hint={t("pipeline.modelHint")}>
+                      {/* Trigger that looks like a form field (same visual as the Input),
+                          but opens the real picker — which includes the recents. Next to
+                          it, the reasoning level (as in Preferences). */}
+                      <div className="flex items-center gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <ModelPicker
+                            sessionId={MODEL_KEY}
+                            triggerClassName="w-full justify-start gap-1.5 rounded-md border border-input bg-input/20 px-2 text-sm font-normal shadow-none hover:bg-accent/40 dark:bg-input/30 md:text-xs/relaxed"
+                          />
+                        </div>
+                        <ThinkingMenu model={model ?? null} value={defaultReasoning} onChange={setDefaultReasoning} />
+                      </div>
+                    </Field>
+                  </div>
+                )}
+
+                <div className="space-y-2.5 border-t pt-3.5">
+                  <p className="text-xs font-medium text-foreground">{t("pipeline.settings.run")}</p>
+
+                  {/* Worktrees: the flow is built around them (tasks merge into one
+                      integration branch). Without git there is nothing to merge, so the
+                      switch is off and explains why. */}
+                  <label className={cn("flex items-start gap-2", hasGit === false ? "opacity-60" : "cursor-pointer")}>
+                    <Switch
+                      checked={worktreePerTask && hasGit !== false}
+                      onCheckedChange={setWorktreePerTask}
+                      disabled={hasGit === false}
+                      className="mt-0.5"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs text-foreground">{t("pipeline.worktreePerTask")}</span>
+                      <span
+                        className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground"
+                        title={t("pipeline.worktreePerTaskHint")}
+                      >
+                        {t("pipeline.worktreePerTaskHint")}
+                      </span>
+                      {hasGit === false && (
+                        <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                          {t("pipeline.noGitNotice")}
+                        </span>
+                      )}
+                      {hasGit !== false && !worktreePerTask && (
+                        <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                          {t("pipeline.worktreeOffNotice")}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
+                      <span className="text-xs text-foreground">{t("pipeline.commit")}</span>
+                      <Hint label={t("pipeline.commitPromptTitle")}>
+                        <button
+                          type="button"
+                          onClick={() => setPromptOpen(true)}
+                          className="cursor-pointer text-muted-foreground hover:text-foreground"
+                        >
+                          <Settings2Icon className="size-3.5" />
+                        </button>
+                      </Hint>
+                    </div>
+                    {!commitAtEnd && (
+                      <p className="pl-11 text-[11px] text-amber-600 dark:text-amber-400">
+                        {t(worktreePerTask && hasGit !== false ? "pipeline.commitOffSharedNotice" : "pipeline.commitOffNotice")}
+                      </p>
+                    )}
+                  </div>
+
+                  {mergeFlow && (
+                    <div className="flex items-start gap-2">
+                      <select
+                        value={parallelTasks}
+                        onChange={(e) => setParallelTasks(Number(e.target.value))}
+                        className="mt-0.5 h-7 rounded-md border bg-background px-1.5 text-xs"
+                      >
+                        {[1, 2, 3, 4].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="min-w-0">
+                        <span className="block text-xs text-foreground">{t("pipeline.parallelTasks")}</span>
+                        <span
+                          className="line-clamp-2 text-[11px] text-muted-foreground"
+                          title={t("pipeline.parallelTasksHint")}
+                        >
+                          {t("pipeline.parallelTasksHint")}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* 2 · Phases — the order every task will run in. */}
+            <section className="flex flex-col md:min-h-0">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3.5">
+                <p className="text-[11px] text-muted-foreground">{t("pipeline.phasesHint")}</p>
+
+                <DndContext sensors={sensors} onDragEnd={handleDrop}>
+                  <div className="space-y-1">
+                    {phases.map((phase, index) => (
+                      <PhaseRow
+                        key={`${phase.templateId ?? "custom"}-${index}`}
+                        phase={phase}
+                        index={index}
+                        defaultModel={phasesModel}
+                        defaultReasoning={phasesReasoning}
+                        showDefault={!editingPipeline}
+                        onEdit={() => setEditing({ index, phase })}
+                        onRemove={() => setPhases((current) => current.filter((_, i) => i !== index))}
+                      />
+                    ))}
+                  </div>
+                </DndContext>
+
+                <div className="pt-0.5">
+                  <DropdownMenu open={phaseMenuOpen} onOpenChange={setPhaseMenuOpen}>
+                    <DropdownMenuTrigger className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+                      <PlusIcon className="size-3" />
+                      {t("pipeline.addPhase")}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-56">
+                      {available.map((tpl) => (
+                        <DropdownMenuItem key={tpl.id} onClick={() => setPhases((current) => [...current, fromTemplate(tpl)])}>
+                          <div className="min-w-0 flex-1">
+                            <Truncate text={label(tpl).name}>
+                              <p className="truncate text-xs">{label(tpl).name}</p>
+                            </Truncate>
+                            <Truncate text={label(tpl).description}>
+                              <p className="truncate text-[10px] text-muted-foreground">{label(tpl).description}</p>
+                            </Truncate>
+                          </div>
+                          {/* Only the user-created ones can go; the built-in ones belong to the app. */}
+                          {tpl.userCreated && (
+                            <Hint label={t("pipeline.deletePhase")}>
+                              <button
+                                type="button"
+                                aria-label={t("pipeline.deletePhase")}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  setPhaseMenuOpen(false)
+                                  setDeleting(tpl)
+                                }}
+                                className="ml-2 shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <XIcon className="size-3" />
+                              </button>
+                            </Hint>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      {available.length > 0 && <DropdownMenuSeparator />}
+                      <DropdownMenuItem onClick={() => setEditing({ index: null, phase: null })}>
+                        <PlusIcon className="size-3.5" />
+                        {t("pipeline.createPhase")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t px-5 py-3">
+            <p className="min-w-0 truncate text-[11px] text-muted-foreground">{summary}</p>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button disabled={!canCreate || saving} onClick={() => void create()}>
+                {editingPipeline ? t("pipeline.save") : t("pipeline.create")}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -538,7 +581,7 @@ export function PipelineCreateDialog({
           />
           <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] text-muted-foreground">{t("pipeline.commitPromptEmpty")}</p>
-            <Button size="sm" onClick={() => setPromptOpen(false)}>
+            <Button onClick={() => setPromptOpen(false)}>
               {t("common.close")}
             </Button>
           </div>
@@ -559,7 +602,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 /** Draggable phase row: the handle moves it, the rest opens the editor. */
-function PhaseRow({
+export function PhaseRow({
   phase,
   index,
   defaultModel,

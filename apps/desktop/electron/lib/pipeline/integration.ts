@@ -13,7 +13,7 @@ import { PIPELINE_INTEGRATION_ATTEMPTS, pipelineFlow, pipelineModel } from '@sha
 import { git, repositoryRoot } from '../worktrees/core'
 import { discoverChecks, runCheck } from '../orchestration/checks'
 import { tryCommit } from './commit'
-import { DEFAULT_POLICY, CONTRACT } from './templates'
+import { DEFAULT_POLICY } from './templates'
 import { runPhase } from './runner'
 import {
   abortMerge,
@@ -159,8 +159,7 @@ You work inside a single git worktree. The engine runs every git command that ch
 
 For a conflict: the listed files contain conflict markers. For each one, read both sides, keep the intent of BOTH changes, remove every marker (<<<<<<<, =======, >>>>>>>) and make the result coherent — callers, imports and types must still line up. Only drop one side when the other clearly supersedes it, and say so in the note.
 For failing checks: read the output and find the cause. After a merge it is usually two valid changes that no longer fit together (a renamed symbol, a changed signature, a duplicated import). Fix the code. Never weaken, skip or delete tests to make them pass. If a failure has nothing to do with the merged work, leave it and say so in the note.
-Keep the change as small as it can be.
-${CONTRACT}`
+Keep the change as small as it can be.`
 
 function integrationPhase(pipeline: Pipeline): PhaseConfig {
   const model = pipelineModel(pipeline)
@@ -176,7 +175,6 @@ function integrationPhase(pipeline: Pipeline): PhaseConfig {
     reasoning: model.reasoning ?? null,
     tools: ['read', 'edit', 'shell'],
     order: 0,
-    kind: 'infra',
   }
 }
 

@@ -3,7 +3,8 @@
  * drag & drop by long-press and the automatic queue control in the header.
  */
 import { useEffect, useState } from 'react'
-import { View, Text, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, MoreHorizontal, Pause, Pencil, Play, Trash2 } from 'lucide-react-native'
@@ -18,6 +19,7 @@ import { useCodeOnly } from '~/components/pipeline/use-code-only'
 
 export default function PipelineBoardScreen() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   useCodeOnly()
@@ -67,21 +69,16 @@ export default function PipelineBoardScreen() {
       icon: Trash2,
       label: t('pipeline.removePipeline'),
       destructive: true,
-      onPress: () =>
-        Alert.alert(
-          t('pipeline.removePipeline'),
-          t('pipeline.confirmRemoval', { name: pipeline.name }),
-          [
-            { text: t('sidebar.cancel'), style: 'cancel' },
-            {
-              text: t('pipeline.removePipeline'),
-              style: 'destructive',
-              onPress: () => {
-                void removePipeline(pipeline.id).then(() => router.back())
-              },
-            },
-          ],
-        ),
+      onPress: async () => {
+        const ok = await confirm({
+          title: t('pipeline.removePipeline'),
+          description: t('pipeline.confirmRemoval', { name: pipeline.name }),
+          confirmLabel: t('pipeline.removePipeline'),
+          cancelLabel: t('sidebar.cancel'),
+          destructive: true,
+        })
+        if (ok) void removePipeline(pipeline.id).then(() => router.back())
+      },
     },
   ]
 

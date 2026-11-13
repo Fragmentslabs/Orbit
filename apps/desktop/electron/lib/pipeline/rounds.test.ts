@@ -39,7 +39,6 @@ const pipeline = {
       thinkingLevel: 0,
       tools: [],
       order: 1,
-      kind: 'validation',
     },
   ],
   operationMode: 'manual',

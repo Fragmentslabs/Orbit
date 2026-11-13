@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowLeftIcon, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { MoreHorizontalIcon, PencilIcon } from "lucide-react"
 import type { PhaseChoice, PhaseConfig, Pipeline, Task } from "@shared/pipeline"
 import { isTaskSatisfied } from "@shared/pipeline"
-import { Button } from "@/components/ui/button"
 import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store"
 import { cn } from "@/lib/utils"
 import {
@@ -13,8 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { PipelineCreateDialog } from "./pipeline-create-dialog"
 import { PipelineList } from "./pipeline-list"
+import { PipelineSettingsPanel } from "./pipeline-settings-panel"
 import { PhaseEditor, useModelLabel, useSavePhaseTemplate, type PhaseDestination } from "./phase-editor"
 import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
@@ -22,11 +21,9 @@ import { TaskCreateDialog } from "./task-create-dialog"
 import { TaskPlanDialog } from "./task-plan-dialog"
 import { PipelineFooter } from "./pipeline-footer"
 import { IntegrationBar } from "./integration-bar"
-import { PipelineModelControl } from "./pipeline-model-control"
 import { HistoryPanel } from "./history-panel"
 import { TaskCard } from "./task-card"
 import { TaskModal } from "./task-modal"
-import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
@@ -44,6 +41,7 @@ export function PipelineBoard() {
   const load = usePipelineStore((s) => s.load)
   const openPipelineId = usePipelineStore((s) => s.openPipelineId)
   const setOpenPipelineId = usePipelineStore((s) => s.setOpenPipeline)
+  const setSettingsOpen = usePipelineStore((s) => s.setSettingsOpen)
 
   useEffect(() => {
     if (!loaded) void load()
@@ -67,29 +65,35 @@ export function PipelineBoard() {
   }
 
   return open ? (
-    <PipelineBoardView pipeline={open} onBack={() => setOpenPipelineId(null)} />
+    <PipelineBoardView pipeline={open} />
   ) : (
-    <PipelineList onOpen={setOpenPipelineId} />
+    <PipelineList
+      onOpen={setOpenPipelineId}
+      onSettings={(id) => {
+        setOpenPipelineId(id)
+        setSettingsOpen(true)
+      }}
+    />
   )
 }
 
 // ─── Level 2: pipeline board ─────────────────────────────────────────────────
 
-function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: () => void }) {
+function PipelineBoardView({ pipeline }: { pipeline: Pipeline }) {
   const { t } = useTranslation()
   const startTask = usePipelineStore((s) => s.startTask)
   const createTaskInStore = usePipelineStore((s) => s.createTask)
-  const removePipeline = usePipelineStore((s) => s.removePipeline)
-  const toggleQueue = usePipelineStore((s) => s.toggleQueue)
+  const settingsOpen = usePipelineStore((s) => s.settingsOpen)
+  const setSettingsOpen = usePipelineStore((s) => s.setSettingsOpen)
   const allTasks = usePipelineStore((s) => s.tasksPerPipeline[pipeline.id] ?? EMPTY_TASKS)
   // Delivered tasks left the board for the history panel.
   const tasks = useMemo(() => allTasks.filter((x) => !x.deliveryId), [allTasks])
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [planOpen, setPlanOpen] = useState(false)
+  const planOpen = usePipelineStore((s) => s.planOpen)
+  const setPlanOpen = usePipelineStore((s) => s.setPlanOpen)
   const queueEnabled = usePipelineStore((s) => s.queueEnabled[pipeline.id] ?? false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [returning, setReturning] = useState<string | null>(null)
   const [instructing, setInstructing] = useState<string | null>(null)
@@ -107,8 +111,9 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
             name: currentPhase.name,
             description: currentPhase.description,
             prompt: currentPhase.prompt,
+            ...(currentPhase.noteContract ? { noteContract: currentPhase.noteContract } : {}),
             tools: [...currentPhase.tools],
-            kind: currentPhase.kind ?? "generic",
+            agent: currentPhase.agent,
             providerId: currentPhase.providerId,
             modelId: currentPhase.modelId,
             reasoning: currentPhase.reasoning ?? null,
@@ -129,8 +134,10 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
               name: phase.name,
               description: phase.description,
               prompt: phase.prompt,
+              ...(phase.noteContract ? { noteContract: phase.noteContract } : {}),
               tools: [...phase.tools],
-              kind: phase.kind,
+              // Written even when absent: choosing General clears the specialist.
+              agent: phase.agent,
               providerId: phase.providerId ?? p.providerId,
               modelId: phase.modelId ?? p.modelId,
               reasoning: phase.reasoning !== undefined ? phase.reasoning : (p.reasoning ?? null),
@@ -195,77 +202,7 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Pipeline header: back + name + controls */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
-        <Hint label={t("pipeline.back")}>
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <ArrowLeftIcon className="size-4" />
-          </button>
-        </Hint>
-        <div className="min-w-0">
-          <Truncate>
-              <h2 className="truncate text-sm font-semibold text-foreground">{pipeline.name}</h2>
-          </Truncate>
-          <Truncate>
-            <p className="truncate text-[11px] text-muted-foreground">
-            {pipeline.phases.map((p) => p.name).join(" → ")}
-            {(pipeline.integration?.branch ?? (pipeline.worktreePerTask ? undefined : pipeline.branch)) &&
-              ` · ${pipeline.integration?.branch ?? pipeline.branch}`}
-          </p>
-          </Truncate>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <PipelineModelControl pipeline={pipeline} />
-          <Button size="lg" onClick={() => setPlanOpen(true)}>
-            <PlusIcon className="size-4" />
-            {t("pipeline.addTask")}
-          </Button>
-          <Hint label={t("pipeline.queueHint")}>
-            <button
-              type="button"
-              onClick={() => void toggleQueue(pipeline.id, !queueEnabled)}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
-                queueEnabled ? "border-primary/50 bg-primary/10 text-primary" : "hover:bg-accent",
-              )}
-            >
-       
-               {queueEnabled ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
-            {queueEnabled ? t("pipeline.queueOn") : t("pipeline.queueOff")}
-          </button>
-          </Hint>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
-              <MoreHorizontalIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                <PencilIcon className="size-3.5" />
-                {t("pipeline.editPipeline")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => {
-                  if (confirm(t("pipeline.confirmRemoval", { name: pipeline.name }))) {
-                    void removePipeline(pipeline.id)
-                    onBack()
-                  }
-                }}
-              >
-                <Trash2Icon className="size-3.5" />
-                {t("pipeline.removePipeline")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <IntegrationBar pipeline={pipeline} tasks={allTasks} onOpenHistory={() => setHistoryOpen(true)} />
 
       <DndContext sensors={sensors} onDragEnd={handleDrop}>
@@ -307,12 +244,6 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
         onManual={() => setCreateTaskOpen(true)}
       />
 
-      <PipelineCreateDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        editing={pipeline}
-      />
-
       <PhaseEditor
         phase={phaseForEditor}
         open={editingPhase != null && !!phaseForEditor}
@@ -350,6 +281,10 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
         open={!!openTaskId}
         onOpenChange={(open) => !open && setOpenTaskId(null)}
       />
+
+      {settingsOpen && (
+        <PipelineSettingsPanel pipeline={pipeline} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   )
 }

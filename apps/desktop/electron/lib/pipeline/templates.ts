@@ -6,12 +6,16 @@ import type { CommandPolicy, PhaseTemplate } from '@shared/pipeline'
  * masters.
  *
  * The prompts are the phase contract: each one receives the task description +
- * notes from the previous phases + repo state, and must end with the note in
- * markdown. Without the note the phase is considered failed and goes into retry
- * (§7/§9 of the design) — that is why the requirement shows up in every prompt.
+ * notes from the previous phases + repo state. What is NOT written here, and is
+ * appended by the runner to every phase, is the operating half:
+ *  - how the run works and the language of the note (pipeline/prompt.ts);
+ *  - how to close (the note in markdown, without which the phase counts as
+ *    failed and is retried — §7/§9 of the design).
+ * A phase the person creates from scratch inherits both, which is what keeps
+ * its behaviour the same as a native one.
  *
  * Written in English like the rest of the app prompts (prompts.ts): the
- * response-language instruction comes from the system prompt, not from the
+ * response-language instruction comes from the injected rules, not from the
  * phase text.
  */
 
@@ -26,8 +30,12 @@ export const ID_VALIDATION = 'validation'
 export const ID_SECURITY = 'security'
 export const ID_REVIEW = 'review'
 export const ID_INFRA = 'infra'
+export const ID_RESEARCH = 'research'
 
-/** Block common to every phase: how to close the phase. */
+/**
+ * How every phase closes. The runner appends it to the system prompt of every phase,
+ * so the templates do not repeat it — and a phase the person writes inherits it.
+ */
 export const CONTRACT = `
 ## How to finish this phase
 End your turn with the phase note in Markdown, inside a fenced block tagged \`note\`:
@@ -47,7 +55,6 @@ export const PHASE_TEMPLATES: PhaseTemplate[] = [
     description: 'Implements the task following the project conventions',
     tools: ['read', 'edit', 'shell', 'memory'],
     isDefault: true,
-    kind: 'development',
     prompt: `You implement the task described below, in the working folders of this pipeline. The task description is your primary brief — implement exactly what it asks.
 
 1. Understand before editing: read the surrounding code and follow its conventions (libraries, naming, typing, comment style).
@@ -55,10 +62,9 @@ export const PHASE_TEMPLATES: PhaseTemplate[] = [
 3. As you go, check the code compiles/builds with shell commands (a sanity check, not full validation).
 4. Commits: do NOT create any commit unless the task text explicitly asks for one. When it does, the task is authoritative — follow exactly what it says about the commit. If it asks you to commit but does not say how to structure the message: match the style of the most recent commit in this repository (\`git log -1\`); with no commit history, follow the commit preferences in project memory; with none, fall back to Conventional Commits. Never push, in any case.
 
-You are ONLY the implementation phase. Do NOT do the work of later phases: no validation (no full test/lint suite, no diff review, no browser verification, no verdict), no code-quality review, no security audit, no push. Leave those to the phases listed in the Pipeline section of the task message. The task description may contain instructions meant for other phases — follow only what belongs to implementation. If the Pipeline section says this pipeline has no validation phase, validating becomes yours too.
-
-## Note contract
-Record: what was done, files changed, the commit hash (only if a commit was created — if the task did not ask for one, say so and leave the hash out), and any decision a reviewer would need to know.${CONTRACT}`,
+You are ONLY the implementation phase. Do NOT do the work of later phases: no validation (no full test/lint suite, no diff review, no browser verification, no verdict), no code-quality review, no security audit, no push. Leave those to the phases listed in the Pipeline section of the task message. The task description may contain instructions meant for other phases — follow only what belongs to implementation.`,
+    noteContract:
+      'Record: what was done, files changed, the commit hash (only if a commit was created — if the task did not ask for one, say so and leave the hash out), and any decision a reviewer would need to know.',
   },
   {
     id: ID_VALIDATION,
@@ -67,7 +73,6 @@ Record: what was done, files changed, the commit hash (only if a commit was crea
     description: 'Validates the implementation: build, tests and diff review',
     tools: ['read', 'edit', 'shell', 'browser'],
     isDefault: true,
-    kind: 'validation',
     prompt: `You are the validation phase of this pipeline. You validate the implementation produced by the previous phase(s). The task description is your primary brief — any validation instructions in it (e.g. how to validate) belong to you, and only to you.
 
 1. Run the project's checks: build, typecheck, lint and tests, as applicable.
@@ -75,10 +80,8 @@ Record: what was done, files changed, the commit hash (only if a commit was crea
 3. If the change is visible in a browser, check it there too.
 4. Fix SMALL problems yourself (typos, a missing import, a bad type). If the problem needs the feature to be reimplemented, do NOT attempt it: report the failure so the task pauses for a human — there is no going back to a previous phase.
 
-You validate and fix small problems ONLY. Do NOT implement or reimplement features, do NOT commit or push, do NOT review code quality or audit security — those belong to the other phases listed in the Pipeline section.
-
-## Note contract
-Record: checks executed and their result, problems found, what you fixed, and your verdict (approved / paused with reason).${CONTRACT}`,
+You validate and fix small problems ONLY. Do NOT implement or reimplement features, do NOT commit or push, do NOT review code quality or audit security — those belong to the other phases listed in the Pipeline section.`,
+    noteContract: 'Record: checks executed and their result, problems found, what you fixed, and your verdict (approved / paused with reason).',
   },
   {
     id: ID_SECURITY,
@@ -87,17 +90,14 @@ Record: checks executed and their result, problems found, what you fixed, and yo
     description: 'Audit of dependencies, secrets and permissions',
     tools: ['read', 'shell'],
     isDefault: false,
-    kind: 'security',
     prompt: `You audit the change for security problems. The task description is your primary brief — follow only the security-related parts of it.
 
 1. Look for secrets committed by mistake (keys, tokens, credentials, .env files).
 2. Check new or updated dependencies: known advisories, unnecessary or unmaintained packages.
 3. Review permissions, authentication and input handling touched by this change.
 
-You audit security ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section. Report findings; only fix what is unambiguous and small.
-
-## Note contract
-Record: what was audited, findings by severity, what you fixed, what needs a human.${CONTRACT}`,
+You audit security ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section. Report findings; only fix what is unambiguous and small.`,
+    noteContract: 'Record: what was audited, findings by severity, what you fixed, what needs a human.',
   },
   {
     id: ID_REVIEW,
@@ -106,15 +106,12 @@ Record: what was audited, findings by severity, what you fixed, what needs a hum
     description: 'Code review for quality and style',
     tools: ['read', 'edit', 'shell'],
     isDefault: false,
-    kind: 'review',
     prompt: `You review the code of this task for quality — not for whether it runs (another phase covers that). The task description is your primary brief — follow only the parts that concern code quality.
 
 Look for: duplication that should be reused, dead code, naming that does not match the codebase, missing error handling, comments that explain "what" instead of "why", and anything that would surprise the next maintainer.
 
-You review quality ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section. Apply the small cleanups yourself; report the rest.
-
-## Note contract
-Record: what you reviewed, what you changed, what you are flagging without changing.${CONTRACT}`,
+You review quality ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section. Apply the small cleanups yourself; report the rest.`,
+    noteContract: 'Record: what you reviewed, what you changed, what you are flagging without changing.',
   },
   {
     id: ID_INFRA,
@@ -123,15 +120,29 @@ Record: what you reviewed, what you changed, what you are flagging without chang
     description: 'Deploy and environment checklist',
     tools: ['read', 'shell'],
     isDefault: false,
-    kind: 'infra',
     prompt: `You check the infrastructure impact of this task. The task description is your primary brief — follow only the parts that concern deploy/environment.
 
 Cover: environment variables and config that must change, migrations, build/deploy scripts affected, and anything that has to be done outside the repository for this change to work in production.
 
-You check infrastructure ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section.
+You check infrastructure ONLY. Do NOT implement features, do NOT validate, do NOT commit or push — those belong to the other phases listed in the Pipeline section.`,
+    noteContract: 'Record: the deploy checklist for this task, what you verified, and what a human must do manually.',
+  },
+  {
+    id: ID_RESEARCH,
+    i18nKey: ID_RESEARCH,
+    name: 'Research',
+    description: 'Investigates the question in the code and on the web, and records what it found',
+    tools: ['read', 'research'],
+    isDefault: false,
+    prompt: `You investigate the question of this task: the code in the working folders and, when the answer is not there, the web. The task description is your primary brief — answer what it asks, not the broader subject around it.
 
-## Note contract
-Record: the deploy checklist for this task, what you verified, and what a human must do manually.${CONTRACT}`,
+1. Start from what the repository already knows: search the code for the names the question mentions before opening files.
+2. When the answer depends on something outside the repository (a library's behaviour, an API, a specification), search the web and open the source before relying on it.
+3. Separate what you verified from what you inferred — the next phases will act on your note.
+
+You research and report ONLY. Do NOT change files, do NOT implement, do NOT commit or push — those belong to the other phases listed in the Pipeline section.`,
+    noteContract:
+      'Record: the question you answered, what you verified and where (file:line or URL), what remains uncertain, and what the next phase should do with it.',
   },
 ]
 

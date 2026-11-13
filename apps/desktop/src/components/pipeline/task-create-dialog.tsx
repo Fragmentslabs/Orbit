@@ -90,10 +90,10 @@ export function TaskCreateDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t pt-3">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" disabled={!title.trim() || saving} onClick={() => void create()}>
+          <Button disabled={!title.trim() || saving} onClick={() => void create()}>
             {t("pipeline.createTask")}
           </Button>
         </div>

@@ -94,10 +94,8 @@ export async function listTemplates(): Promise<PhaseTemplate[]> {
   const custom = await listCustomTemplates()
   const byId = new Map(PHASE_TEMPLATES.map((t) => [t.id, t]))
   for (const t of custom) {
-    // Older templates (saved before the `kind` field) inherit the role of the
-    // built-in with the same id; new user phases fall back to 'generic'.
     const builtIn = PHASE_TEMPLATES.some((e) => e.id === t.id)
-    byId.set(t.id, { ...t, kind: t.kind ?? byId.get(t.id)?.kind ?? 'generic', custom: true, userCreated: !builtIn })
+    byId.set(t.id, { ...t, custom: true, userCreated: !builtIn })
   }
   return [...byId.values()]
 }
@@ -171,8 +169,9 @@ async function copyPhases(input: NewPipelineInput): Promise<PhaseConfig[]> {
     name: t.name,
     description: t.description,
     prompt: t.prompt,
+    ...(t.noteContract ? { noteContract: t.noteContract } : {}),
     tools: t.tools,
-    kind: t.kind,
+    ...(t.agent ? { agent: t.agent } : {}),
   })
 
   let choices = input.phases
@@ -191,13 +190,14 @@ async function copyPhases(input: NewPipelineInput): Promise<PhaseConfig[]> {
     name: choice.name,
     description: choice.description,
     prompt: choice.prompt,
+    ...(choice.noteContract ? { noteContract: choice.noteContract } : {}),
     providerId: choice.providerId && choice.modelId ? choice.providerId : input.providerId,
     modelId: choice.providerId && choice.modelId ? choice.modelId : input.modelId,
     thinkingLevel: input.thinkingLevel ?? 0,
     reasoning: choice.reasoning !== undefined ? choice.reasoning : (input.reasoning ?? null),
     ...(choice.templateId ? { templateId: choice.templateId } : {}),
     tools: [...choice.tools],
-    kind: choice.kind,
+    ...(choice.agent ? { agent: choice.agent } : {}),
     order,
   }))
 }

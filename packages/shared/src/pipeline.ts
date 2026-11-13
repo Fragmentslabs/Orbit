@@ -7,7 +7,7 @@
  * order of the phases itself.
  */
 
-import type { ReasoningConfig } from './chat'
+import type { ProfileId, ReasoningConfig } from './chat'
 
 // ─── Project ─────────────────────────────────────────────────────────────────
 
@@ -27,21 +27,16 @@ export interface Project {
  * Capabilities unlocked per phase. It is a product grouping, not the name of
  * the engine tools — the mapping lives in electron/lib/pipeline/runner.ts.
  */
-export type AllowedTool = 'read' | 'edit' | 'shell' | 'browser' | 'memory'
-
-/**
- * Role of the phase in the pipeline. Defines what the phase does — and what it
- * leaves for the next ones — regardless of the name the user gives it. It is
- * what allows routing responsibilities (e.g. validate) even in custom phases.
- */
-export type PhaseKind = 'development' | 'validation' | 'security' | 'review' | 'infra' | 'generic'
+export type AllowedTool = 'read' | 'edit' | 'shell' | 'browser' | 'research' | 'memory'
 
 export interface PhaseConfig {
   id: string
   name: string
   description: string
-  /** Phase instructions: what to do, what to note, when to fail */
+  /** Phase instructions: what to do, when to fail */
   prompt: string
+  /** What the note must record — appended right before the note rule. Absent = free. */
+  noteContract?: string
   /** Inherits the pipeline's default model; editable per phase */
   providerId: string
   modelId: string
@@ -54,11 +49,8 @@ export interface PhaseConfig {
   tools: AllowedTool[]
   /** Position in the sequence — execution follows ascending order, without skipping */
   order: number
-  /**
-   * Role of the phase in the pipeline. Optional for backwards compatibility:
-   * pipelines saved before this field are read as 'generic' by consumers.
-   */
-  kind?: PhaseKind
+  /** Specialist that runs this phase (absent = the general Orbit setup) */
+  agent?: ProfileId
 }
 
 /** System phase template: the phases are COPIED when the pipeline is created,
@@ -68,6 +60,8 @@ export interface PhaseTemplate {
   name: string
   description: string
   prompt: string
+  /** What the note must record (see PhaseConfig.noteContract) */
+  noteContract?: string
   tools: AllowedTool[]
   /** true on the phases suggested up front in a new pipeline (the others come from the "+") */
   isDefault: boolean
@@ -77,8 +71,8 @@ export interface PhaseTemplate {
   i18nKey?: string
   /** Phase created by the user (not an overwrite of a built-in one) — can be deleted */
   userCreated?: boolean
-  /** Role of the phase in the pipeline (defines responsibilities beyond name/prompt). */
-  kind: PhaseKind
+  /** Specialist that runs this phase (absent = the general Orbit setup) */
+  agent?: ProfileId
 }
 
 /** Phase already resolved in the creation modal — it may have been edited only
@@ -89,9 +83,11 @@ export interface PhaseChoice {
   name: string
   description: string
   prompt: string
+  /** What the note must record (see PhaseConfig.noteContract) */
+  noteContract?: string
   tools: AllowedTool[]
-  /** Role of the phase in the pipeline. */
-  kind: PhaseKind
+  /** Specialist that runs this phase (absent = the general Orbit setup) */
+  agent?: ProfileId
   /** Phase's own model; absent = inherits the pipeline's default model */
   providerId?: string
   modelId?: string

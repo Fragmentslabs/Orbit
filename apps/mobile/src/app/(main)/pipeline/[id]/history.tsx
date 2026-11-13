@@ -6,6 +6,7 @@
  */
 import { useEffect } from 'react'
 import { View, Text, Pressable, ScrollView, Alert, StyleSheet } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, GitMerge, Trash2 } from 'lucide-react-native'
@@ -21,6 +22,7 @@ const NO_DELIVERIES: Delivery[] = []
 
 export default function PipelineHistoryScreen() {
   const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   useCodeOnly()
@@ -38,17 +40,17 @@ export default function PipelineHistoryScreen() {
   const date = (iso: string) =>
     new Date(iso).toLocaleString(i18n.language, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 
-  const confirmDelete = (delivery: Delivery) =>
-    Alert.alert(t('pipeline.history.confirmDelete', { number: delivery.number }), t('pipeline.history.confirmDeleteBody'), [
-      { text: t('sidebar.cancel'), style: 'cancel' },
-      {
-        text: t('pipeline.history.delete'),
-        style: 'destructive',
-        onPress: () => {
-          if (id) void deleteDelivery(id, delivery.id).catch((err) => Alert.alert(String(err instanceof Error ? err.message : err)))
-        },
-      },
-    ])
+  const confirmDelete = async (delivery: Delivery) => {
+    const ok = await confirm({
+      title: t('pipeline.history.confirmDelete', { number: delivery.number }),
+      description: t('pipeline.history.confirmDeleteBody'),
+      confirmLabel: t('pipeline.history.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    if (id) void deleteDelivery(id, delivery.id).catch((err) => Alert.alert(String(err instanceof Error ? err.message : err)))
+  }
 
   const ordered = [...deliveries].sort((a, b) => b.number - a.number)
 

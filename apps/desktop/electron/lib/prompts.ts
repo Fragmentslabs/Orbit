@@ -149,6 +149,13 @@ const PAST_CHATS_INSTRUCTION = `When the user refers to something discussed or d
 const SUBCHAT_INSTRUCTION = `## Subchats
 When something shows up that does not belong in this conversation — a second task, a problem the user mentioned in passing, work for another folder — call suggest_subchat with scope "subchat" on your own initiative: nobody will ask for it. When this conversation itself is getting long (compactions stacking), suggest a new chat with scope "chat" instead. The same card also lets the user send independent, larger work to a pipeline (tasks with validation phases and their own worktree) — several independent items are a good fit for it.`
 
+/**
+ * Delegating a craft before doing any of its work. The offer attached to the creation tools
+ * (withSpecialistOffer) is only the safety net for a turn that ignores this — by then the guides
+ * were read, the project explored and the plan written, all of it thrown away when the chat opens.
+ */
+const CRAFT_DELEGATION_INSTRUCTION = `CRAFT WORK GOES TO ITS SPECIALIST CHAT BEFORE ANY WORK STARTS. Motion compositions, design canvases and fragments are planned by the lean chat of that craft better than by you. When the request is to CREATE one, call suggest_subchat with agent "motion", "design" or "fragment" BEFORE reading guides, loading the craft's tools, exploring the project or planning the piece: everything you prepare here is discarded when the chat opens. The brief carries only what BINDS the work — the request as the user made it, constraints already decided, what was tried and rejected, the files and names that matter — never the plan: planning the craft is its job. If the user chooses to keep the work here, do it in this conversation.`
+
 const INLINE_VISUALS_INSTRUCTION = `INLINE VISUALS. You can draw visuals directly inside your answer — no tool call, no separate page:
 - \`\`\`orbit-ui — Orbit components (stats, chart, table, compare, checklist, steps, kv, progress, callout, buttons, entity — a subject with its picture beside the text) and live calculators and simulators with inputs and formulas. The format is strict JSON Lines with its own expression language: call skill_read with @inline_ui once in the conversation, before your first orbit-ui block.
 - \`\`\`mermaid — flowcharts, sequence diagrams, state machines, ER diagrams, gantt, mindmaps, class diagrams. Use it when the relationship between things is the point (a process, an architecture, a timeline). Keep node labels short, quote labels that contain parentheses or punctuation (A["Step (1)"]), and do not set colors or themes: Orbit styles the diagram itself.
@@ -803,7 +810,7 @@ async function memoryContent(input: SendMessageInput): Promise<string[]> {
 }
 
 /** Block of memories injected silently when the Brain is active. */
-async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
+export async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
   const parts: string[] = [input.mode === 'chat' ? BRAIN_CHAT_PROMPT : BRAIN_CODE_PROMPT]
   try {
     parts.push(...(await memoryContent(input)))
@@ -1053,6 +1060,8 @@ export async function buildPromptSections(
   // of the whole conversation — it travels in the turn's message (chat-engine).
   if (input.orchestrationRole !== 'worker') {
     parts.push(SUBCHAT_INSTRUCTION)
+    // A plan turn writes the plan; it does not delegate execution.
+    if (!input.options.plan) parts.push(CRAFT_DELEGATION_INSTRUCTION)
     parts.push(PAST_CHATS_INSTRUCTION)
     // The user's own agents the chat may suggest (empty when none qualifies, and in plan turns).
     into('agents')

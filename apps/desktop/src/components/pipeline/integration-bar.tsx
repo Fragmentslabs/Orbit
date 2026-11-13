@@ -159,14 +159,14 @@ export function IntegrationBar({
           </span>
         )}
         <Hint label={t("pipeline.history.open")}>
-          <Button size="sm" variant="ghost" onClick={onOpenHistory}>
+          <Button variant="ghost" onClick={onOpenHistory}>
             <HistoryIcon className="size-3.5" />
             {t("pipeline.history.title")}
           </Button>
         </Hint>
         {flow === "simple" ? (
           pendingCompleted > 0 && (
-            <Button size="sm" variant="outline" disabled={busy === "archive"} onClick={() => void archive()}>
+            <Button variant="outline" disabled={busy === "archive"} onClick={() => void archive()}>
               {t("pipeline.history.archiveCompleted", { count: pendingCompleted })}
             </Button>
           )
@@ -174,7 +174,7 @@ export function IntegrationBar({
           <div className={cn("flex items-center -space-x-px", (!target || nothingToMerge) && "opacity-50")}>
             <Hint label={t("pipeline.merge.hint", { branch: target ?? "…" })}>
               <Button
-                size="sm"
+               
                 variant="default"
                 className="h-7 rounded-r-none border border-primary disabled:opacity-100"
                 disabled={!target || busy !== null || nothingToMerge}

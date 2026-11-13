@@ -112,10 +112,10 @@ export function ReturnTaskDialog({
         {error && <p className="text-[11px] text-destructive">{error}</p>}
 
         <div className="flex justify-end gap-2 border-t pt-3">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" disabled={!text.trim() || sending} onClick={() => void submitReturn()}>
+          <Button disabled={!text.trim() || sending} onClick={() => void submitReturn()}>
             {t("pipeline.return")}
           </Button>
         </div>

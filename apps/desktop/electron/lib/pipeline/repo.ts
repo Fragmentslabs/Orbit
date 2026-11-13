@@ -4,7 +4,6 @@ import path from 'node:path'
 import type {
   AllowedTool,
   PhaseConfig,
-  PhaseKind,
   PhaseNote,
   Delivery,
   PhaseTemplate,
@@ -14,6 +13,7 @@ import type {
   TaskReturn,
   ResumeInstruction,
 } from '@shared/pipeline'
+import { CONTRACT } from './templates'
 
 /**
  * Pipeline mode persistence: JSON in the app data folder (§15), no new database
@@ -71,13 +71,6 @@ function legacyValue<T extends string>(value: unknown, map: Record<string, strin
 }
 
 const TOOL: Record<string, string> = { leitura: 'read', memoria: 'memory' }
-const KIND: Record<string, string> = {
-  desenvolvimento: 'development',
-  validacao: 'validation',
-  seguranca: 'security',
-  revisao: 'review',
-  generico: 'generic',
-}
 /** Built-in template ids before the English rename; `infra` did not change. */
 const TEMPLATE_ID: Record<string, string> = {
   desenvolvimento: 'development',
@@ -113,13 +106,23 @@ function mapProject(raw: Json): Project {
   }
 }
 
+/**
+ * Prompts saved before the closing rule moved into the runner still carry the
+ * contract text; the runner appends it to every phase, so it is removed here to
+ * avoid saying it twice. Only the exact block is stripped — a prompt the person
+ * edited is left alone.
+ */
+function stripContract(prompt: string): string {
+  return prompt.includes(CONTRACT) ? prompt.replace(CONTRACT, '').trimEnd() : prompt
+}
+
 function mapPhaseConfig(raw: Json): PhaseConfig {
-  const kind = legacyValue<PhaseKind>(pick(raw, 'kind', 'tipo'), KIND)
   return {
     id: String(raw.id),
     name: pick<string>(raw, 'name', 'nome') ?? '',
     description: pick<string>(raw, 'description', 'descricao') ?? '',
-    prompt: (raw.prompt as string) ?? '',
+    prompt: stripContract((raw.prompt as string) ?? ''),
+    ...(typeof raw.noteContract === 'string' ? { noteContract: raw.noteContract } : {}),
     providerId: (raw.providerId as string) ?? '',
     modelId: (raw.modelId as string) ?? '',
     thinkingLevel: Number(pick<number>(raw, 'thinkingLevel', 'thinkingNivel') ?? 0),
@@ -127,7 +130,7 @@ function mapPhaseConfig(raw: Json): PhaseConfig {
     ...(raw.templateId !== undefined ? { templateId: legacyValue<string>(raw.templateId, TEMPLATE_ID) } : {}),
     tools: asArray<string>(raw.tools).map((tool) => legacyValue<AllowedTool>(tool, TOOL) ?? 'read'),
     order: Number(pick<number>(raw, 'order', 'ordem') ?? 0),
-    ...(kind !== undefined ? { kind } : {}),
+    ...(typeof raw.agent === 'string' ? { agent: raw.agent as PhaseConfig['agent'] } : {}),
   }
 }
 
@@ -136,7 +139,8 @@ function mapPhaseTemplate(raw: Json): PhaseTemplate {
     id: legacyValue<string>(raw.id, TEMPLATE_ID) ?? '',
     name: pick<string>(raw, 'name', 'nome') ?? '',
     description: pick<string>(raw, 'description', 'descricao') ?? '',
-    prompt: (raw.prompt as string) ?? '',
+    prompt: stripContract((raw.prompt as string) ?? ''),
+    ...(typeof raw.noteContract === 'string' ? { noteContract: raw.noteContract } : {}),
     tools: asArray<string>(raw.tools).map((tool) => legacyValue<AllowedTool>(tool, TOOL) ?? 'read'),
     isDefault: (pick<boolean>(raw, 'isDefault', 'padrao') ?? false) as boolean,
     ...(raw.custom !== undefined ? { custom: Boolean(raw.custom) } : {}),
@@ -144,7 +148,7 @@ function mapPhaseTemplate(raw: Json): PhaseTemplate {
     ...(pick(raw, 'userCreated', 'doUsuario') !== undefined
       ? { userCreated: Boolean(pick(raw, 'userCreated', 'doUsuario')) }
       : {}),
-    kind: legacyValue<PhaseKind>(pick(raw, 'kind', 'tipo'), KIND) ?? 'generic',
+    ...(typeof raw.agent === 'string' ? { agent: raw.agent as PhaseTemplate['agent'] } : {}),
   }
 }
 

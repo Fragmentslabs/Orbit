@@ -10,7 +10,8 @@
  * message) or to cancel. Everything runs on the desktop.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { Brain, ChevronDown, GitBranch, GitMerge, History } from 'lucide-react-native'
@@ -26,6 +27,7 @@ import { usePipelineStore } from '~/stores/pipeline-store'
 
 export function IntegrationStrip({ pipeline, tasks }: { pipeline: Pipeline; tasks: Task[] }) {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const catalog = useSettingsStore((s) => s.catalog)
@@ -132,11 +134,14 @@ export function IntegrationStrip({ pipeline, tasks }: { pipeline: Pipeline; task
     }
   }
 
-  const askToCommit = () => {
-    Alert.alert(t('pipeline.merge.dirtyTitle'), t('pipeline.merge.dirtyBody'), [
-      { text: t('sidebar.cancel'), style: 'cancel' },
-      { text: t('pipeline.merge.commit'), onPress: () => void commitThenMerge() },
-    ])
+  const askToCommit = async () => {
+    const ok = await confirm({
+      title: t('pipeline.merge.dirtyTitle'),
+      description: t('pipeline.merge.dirtyBody'),
+      confirmLabel: t('pipeline.merge.commit'),
+      cancelLabel: t('sidebar.cancel'),
+    })
+    if (ok) void commitThenMerge()
   }
 
   const commitThenMerge = async () => {

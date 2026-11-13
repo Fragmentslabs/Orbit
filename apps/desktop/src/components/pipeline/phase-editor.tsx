@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDownIcon } from "lucide-react"
-import type { ReasoningConfig } from "@shared/chat"
-import type { AllowedTool, PhaseChoice, PhaseKind, PhaseTemplate } from "@shared/pipeline"
+import { BookOpenIcon, BrainIcon, ChevronDownIcon, GlobeIcon, PenLineIcon, SearchIcon, TerminalIcon, type LucideIcon } from "lucide-react"
+import type { ProfileId, ReasoningConfig } from "@shared/chat"
+import type { AllowedTool, PhaseChoice, PhaseTemplate } from "@shared/pipeline"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,15 +12,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { AgentMenu } from "@/src/components/routines/agent-menu"
 import { ModelField } from "@/src/components/model-field"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
+import { useAgents } from "@/src/stores/agents-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import type { DefaultModel } from "@/src/stores/model-mode-prefs"
 import { cn } from "@/lib/utils"
 
-const CAPABILITIES: AllowedTool[] = ["read", "edit", "shell", "browser", "memory"]
-const KINDS: PhaseKind[] = ["development", "validation", "security", "review", "infra", "generic"]
+/**
+ * What a phase may use, each with the icon it wears (the same pill language as
+ * the routines). Reading is not a choice: a phase that cannot read cannot work,
+ * so it is always on and shows as a fixed pill instead of a toggle.
+ */
+const CAPABILITIES: { id: AllowedTool; icon: LucideIcon }[] = [
+  { id: "edit", icon: PenLineIcon },
+  { id: "shell", icon: TerminalIcon },
+  { id: "browser", icon: GlobeIcon },
+  { id: "research", icon: SearchIcon },
+  { id: "memory", icon: BrainIcon },
+]
 
 /**
  * Where to save the edited phase:
@@ -52,7 +64,7 @@ export function useModelLabel(
 /**
  * Saves the template according to the destination and returns the phase already
  * pointing at it. The model does not go into the template: it is each
- * pipeline's choice.
+ * pipeline's choice. The specialist does: it is part of what the phase is.
  */
 export function useSavePhaseTemplate() {
   const saveTemplate = usePipelineStore((s) => s.saveTemplate)
@@ -67,8 +79,9 @@ export function useSavePhaseTemplate() {
       name: phase.name,
       description: phase.description,
       prompt: phase.prompt,
+      ...(phase.noteContract ? { noteContract: phase.noteContract } : {}),
       tools: phase.tools,
-      kind: phase.kind,
+      ...(phase.agent ? { agent: phase.agent } : {}),
       // Keeps the phase among the suggested ones if it already was, so the default does not vanish
       isDefault: original?.isDefault ?? false,
     }
@@ -78,10 +91,11 @@ export function useSavePhaseTemplate() {
 }
 
 /**
- * Phase editor: name, description, model + reasoning, prompt and capabilities.
- * Saving sits on a split button: the main one touches only this pipeline; the
- * chevron leads to "save on the original" and "save as a new phase" (see
- * PhaseDestination).
+ * Phase editor, in two columns: on the left what the phase IS (name, description, the
+ * specialist that runs it, model and capabilities); on the right what it does (the prompt),
+ * with room to write. Saving sits on a split button in a pipeline — the main one touches only
+ * this pipeline, the chevron reaches the original and "save as a new phase". In the phase
+ * library there is nothing to split: it always writes the template.
  */
 export function PhaseEditor({
   phase,
@@ -91,6 +105,7 @@ export function PhaseEditor({
   onOpenChange,
   onSave,
   inheritsDefault = false,
+  library = false,
 }: {
   /** Phase being edited; absent = creating one from scratch */
   phase: PhaseChoice | null
@@ -104,15 +119,19 @@ export function PhaseEditor({
    * default" link.
    */
   inheritsDefault?: boolean
+  /** The phase library: one save button, writing the template itself. */
+  library?: boolean
   onOpenChange: (open: boolean) => void
   onSave: (phase: PhaseChoice, destination: PhaseDestination) => void
 }) {
   const { t } = useTranslation()
+  const agents = useAgents()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [prompt, setPrompt] = useState("")
+  const [noteContract, setNoteContract] = useState("")
   const [tools, setTools] = useState<AllowedTool[]>(["read"])
-  const [kind, setKind] = useState<PhaseKind>("generic")
+  const [agent, setAgent] = useState<ProfileId | undefined>(undefined)
   // The phase's own model. While there is none (`own` false), the editor shows
   // the default and the phase is saved without a model — it follows the
   // pipeline's.
@@ -127,8 +146,9 @@ export function PhaseEditor({
     setName(phase?.name ?? "")
     setDescription(phase?.description ?? "")
     setPrompt(phase?.prompt ?? "")
+    setNoteContract(phase?.noteContract ?? "")
     setTools(phase?.tools ?? ["read", "edit", "shell"])
-    setKind(phase?.kind ?? "generic")
+    setAgent(phase?.agent)
     const hasOwn = !!phase?.providerId && !!phase.modelId
     setOwn(hasOwn)
     setModel(hasOwn ? { providerId: phase!.providerId!, modelId: phase!.modelId! } : null)
@@ -143,6 +163,9 @@ export function PhaseEditor({
   }
 
   const valid = name.trim().length > 0 && prompt.trim().length > 0
+  // A specialist deleted from the agents screen leaves the phase pointing at
+  // nothing: say it instead of silently running as General.
+  const missingAgent = !!agent && !agents.some((a) => a.id === agent)
 
   const save = (destination: PhaseDestination) => {
     if (!valid) return
@@ -152,8 +175,9 @@ export function PhaseEditor({
         name: name.trim(),
         description: description.trim(),
         prompt: prompt.trim(),
+        ...(noteContract.trim() ? { noteContract: noteContract.trim() } : {}),
         tools,
-        kind,
+        agent,
         // Without its own model the phase is saved without those fields: whoever saves uses the default.
         ...(own && model ? { providerId: model.providerId, modelId: model.modelId, reasoning } : {}),
       },
@@ -164,141 +188,171 @@ export function PhaseEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogTitle>{phase ? t("pipeline.editPhase") : t("pipeline.newPhase")}</DialogTitle>
 
-        <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-          <div className="space-y-1">
-            <p className="text-xs font-medium">{t("pipeline.phaseName")}</p>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-sm" />
-          </div>
+        <div className="grid max-h-[68vh] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+          {/* What the phase is. */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium">{t("pipeline.phaseName")}</p>
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-sm" />
+            </div>
 
-          <div className="space-y-1">
-            <p className="text-xs font-medium">{t("pipeline.phaseDescription")}</p>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="h-8 text-sm"
-              placeholder={t("pipeline.phaseDescriptionHint")}
-            />
-          </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium">{t("pipeline.phaseDescription")}</p>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-8 text-sm"
+                placeholder={t("pipeline.phaseDescriptionHint")}
+              />
+            </div>
 
-          <div className="space-y-1">
-            <ModelField
-              label={t("pipeline.phaseModel")}
-              value={visibleModel}
-              onChange={(m) => {
-                if (!m) return
-                setModel(m)
-                // Another model, other levels: back to off (as in Preferences);
-                // the same model keeps the level it already had.
-                const same = m.providerId === visibleModel?.providerId && m.modelId === visibleModel?.modelId
-                setReasoning(same ? visibleReasoning : null)
-                setOwn(true)
-              }}
-              action={
-                <>
-                  <ThinkingMenu
-                    model={visibleModel}
-                    value={visibleReasoning}
-                    onChange={(r) => {
-                      setModel(visibleModel)
-                      setReasoning(r)
-                      setOwn(true)
-                    }}
-                  />
-                  {inheritsDefault && own && (
-                    <button
-                      type="button"
-                      onClick={() => setOwn(false)}
-                      className="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    >
-                      {t("pipeline.useDefault")}
-                    </button>
-                  )}
-                </>
-              }
-            />
-            {inheritsDefault && !own && (
-              <p className="text-[11px] text-muted-foreground">{t("pipeline.followsDefault")}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium">{t("pipeline.phaseAgent")}</p>
+              <AgentMenu
+                value={agent}
+                onChange={setAgent}
+                // A phase runs in a worktree and answers with a note: the craft setups
+                // (motion, design, fragment) have nothing to work on here — and their
+                // tools are the craft's, not the phase's.
+                builtins={["general"]}
+                excludeCraft
+              />
+              <p className="text-[11px] text-muted-foreground">{t("pipeline.phaseAgentHint")}</p>
+              {missingAgent && (
+                <p className="text-[11px] text-amber-500">{t("pipeline.phaseAgentMissing")}</p>
+              )}
+            </div>
+
+            {/* A template carries no model: it is each pipeline's choice (see useSavePhaseTemplate). */}
+            {!library && (
+            <div className="space-y-1">
+              <ModelField
+                label={t("pipeline.phaseModel")}
+                value={visibleModel}
+                onChange={(m) => {
+                  if (!m) return
+                  setModel(m)
+                  // Another model, other levels: back to off (as in Preferences);
+                  // the same model keeps the level it already had.
+                  const same = m.providerId === visibleModel?.providerId && m.modelId === visibleModel?.modelId
+                  setReasoning(same ? visibleReasoning : null)
+                  setOwn(true)
+                }}
+                action={
+                  <>
+                    <ThinkingMenu
+                      model={visibleModel}
+                      value={visibleReasoning}
+                      onChange={(r) => {
+                        setModel(visibleModel)
+                        setReasoning(r)
+                        setOwn(true)
+                      }}
+                    />
+                    {inheritsDefault && own && (
+                      <button
+                        type="button"
+                        onClick={() => setOwn(false)}
+                        className="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        {t("pipeline.useDefault")}
+                      </button>
+                    )}
+                  </>
+                }
+              />
+              {inheritsDefault && !own && (
+                <p className="text-[11px] text-muted-foreground">{t("pipeline.followsDefault")}</p>
+              )}
+            </div>
             )}
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium">{t("pipeline.phaseCapabilities")}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {/* Reading is the floor of any phase: always on, not a toggle. */}
+                <span
+                  title={t("pipeline.phaseReadFixed")}
+                  className="flex cursor-default items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] text-primary"
+                >
+                  <BookOpenIcon className="size-3" />
+                  {t("pipeline.capability.read")}
+                </span>
+                {CAPABILITIES.map(({ id, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => toggleTool(id)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] transition-colors",
+                      tools.includes(id)
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    <Icon className="size-3" />
+                    {t(`pipeline.capability.${id}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <p className="text-xs font-medium">{t("pipeline.phaseKind")}</p>
-            <p className="text-[11px] text-muted-foreground">{t("pipeline.phaseKindHint")}</p>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as PhaseKind)}
-              className="h-8 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
-            >
-              {KINDS.map((kindOption) => (
-                <option key={kindOption} value={kindOption} className="bg-popover text-popover-foreground">
-                  {t(`pipeline.kind.${kindOption}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
+          {/* What the phase does. */}
+          <div className="flex min-h-0 flex-col gap-1">
             <p className="text-xs font-medium">{t("pipeline.phasePrompt")}</p>
             <p className="text-[11px] text-muted-foreground">{t("pipeline.phasePromptHint")}</p>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              rows={12}
-              className="w-full resize-y rounded-md border bg-transparent px-2 py-1.5 font-mono text-[11px] leading-relaxed outline-none focus-visible:border-ring"
+              className="min-h-[240px] w-full flex-1 resize-none rounded-md border bg-transparent px-2 py-1.5 font-mono text-[11px] leading-relaxed outline-none focus-visible:border-ring"
             />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-medium">{t("pipeline.phaseCapabilities")}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {CAPABILITIES.map((tool) => (
-                <button
-                  key={tool}
-                  type="button"
-                  onClick={() => toggleTool(tool)}
-                  className={cn(
-                    "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
-                    tools.includes(tool)
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-accent",
-                  )}
-                >
-                  {t(`pipeline.capability.${tool}`)}
-                </button>
-              ))}
-            </div>
+            <p className="mt-2 text-xs font-medium">{t("pipeline.phaseNote")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("pipeline.phaseNoteHint")}</p>
+            <textarea
+              value={noteContract}
+              onChange={(e) => setNoteContract(e.target.value)}
+              placeholder={t("pipeline.phaseNotePlaceholder")}
+              className="min-h-[96px] w-full resize-none rounded-md border bg-transparent px-2 py-1.5 font-mono text-[11px] leading-relaxed outline-none focus-visible:border-ring"
+            />
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <div className="flex">
-            <Button size="sm" className="rounded-r-none" disabled={!valid} onClick={() => save("pipeline")}>
-              {t("pipeline.saveInThisPipeline")}
+          {library ? (
+            <Button disabled={!valid} onClick={() => save(phase?.templateId ? "original" : "new")}>
+              {t("pipeline.save")}
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                disabled={!valid}
-                aria-label={t("pipeline.moreSaveOptions")}
-                render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" />}
-              >
-                <ChevronDownIcon className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="top" className="min-w-52">
-                <DropdownMenuItem disabled={!phase?.templateId} onClick={() => save("original")}>
-                  {t("pipeline.saveToOriginal")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => save("new")}>
-                  {t("pipeline.saveAsNewPhase")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          ) : (
+            <div className="flex">
+              <Button className="rounded-r-none" disabled={!valid} onClick={() => save("pipeline")}>
+                {t("pipeline.saveInThisPipeline")}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={!valid}
+                  aria-label={t("pipeline.moreSaveOptions")}
+                  render={<Button className="rounded-l-none border-l border-primary-foreground/20 px-1.5" />}
+                >
+                  <ChevronDownIcon className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="min-w-52">
+                  <DropdownMenuItem disabled={!phase?.templateId} onClick={() => save("original")}>
+                    {t("pipeline.saveToOriginal")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => save("new")}>
+                    {t("pipeline.saveAsNewPhase")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
