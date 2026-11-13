@@ -21,10 +21,16 @@ export function isFragmentId(id: unknown): id is string {
  * - `ai`: call the user's model through `orbit.ai`.
  * - `models`: let the fragment's own UI list and pick the model of `orbit.ai` (`orbit.models`).
  *   Granted, it is the fragment — not the app header — that offers the choice.
+ * - `notify`: show notifications in the app (`orbit.notify`) — a toast while the window is
+ *   in front, a native banner when it is not. The page schedules them and the app keeps
+ *   the schedule, so they still fire with the fragment closed (never with Orbit closed).
+ * - `microphone`: record audio with `navigator.mediaDevices.getUserMedia`. The ask happens at
+ *   the moment the page really asks for it: the app shows the dialog, and only after the person
+ *   allows does macOS get asked too. Declaring it in the manifest asks in advance.
  */
-export type FragmentCapability = "ai" | "models" | "http" | "mcp"
+export type FragmentCapability = "ai" | "models" | "http" | "mcp" | "notify" | "microphone"
 
-export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai", "models", "http", "mcp"]
+export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai", "models", "http", "mcp", "notify", "microphone"]
 
 /**
  * - `http`: fetch over https from the hosts the manifest declares (`orbit.http`), performed by
@@ -43,6 +49,60 @@ export interface FragmentMcpAccess {
 export const FRAGMENT_MAX_HOSTS = 10
 export const FRAGMENT_MAX_MCP_SERVERS = 8
 export const FRAGMENT_MAX_MCP_TOOLS = 20
+
+/** How many notifications one fragment may keep scheduled at once. */
+export const FRAGMENT_MAX_NOTIFICATIONS = 20
+/** Shortest recurring interval a fragment may ask for, in minutes. */
+export const FRAGMENT_NOTIFY_MIN_MINUTES = 1
+export const FRAGMENT_NOTIFY_MAX_TITLE = 120
+export const FRAGMENT_NOTIFY_MAX_BODY = 300
+/** Identity of a schedule inside its fragment: re-scheduling the same id updates it. */
+export const FRAGMENT_NOTIFY_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/
+/** "HH:MM", local time. */
+export const FRAGMENT_DAILY_AT_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/**
+ * A notification a fragment scheduled. Kept by the APP, not by the page: it survives a
+ * reload and fires with the fragment closed — as long as Orbit is open.
+ */
+export interface FragmentNotification {
+  /** Identity inside the fragment (re-scheduling the same id updates it). */
+  id: string
+  title: string
+  body: string
+  /** Every day at `HH:MM`, local time. */
+  dailyAt?: string
+  /** Every N minutes (at least FRAGMENT_NOTIFY_MIN_MINUTES). */
+  everyMinutes?: number
+  /** One-shot: epoch ms. */
+  at?: number
+  /** Next firing, epoch ms — computed and advanced by the app. */
+  nextAt: number
+  createdAt: number
+}
+
+/** What a notification needs to become a toast: who sent it and what to show. */
+export interface FragmentNotifyEvent {
+  fragmentId: string
+  fragmentName: string
+  /** Lucide icon name of the fragment. */
+  icon: string
+  title: string
+  body: string
+  at: number
+}
+
+/** The three states of a capability, from the page's point of view. */
+export type FragmentPermissionState = "granted" | "not_requested" | "denied"
+
+/**
+ * The page asked again about a capability the person has not allowed — sent to the window(s)
+ * showing the fragment, so the notice above it comes back even if it had been dismissed.
+ */
+export interface FragmentPermissionAskEvent {
+  fragmentId: string
+  capability: FragmentCapability
+}
 
 /**
  * A bare, lowercase DNS name from what the agent wrote ("api.example.com" or a full URL),
@@ -105,13 +165,62 @@ export function mcpIsSubset(next: FragmentMcpAccess[], prev: FragmentMcpAccess[]
 /**
  * Where a fragment is meant to live:
  * - `screen`: a page of the app (the Fragments page, pinnable in the sidebar);
- * - `panel`: a tab of the side panel (pinnable in its "Open" hub);
- * - `widget`: a small card for the home screen (rendered there in a later phase).
+ * - `panel`: a tab of the side panel (pinnable in its "Open" hub).
  * It is the DEFAULT placement; the pins below decide where it is actually reachable.
  */
-export type FragmentKind = "screen" | "panel" | "widget"
+export type FragmentKind = "screen" | "panel"
 
-export const FRAGMENT_KINDS: readonly FragmentKind[] = ["screen", "panel", "widget"]
+export const FRAGMENT_KINDS: readonly FragmentKind[] = ["screen", "panel"]
+
+/**
+ * The sizes a widget may occupy on the board beside the chat: a grid of 2 columns by
+ * 5 rows. `1x1` is one cell, `2x1` two columns, `1x2` two rows, `2x2` both.
+ */
+export type FragmentWidgetSize = "1x1" | "2x1" | "1x2" | "2x2"
+
+export const FRAGMENT_WIDGET_SIZES: readonly FragmentWidgetSize[] = ["1x1", "2x1", "1x2", "2x2"]
+
+/** The board holds at most 2 columns by 6 rows. The panel beside the chat shrinks to what is used. */
+export const FRAGMENT_WIDGET_COLUMNS = 2
+export const FRAGMENT_WIDGET_ROWS = 6
+/** One cell, in CSS pixels. */
+export const FRAGMENT_WIDGET_UNIT = 72
+export const FRAGMENT_WIDGET_GAP = 8
+/** How many widgets one fragment may offer. */
+export const FRAGMENT_MAX_WIDGETS = 8
+export const FRAGMENT_WIDGET_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/
+
+/**
+ * One widget a fragment offers: a small render of itself, drawn for the cell it is given.
+ * The page is loaded with `?widget=<id>&size=<size>` and must fill exactly that box —
+ * no scaling, no scrollbars. The same page keeps working as a full screen without it.
+ */
+export interface FragmentWidget {
+  id: string
+  name: string
+  /** The sizes it knows how to draw. The person picks one when placing it. */
+  sizes: FragmentWidgetSize[]
+  /** Screen of the fragment a click opens (a value the fragment's own page understands). */
+  destination?: string
+  /** One line shown while choosing it. */
+  description?: string
+}
+
+/** A widget placed on the board: which fragment offers it, which widget of it, at which size. */
+export interface FragmentWidgetPlacement {
+  fragmentId: string
+  widgetId: string
+  /** The cell it sits on. Absent only on boards saved before the board had free placement. */
+  col?: number
+  row?: number
+  /** The size the person chose; absent = the largest one that fits. */
+  size?: FragmentWidgetSize
+  /**
+   * The board page it sits on; absent = 0. A page is a board of its own — its own cells,
+   * its own rows — and the same widget can only be on one of them.
+   */
+  page?: number
+}
 
 /** The model a fragment's `orbit.ai` uses when the user picks one for it. */
 export interface FragmentModel {
@@ -135,8 +244,6 @@ export interface FragmentPins {
   sidebar: boolean
   /** Listed as its own card in the side panel's "Open" hub. */
   panel: boolean
-  /** Shown as a small live card on the home screen (the natural home of a `widget`). */
-  home: boolean
 }
 
 /** What the UI (never the agent) may change about a fragment. */
@@ -173,6 +280,8 @@ export interface FragmentManifest {
   hosts: string[]
   /** MCP servers and tools `orbit.mcp` may call — meaningful once "mcp" is requested and allowed. */
   mcp: FragmentMcpAccess[]
+  /** The widgets this fragment offers to the board beside the chat (never the ones placed: that is the person's). */
+  widgets: FragmentWidget[]
   /** Bumped on every write; the tab uses it to reload. */
   revision: number
   createdAt: number
@@ -183,9 +292,9 @@ export interface FragmentManifest {
 }
 
 /**
- * What a read-only frame (a widget on the home screen) may still ask Orbit: reading its own
- * saved data. Never writes, never the model — a card on the home screen must not spend
- * tokens or change data just by being on screen.
+ * What a read-only frame (a widget on the board beside the chat) may still ask Orbit: reading
+ * its own saved data. Never writes, never the model — a widget must not spend tokens or
+ * change data just by being on screen.
  */
 export const FRAGMENT_READ_ONLY_METHODS: readonly string[] = ["store.get", "store.keys"]
 
@@ -202,6 +311,12 @@ export type FragmentMethod =
   | "http.fetch"
   | "mcp.list"
   | "mcp.call"
+  | "notify.show"
+  | "notify.schedule"
+  | "notify.list"
+  | "notify.cancel"
+  | "permissions.state"
+  | "permissions.request"
 
 /** A model the fragment may offer in its own UI. Names only: never a key, endpoint or price. */
 export interface FragmentModelOption {

@@ -1,9 +1,26 @@
 import { generateText } from 'ai'
-import type { FragmentCallInput, FragmentCallResult, FragmentCapability, FragmentManifest } from '@shared/fragments'
+import type {
+  FragmentCallInput,
+  FragmentCallResult,
+  FragmentCapability,
+  FragmentManifest,
+  FragmentPermissionState,
+} from '@shared/fragments'
+import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { resolveModel } from '../providers'
 import { isUsableModel, listUsableModels } from './fragment-models'
-import { getFragment, storeDelete, storeGet, storeKeys, storeSet, updateFragmentMeta } from './fragment-store'
+import {
+  fragmentEvents,
+  getFragment,
+  storeDelete,
+  storeGet,
+  storeKeys,
+  storeSet,
+  updateFragmentMeta,
+} from './fragment-store'
+import { cancelNotification, listNotifications, scheduleNotification, showNotificationNow } from './fragment-notify'
 import { createBudget } from './fragment-budget'
+import { announceAsk } from './fragment-ask'
 import { fragmentHttpFetch } from './fragment-http'
 import { fragmentMcpCall, fragmentMcpList } from './fragment-mcp'
 import { modelForSession } from './session-model'
@@ -32,6 +49,14 @@ const METHOD_CAPABILITY: Record<string, FragmentCapability | undefined> = {
   'http.fetch': 'http',
   'mcp.list': 'mcp',
   'mcp.call': 'mcp',
+  'notify.show': 'notify',
+  'notify.schedule': 'notify',
+  'notify.list': 'notify',
+  'notify.cancel': 'notify',
+  // Reading the state and ASKING again are always available: they never grant anything,
+  // they only let the page show "notifications blocked — turn on" and re-open the ask.
+  'permissions.state': undefined,
+  'permissions.request': undefined,
 }
 
 const AI_MAX_PROMPT_CHARS = 30_000
@@ -111,6 +136,28 @@ async function setModel(manifest: FragmentManifest, params: Record<string, unkno
   return { ok: true, value: null }
 }
 
+/** The three states of a capability, as the page sees them. */
+function permissionState(manifest: FragmentManifest, capability: FragmentCapability): FragmentPermissionState {
+  if (manifest.grants.includes(capability)) return 'granted'
+  // Declared but not allowed: the person either has not answered yet or said no.
+  return manifest.requests.includes(capability) ? 'denied' : 'not_requested'
+}
+
+function requestedCapability(params: Record<string, unknown>): FragmentCapability | null {
+  const cap = params.capability
+  if (typeof cap !== 'string') return null
+  return FRAGMENT_CAPABILITIES.includes(cap as FragmentCapability) ? (cap as FragmentCapability) : null
+}
+
+/** `notify.show`: one toast now, through the same caps and the same sound as a scheduled one. */
+async function showNotification(manifest: FragmentManifest, params: Record<string, unknown>): Promise<FragmentCallResult> {
+  const title = typeof params.title === 'string' ? params.title.replace(/\s+/g, ' ').trim() : ''
+  if (!title) return fail('invalid_params', 'orbit.notify.show needs { title: string }')
+  const body = typeof params.body === 'string' ? params.body.replace(/\s+/g, ' ').trim() : ''
+  await showNotificationNow(manifest, title, body)
+  return { ok: true, value: null }
+}
+
 export async function handleFragmentCall(input: FragmentCallInput): Promise<FragmentCallResult> {
   const manifest = await getFragment(input.fragmentId)
   if (!manifest) return fail('not_found', 'This fragment no longer exists.')
@@ -153,6 +200,45 @@ export async function handleFragmentCall(input: FragmentCallInput): Promise<Frag
         return fragmentMcpList(manifest)
       case 'mcp.call':
         return await fragmentMcpCall(manifest, params)
+      case 'notify.show':
+        return await showNotification(manifest, params)
+      case 'notify.schedule':
+        try {
+          return { ok: true, value: await scheduleNotification(manifest.id, params) }
+        } catch (err) {
+          return fail('invalid_params', err instanceof Error ? err.message : String(err))
+        }
+      case 'notify.list':
+        return { ok: true, value: await listNotifications(manifest.id) }
+      case 'notify.cancel': {
+        const id = typeof params.id === 'string' && params.id ? params.id : undefined
+        return { ok: true, value: await cancelNotification(manifest.id, id) }
+      }
+      case 'permissions.state': {
+        const cap = requestedCapability(params)
+        if (!cap) return fail('invalid_params', 'orbit.permissions.state needs { capability }')
+        return { ok: true, value: permissionState(manifest, cap) }
+      }
+      case 'permissions.request': {
+        const cap = requestedCapability(params)
+        if (!cap) return fail('invalid_params', 'orbit.permissions.request needs { capability }')
+        // The microphone is the one the page cannot gate: there is no `orbit.microphone` API,
+        // it calls getUserMedia directly. Asking here is the same thing — the notice goes up
+        // above the fragment, and nothing is granted without the person's click on it.
+        if (cap === 'microphone') {
+          if (manifest.grants.includes('microphone')) return { ok: true, value: 'granted' }
+          const declared = await announceAsk(manifest.id, 'microphone')
+          return { ok: true, value: declared ? permissionState(declared, cap) : 'denied' }
+        }
+        if (!manifest.requests.includes(cap)) {
+          // Only a grant request written by the agent can declare; the page can only re-ask.
+          return fail('not_requested', `This fragment did not declare "${cap}".`)
+        }
+        if (!manifest.grants.includes(cap)) {
+          fragmentEvents.emit('permission-ask', { fragmentId: manifest.id, capability: cap })
+        }
+        return { ok: true, value: permissionState(manifest, cap) }
+      }
       default:
         return fail('unknown_method', 'Unknown method.')
     }

@@ -146,8 +146,13 @@ Native fragments (planned) live in `resources/fragments/`, read-only, with a
 ```
 
 `requests` is written by the agent; `grants` only by the UI. Dropping a request also
-drops its grant. Capabilities today: `ai` (call the model) and `models` (the fragment
-offers the model choice in its own screen). `pinned` has three flags: `sidebar`, `panel`
+drops its grant. Capabilities today: `ai` (call the model), `models` (the fragment
+offers the model choice in its own screen), `http` (fetch the declared hosts), `mcp`
+(call the declared MCP tools), `notify` (toasts and schedules) and `microphone`
+(record audio with `getUserMedia`). The microphone is the only one the page can ask
+for by USING it: a `getUserMedia` without a grant refuses the call and puts up the
+same notice as the other capabilities, over the fragment — the person allows it
+there, and the page calls again. `pinned` has three flags: `sidebar`, `panel`
 and `home` (a small card on the home screen; on by default for the `widget` kind).
 
 **Target (v1)** — what the manifest grows into:
@@ -199,6 +204,7 @@ forwards it to the main process.
 | `orbit.ai.generate({ prompt, system? })` → `{ text }` | The user's own model. Needs `ai` requested + granted. Rejects with `err.code` |
 | `orbit.models.list/get/set` | The fragment's own model picker for `orbit.ai`. Needs `models` requested + granted. `list` returns only connected, text-producing models (`providerId`, `providerName`, `modelId`, `name`, `reasoning`); `set` is re-checked against that list in the broker; `set(null)` follows the chat again |
 | `orbit.theme`, `orbit.on('theme', fn)` | Current theme; the Orbit CSS variables are already defined |
+| `getUserMedia({ audio })` + `MediaRecorder` | The fragment records audio. The first call opens the app's dialog over the fragment (the same ask the other permissions use); with a yes, macOS asks for the app once. Camera is refused |
 | (automatic) console + errors | Forwarded to the tab, readable by the agent with `fragment_logs` |
 
 **Planned**
@@ -233,12 +239,12 @@ is refused, so a card can never spend tokens or write data just by being on scre
 Fragments pinned to the sidebar or the panel come first. Search, filter by kind, and a
 *New fragment* action.
 
-**Creating** is an empty canvas with the prompt in the middle — not a modal and not a card in
-a chat: a heading ("Create a screen with Orbit"), the prompt, where it lives (screen /
-side panel / widget) and a few starting points that fill the prompt. Sending shows the
-**creating screen**: the persona thinking, a shimmering line that cycles through phases
-("Creating…", "Laying out the screen…", …) and, quieter, what the agent is really doing.
-The moment the first version exists it turns into the live fragment.
+**Creating** happens in a chat, like every other piece. *New fragment* opens a normal
+conversation running the fragment agent, with a ready-made sentence in the composer whose
+fields the person fills: what it does, what it shows and where it lives (screen / side panel
+/ widget). The agent builds it with `fragment_create`; the fragment opens in the panel tab
+and keeps that conversation as its own chat — the one edit mode talks to. The page is the
+library and the full-bleed view: there is no canvas or creating screen of its own.
 
 **The fragment screen** fills the whole area: no border and no header of its own. The app
 header carries back, the fragment's **icon** (click to pick another from the Lucide set) and
@@ -262,8 +268,10 @@ each fragment gets its own chat (`SessionInfo.fragment`) that:
 - is told, every turn, **which fragment it is looking at** (id, kind, files, what was
   asked and allowed) — so a fresh chat editing an old fragment starts oriented, with no
   briefing message;
-- is **hidden from the chat list**; the full conversation opens on demand in the side panel
-  ("See the conversation"), and is where a failure is diagnosed.
+- is **hidden from the chat list** when it was made inside the fragment (from its card); a
+  conversation that created the fragment from a normal chat stays in the sidebar like any
+  other. The full conversation opens on demand in the side panel ("See the conversation"),
+  and is where a failure is diagnosed.
 
 The profile is decided in the main process from the session on disk
 (`fragmentProfileOf`), never trusted from the UI.
@@ -311,9 +319,14 @@ declared and granted `context`) are a planned follow-up.
 
 ### Isolation (today)
 
-- The fragment runs in an `<iframe sandbox="allow-scripts">` **without**
-  `allow-same-origin`: an opaque origin with no access to the Orbit window, cookies
-  or storage. No popups, forms, top navigation, or device permissions.
+- The fragment runs in an `<iframe sandbox="allow-scripts allow-same-origin">`: no
+  access to the Orbit window (a different origin), no popups, forms or top navigation.
+  `allow-same-origin` is what gives the page a real origin, `orbit-fragment://<id>` —
+  Chromium refuses `getUserMedia` on an opaque one (`SecurityError: Invalid security
+  origin`), so without it no fragment could ever record. What the page reaches is its
+  OWN origin (its storage, never the app's). The iframe carries `allow="microphone"`
+  and nothing else; the permission itself is decided in the main process, against the
+  manifest's grant (see `fragments/fragment-permissions.ts`).
 - The scheme serves a **closed CSP**: scripts/styles only from the fragment itself
   (and inline), images/fonts only from itself or `data:`/`blob:`, `connect-src
   'self'` (its own files only), no frames, no forms. No CDN, no network.

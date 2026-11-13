@@ -64,10 +64,10 @@ describe('fragment profile', () => {
   })
 
   it('tells a chat with no fragment yet to create one of the asked kind', async () => {
-    await storage.writeJson(StorageKeys.session('sess-new'), session('sess-new', { fragment: { kind: 'widget' } }))
+    await storage.writeJson(StorageKeys.session('sess-new'), session('sess-new', { fragment: { kind: 'panel' } }))
     const block = await profile.fragmentTurnBlock('sess-new')
     expect(block).toContain('fragment_create')
-    expect(block).toContain('widget')
+    expect(block).toContain('panel')
   })
 
   it('orients a chat that already owns a fragment: which one, its files, what was asked', async () => {
@@ -93,7 +93,10 @@ describe('fragment profile', () => {
   it('gives a fragment chat the fragment tools and nothing else', () => {
     const lean = Object.keys(tools.buildToolSet(input('sess-frag', true), null))
     expect(lean.length).toBeGreaterThan(0)
-    expect(lean.every((name) => name.startsWith('fragment_'))).toBe(true)
+    // `question` is the one exception: it is how a fragment chat asks the person a quick
+    // choice while it builds — the card shows in the middle of the conversation.
+    expect(lean.every((name) => name.startsWith('fragment_') || name === 'question')).toBe(true)
+    expect(lean).toContain('question')
     const normal = Object.keys(tools.buildToolSet(input('sess-plain', false), null))
     expect(normal.some((name) => !name.startsWith('fragment_'))).toBe(true)
   })

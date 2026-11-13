@@ -18,7 +18,10 @@ export type CreationKind = "routine" | "agent" | "skill" | "mcp" | "hook"
 export function useStartCreationChat(): (kind: CreationKind) => Promise<void> {
   const { t } = useTranslation()
   const startChat = useStartChatWith()
-  return useCallback((kind) => startChat(t(`creation.${kind}.title`), t(`creation.${kind}.starter`)), [t, startChat])
+  return useCallback(
+    (kind) => startChat(t(`creation.${kind}.title`), t(`creation.${kind}.starter`), undefined, kind),
+    [t, startChat],
+  )
 }
 
 /**
@@ -26,17 +29,17 @@ export function useStartCreationChat(): (kind: CreationKind) => Promise<void> {
  * With `folders` the chat opens on them (the first is the working directory), so what the agent
  * tries there — a script that reads files — sees the same folders as the thing being edited.
  */
-export function useStartChatWith(): (title: string, starter: string, folders?: readonly string[]) => Promise<void> {
+export function useStartChatWith(): (title: string, starter: string, folders?: readonly string[], creation?: CreationKind) => Promise<void> {
   const { setMode, setView } = useWorkspace()
   return useCallback(
-    async (title, starter, folders) => {
+    async (title, starter, folders, creation) => {
       const [directory, ...extraDirectories] = folders ?? []
       const session = await useSessionStore
         .getState()
         .createSession("chat", { title, ...(directory ? { directory, extraDirectories } : {}) })
       // Like any new chat, it starts from the last chat used (model, thinking, autonomy, modes).
       inheritChatSettings(session.id, "chat")
-      useDraftInput.getState().setDraft(session.id, starter, undefined, { fields: true })
+      useDraftInput.getState().setDraft(session.id, starter, undefined, { fields: true, template: creation })
       setMode("chat")
       setView("chat")
     },

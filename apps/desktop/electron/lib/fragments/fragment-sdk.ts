@@ -4,9 +4,9 @@ import { FRAGMENT_INSPECTOR } from './fragment-inspector'
  * `window.orbit` — the only door out of a fragment page.
  *
  * Injected by the scheme at the top of the HTML (see fragment-protocol.ts), so it exists
- * before any script of the fragment. The page runs in an opaque origin (sandboxed
- * iframe, no allow-same-origin): it cannot reach the Orbit window, so every call is a
- * postMessage to the tab that hosts the iframe, which forwards it to the main process.
+ * before any script of the fragment. The page runs in the fragment's own origin
+ * (`orbit-fragment://<id>`), never the app's: it cannot reach the Orbit window, so every
+ * call is a postMessage to the tab that hosts the iframe, which forwards it to the main process.
  * The main process is who decides — the page only asks.
  *
  * Every message carries the token of THIS load (`?__t=`, set by the tab). A page that
@@ -82,6 +82,20 @@ export const FRAGMENT_SDK = `${FRAGMENT_SDK_MARK}
     mcp: {
       list: function () { return call('mcp.list') },
       call: function (server, tool, args) { return call('mcp.call', { server: server, tool: tool, args: args || {} }) }
+    },
+    // Notifications: a toast while Orbit is in front, a native banner when it is not.
+    // Needs "notify" requested AND allowed. The app keeps the schedule, so a scheduled
+    // notification fires with this page closed — but only while Orbit itself is open.
+    notify: {
+      show: function (options) { return call('notify.show', options || {}) },
+      schedule: function (options) { return call('notify.schedule', options || {}) },
+      list: function () { return call('notify.list') },
+      cancel: function (id) { return call('notify.cancel', { id: id }) }
+    },
+    // Reading the state and asking again: the page may LOOK and ASK, never grant.
+    permissions: {
+      state: function (capability) { return call('permissions.state', { capability: capability }) },
+      request: function (capability) { return call('permissions.request', { capability: capability }) }
     },
     on: function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn)

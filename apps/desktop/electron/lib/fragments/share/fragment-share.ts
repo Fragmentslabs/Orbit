@@ -95,8 +95,8 @@ export async function confirmFragmentImport(token: unknown): Promise<FragmentImp
       icon: manifest.icon,
       requests: manifest.requests,
       files: files.filter((f) => f !== entry).map((f) => ({ path: f.path, data: Buffer.from(f.data) })),
-      // Not on the sidebar, the panel hub or the home screen until the person chooses so.
-      pinned: { sidebar: false, panel: false, home: false },
+      // Not on the sidebar or the panel hub until the person chooses so.
+      pinned: { sidebar: false, panel: false },
       recordProvenance: (id) => recordThirdPartyProvenance(id, { arrival: 'file', fileName, fileHash: sha256, author: manifest.author }),
     })
     return { ok: true, fragmentId: created.id }

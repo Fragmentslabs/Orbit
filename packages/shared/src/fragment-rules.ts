@@ -8,6 +8,9 @@ import {
   FRAGMENT_DEFAULT_ICON,
   FRAGMENT_ICON_PATTERN,
   FRAGMENT_KINDS,
+  FRAGMENT_MAX_WIDGETS,
+  FRAGMENT_WIDGET_ID_PATTERN,
+  FRAGMENT_WIDGET_SIZES,
   isFragmentId,
   type FragmentCapability,
   type FragmentKind,
@@ -15,6 +18,7 @@ import {
   type FragmentModel,
   type FragmentPins,
   type FragmentReasoning,
+  type FragmentWidget,
 } from "./fragments"
 
 /** Major version of the `window.orbit` API (the bridge protocol). A manifest's `sdk` must equal it. */
@@ -33,6 +37,12 @@ export const FRAGMENT_METHODS = [
   "http.fetch",
   "mcp.list",
   "mcp.call",
+  "notify.show",
+  "notify.schedule",
+  "notify.list",
+  "notify.cancel",
+  "permissions.state",
+  "permissions.request",
 ] as const
 
 // Compile-time guard: the runtime list and the `FragmentMethod` type must name the same methods.
@@ -102,9 +112,42 @@ export function sanitizeFragmentIcon(value: unknown): string {
   return name.length <= FRAGMENT_MAX_ICON_LENGTH && FRAGMENT_ICON_PATTERN.test(name) ? name : FRAGMENT_DEFAULT_ICON
 }
 
+/**
+ * The widgets a fragment declares, cleaned: an id the page can put in a URL, a name, and
+ * at least one size it knows how to draw. Anything malformed is dropped instead of
+ * failing the whole manifest — a fragment with a bad widget still works as a page.
+ */
+export function sanitizeFragmentWidgets(value: unknown): FragmentWidget[] {
+  if (!Array.isArray(value)) return []
+  const out: FragmentWidget[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const raw = entry as Record<string, unknown>
+    const id = typeof raw.id === "string" ? raw.id.trim().toLowerCase() : ""
+    if (!FRAGMENT_WIDGET_ID_PATTERN.test(id) || seen.has(id)) continue
+    const name = typeof raw.name === "string" ? raw.name.trim().slice(0, 40) : ""
+    if (!name) continue
+    const declared = Array.isArray(raw.sizes) ? raw.sizes : []
+    const sizes = FRAGMENT_WIDGET_SIZES.filter((size) => declared.includes(size))
+    if (sizes.length === 0) continue
+    seen.add(id)
+    const widget: FragmentWidget = { id, name, sizes: [...sizes] }
+    if (typeof raw.destination === "string" && raw.destination.trim()) {
+      widget.destination = raw.destination.trim().slice(0, 200)
+    }
+    if (typeof raw.description === "string" && raw.description.trim()) {
+      widget.description = raw.description.trim().slice(0, 120)
+    }
+    out.push(widget)
+    if (out.length >= FRAGMENT_MAX_WIDGETS) break
+  }
+  return out
+}
+
 /** A new fragment is pinned where its kind lives; an old manifest without pins gets the same. */
 export function defaultFragmentPins(kind: FragmentKind): FragmentPins {
-  return { sidebar: kind === "screen", panel: kind === "panel", home: kind === "widget" }
+  return { sidebar: kind === "screen", panel: kind === "panel" }
 }
 
 export function sanitizeFragmentPins(value: unknown, kind: FragmentKind): FragmentPins {
@@ -114,7 +157,6 @@ export function sanitizeFragmentPins(value: unknown, kind: FragmentKind): Fragme
   return {
     sidebar: typeof raw.sidebar === "boolean" ? raw.sidebar : base.sidebar,
     panel: typeof raw.panel === "boolean" ? raw.panel : base.panel,
-    home: typeof raw.home === "boolean" ? raw.home : base.home,
   }
 }
 
@@ -208,10 +250,10 @@ export function validateFragmentManifest(raw: unknown): FragmentIssue[] {
 
   if (m.pinned !== undefined) {
     if (!m.pinned || typeof m.pinned !== "object" || Array.isArray(m.pinned)) {
-      error("manifest.pinned", "must be an object with boolean sidebar, panel and home")
+      error("manifest.pinned", "must be an object with boolean sidebar and panel")
     } else {
       for (const [key, value] of Object.entries(m.pinned)) {
-        if (key !== "sidebar" && key !== "panel" && key !== "home") warning(`manifest.pinned.${key}`, "unknown pin, the app ignores it")
+        if (key !== "sidebar" && key !== "panel") warning(`manifest.pinned.${key}`, "unknown pin, the app ignores it")
         else if (typeof value !== "boolean") error(`manifest.pinned.${key}`, "must be true or false")
       }
     }

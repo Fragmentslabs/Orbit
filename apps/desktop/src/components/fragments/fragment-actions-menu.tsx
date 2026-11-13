@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, House, MoreHorizontal, Share, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
+import { Check, MoreHorizontal, Share, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   DropdownMenu,
@@ -56,10 +56,6 @@ export function FragmentActionsMenu({
           <DropdownMenuItem onClick={() => update({ pinned: { panel: !fragment.pinned.panel } })}>
             {fragment.pinned.panel ? <Check className="size-3.5" /> : <PanelRight className="size-3.5" />}
             {t("fragments.pinPanel")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => update({ pinned: { home: !fragment.pinned.home } })}>
-            {fragment.pinned.home ? <Check className="size-3.5" /> : <House className="size-3.5" />}
-            {t("fragments.pinHome")}
           </DropdownMenuItem>
           {/* Only a fragment that asked for the model has anything to allow — and only the person allows it. */}
           {fragment.requests.includes("ai") && (

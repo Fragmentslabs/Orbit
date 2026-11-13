@@ -1,4 +1,4 @@
-import { Info, Loader2, MousePointerClick, Pencil, RotateCw, Sparkles, type LucideIcon } from "lucide-react"
+import { Loader2, MousePointerClick, Pencil, RotateCw, Settings, Sparkles, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Hint } from "@/components/ui/hint"
@@ -6,18 +6,17 @@ import { cn } from "@/lib/utils"
 import type { FragmentManifest } from "@shared/fragments"
 import { useFragment } from "@/src/components/fragment-tab"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
-import { useFragmentHeaderCompact } from "@/src/hooks/use-fragment-header-compact"
 import { useArtifactActivity } from "@/src/hooks/use-artifact-activity"
 import { fragmentApi } from "@/src/lib/ipc"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
-import { FragmentModelPicker } from "./fragment-model-picker"
 
 /**
  * The controls of the open fragment, on the right of the app header: whether an agent is
- * working on it, the model it uses, whether it may use the AI, reload, and edit mode. Under a width threshold the model and reload
- * move into the actions menu of the title (`FragmentHeaderTitle`). The
- * fragment page has no bar of its own — the fragment gets the whole area.
+ * working on it, whether it may use the AI, inspect, reload and edit mode. The model, its
+ * thinking and the fragment's own actions (export, delete) live in the details panel — the
+ * header keeps only what is used while looking at the page. The fragment page has no bar of
+ * its own — the fragment gets the whole area.
  */
 export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
   const { t } = useTranslation()
@@ -25,32 +24,19 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
   const editing = useFragmentsStore((s) => s.editing)
   const toggleEditing = useFragmentsStore((s) => s.toggleEditing)
   const reload = useFragmentsStore((s) => s.reload)
-  const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
-  const toggleDetails = useFragmentsStore((s) => s.toggleDetails)
   const inspecting = useFragmentsStore((s) => s.inspecting)
   const toggleInspecting = useFragmentsStore((s) => s.toggleInspecting)
   const { working } = useArtifactActivity({ kind: "fragment", id: fragmentId })
-  const compact = useFragmentHeaderCompact()
   if (!manifest) return null
 
   const asksAi = manifest.requests.includes("ai")
   const aiOn = manifest.grants.includes("ai")
-  // When the fragment offers the model choice in its own screen (and the person allowed it),
-  // the header must not show a second, competing control.
-  const appPicksModel = manifest.requests.includes("models") && manifest.grants.includes("models")
 
   return (
     <div className="flex shrink-0 items-center gap-1">
       {working && <Loader2 aria-label={t("artifact.working")} className="mr-1 size-4 animate-spin text-primary" />}
-      {/* The fragment's AI. Allowed: its model and thinking. Not allowed: only a small badge
-          (clicking it allows) — the controls of a model nobody can use would be noise. */}
-      {asksAi && aiOn && !appPicksModel && !compact && (
-        <>
-          <FragmentModelPicker manifest={manifest} />
-          {/* Next to the model it belongs to: the thinking level of the fragment's own model. */}
-          <FragmentThinkingMenu manifest={manifest} />
-        </>
-      )}
+      {/* The fragment's AI. Not allowed: only a small badge (clicking it allows). Its model and
+          thinking live in the details panel now — the header has no room to label them. */}
       {asksAi && !aiOn && (
         <Hint label={t("fragments.aiAllow")}>
           <button
@@ -74,9 +60,24 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
         {t("fragments.edit")}
       </Button>
       <HeaderIconButton icon={MousePointerClick} label={t("fragments.inspect")} onClick={toggleInspecting} active={inspecting} />
-      <HeaderIconButton icon={Info} label={t("fragments.details.title")} onClick={toggleDetails} active={detailsOpen} />
-      {!compact && <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />}
+      <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />
     </div>
+  )
+}
+
+/**
+ * The gear at the right of the window header (immediately before the panel button): the fragment's
+ * panel — permissions, model and thinking, usage, data, history — in the same place the routine's
+ * own gear takes.
+ */
+export function FragmentDetailsButton({ fragmentId }: { fragmentId: string }) {
+  const { t } = useTranslation()
+  const { manifest } = useFragment(fragmentId)
+  const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
+  const toggleDetails = useFragmentsStore((s) => s.toggleDetails)
+  if (!manifest) return null
+  return (
+    <HeaderIconButton icon={Settings} label={t("fragments.details.title")} onClick={toggleDetails} active={detailsOpen} />
   )
 }
 
@@ -85,7 +86,7 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
  * `orbit.ai`) — not the agent that edits it, whose model and thinking are in the edit prompt.
  * It follows the model picked for the fragment, else the chat's model it would follow.
  */
-function FragmentThinkingMenu({ manifest }: { manifest: FragmentManifest }) {
+export function FragmentThinkingMenu({ manifest }: { manifest: FragmentManifest }) {
   const followed = useSessionModel(manifest.sessionId)
   return (
     <ThinkingMenu

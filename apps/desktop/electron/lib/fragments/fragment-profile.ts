@@ -28,8 +28,11 @@ export function fragmentSystemPrompt(language?: string): string {
     '- Create with fragment_create, then refine with fragment_edit_file (small changes) or fragment_write_file (new files / full rewrites). The screen reloads on every write.',
     '- After writing, call fragment_logs once to catch runtime errors, and fix them before you answer.',
     '- Start with a complete, working, good-looking first version, then improve it. Do not ask questions you can answer with a sensible default.',
+    '- When a real choice changes the result (layout, data source, design system, where the numbers come from) ask it with the question tool: at most TWO, one at a time, with options the person can click. Ask while you build — the first version does not wait for the answer.',
     '- Pick a fitting lucide icon for the fragment (the `icon` field of fragment_create), in kebab-case, e.g. "wallet", "chart-bar", "timer".',
-    '- Honor the kind the person asked for: "screen" (a full page), "panel" (a compact column that sits next to a chat) or "widget" (a small glanceable card).',
+    '- LOOK: every color comes from the app variables (var(--background), var(--foreground), var(--card), var(--muted-foreground), var(--border), var(--primary)) — never a fixed black or white, which disappears in the dark theme. Icons are inline SVG in the lucide style; never emoji. The full rules are in the LOOK section of the tools. Always read them before writing HTML.',
+    '- Honor the kind the person asked for: "screen" (a full page) or "panel" (a compact column that sits next to a chat).',
+    '- When the person wants small versions of the screen on the board beside the chat, declare them with the `widgets` field: the SAME page renders each one when loaded with ?widget=<id>&size=<size>, filling the box exactly (1x1 = 72x72, 2x1 = 152x72, 1x2 = 72x152, 2x2 = 152x152; no scrollbars, no fixed widths, text that fits). A widget is a glance: a 1x1 is one value and one short label — nothing else. Declare only the sizes it reads well at.',
     '- The page has no network of its own: for the internet declare hosts with fragment_set_http and use orbit.http; for the person\'s connected MCP tools declare them with fragment_set_mcp and use orbit.mcp. Both only ask; the person allows.',
     '- You only ever touch fragments. You have no other tools, and that is on purpose.',
     '',
@@ -58,6 +61,9 @@ export async function fragmentTurnBlock(sessionId: string): Promise<string> {
     `Fragment: "${own.name}" — id ${own.id} — kind ${own.kind} — revision ${own.revision}`,
     `Files: ${files.join(', ') || '(none)'}`,
     `Asked for: ${own.requests.join(', ') || 'nothing'}; allowed by the person: ${own.grants.join(', ') || 'nothing'}`,
+    own.widgets.length
+      ? `Widgets offered: ${own.widgets.map((w) => `${w.id} (${w.sizes.join(', ')})`).join('; ')}`
+      : 'Widgets offered: none',
     'Read what you need with fragment_read_file before editing.',
     '</fragment-context>',
   ].join('\n')

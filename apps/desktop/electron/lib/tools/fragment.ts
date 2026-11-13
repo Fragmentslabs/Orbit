@@ -16,6 +16,7 @@ import {
   readFragmentLogs,
   setFragmentHosts,
   setFragmentMcp,
+  setFragmentWidgets,
   setRequested,
   writeFragmentFile,
 } from '../fragments/fragment-store'
@@ -40,7 +41,31 @@ window.orbit is already loaded in every fragment page (do not add a script for i
 - orbit.theme ("light" | "dark") and orbit.on("theme", fn) — the app theme. The Orbit CSS variables are already defined and follow it: --background, --foreground, --card, --card-foreground, --primary, --primary-foreground, --secondary, --muted, --muted-foreground, --accent, --border, --input, --ring, --radius and --font-sans. Style with them (e.g. body { background: var(--background) }) so the screen looks native in light and dark.
 - orbit.http.fetch(url, { method?, headers?, body? }) → Promise<{ status, ok, url, headers, text, truncated, json() }> — the ONLY way to reach the internet. https only, and only hosts you declared with fragment_set_http AND the user allowed (until then: err.code "permission_denied"; an undeclared host: "host_not_allowed"). The app does the request: no cookies, no Authorization/Cookie headers, response capped at 2MB, 20s, 30 calls/minute. body is a string (JSON.stringify it).
 - orbit.mcp.list() → [{ server, connected, tools: [{ name, available }] }] and orbit.mcp.call(server, tool, args) → Promise<{ text, truncated }> — uses tools of MCP servers the user already connected. Only server/tool pairs you declared with fragment_set_mcp AND the user allowed. Errors: "mcp_unavailable" (server not connected), "tool_not_allowed", "mcp_tool_error" (the tool failed; err.message has its text). 20 calls/minute; result is text, capped.
+- orbit.notify.show({ title, body? }) — a toast in the app now. orbit.notify.schedule({ id, title, body?, at | dailyAt | everyMinutes }) — a notification the APP keeps and fires even with this page closed (only while Orbit is open); "at" is epoch ms, "dailyAt" is "HH:MM" local, "everyMinutes" is at least 1 (the fragment may keep 20 schedules at once, and 6 notifications a minute are delivered). The id is the identity: schedule again with the same id to update it instead of stacking. orbit.notify.list() and orbit.notify.cancel(id?) (no id cancels all). Works only when you call fragment_set_notify AND the user allows it. Typical use: on load, read the data, compute what is due and schedule one "at" per item with a stable id (e.g. "task-<id>"), so re-opening the screen never duplicates.
+- orbit.permissions.state(capability) → "granted" | "denied" | "not_requested" and orbit.permissions.request(capability) — let YOUR screen show "notifications are blocked" with a button, and re-open the app's ask when the user clicks it (the page can only ask, never allow).
+- Microphone: navigator.mediaDevices.getUserMedia({ audio: true }) (plus MediaRecorder) works once the person allows it — the first call is refused and puts the app's notice up over the fragment (the same notice the other permissions use); after the person clicks Allow there, the call works. Nothing else is needed: catch NotAllowedError, show a clear message and offer a "try again" button, and orbit.permissions.state("microphone") tells you whether to point at "allow it in the notice above". Camera is NOT available.
 Errors from orbit calls carry err.code.
+
+WIDGETS — small versions of this screen for the board beside the chat. Declare them in fragment_create (or afterwards with fragment_set_widgets): an id, a name and the sizes it knows how to draw. The board is 2 columns of 72px cells with an 8px gap, so each box is EXACTLY: 1x1 = 72x72, 2x1 = 152x72, 1x2 = 72x152, 2x2 = 152x152.
+When the person places one, THIS SAME PAGE is loaded in that box with ?widget=<id>&size=<size>. Read both ONCE, in <head>, before anything renders, and put them on the root element:
+<script>const q=new URLSearchParams(location.search);const w=q.get("widget");if(w){document.documentElement.dataset.widget=w;document.documentElement.dataset.size=q.get("size")||"2x2"}</script>
+Then the widget is a MODE of the page, never a separate document: CSS hides the screen and shows one block — html[data-widget] .screen{display:none} and html[data-widget="total"] .w-total{display:flex}.
+These rules decide whether the widget looks right or broken:
+- The box IS the canvas: margin:0 and padding:0 on body, width:100% and height:100%, overflow:hidden on html, body and the widget block. No fixed pixel width, no margin auto, nothing wider than 100% or taller than 100%. A widget that scrolls is broken.
+- Text sized for the box, not for the screen. Safe ranges: 1x1 → one value at 18-20px (weight 600, font-variant-numeric: tabular-nums) and ONE label at 9px uppercase with at most two words — no title, no second row, nothing else. 2x1 → a value at 18-20px with a 9-10px label, one row. 1x2 → value on top, two or three 9-10px rows below. 2x2 → value plus one small chart or three rows, at 10-11px.
+- Everything must fit: one-line text gets white-space:nowrap; overflow:hidden; text-overflow:ellipsis, two lines get -webkit-line-clamp:2, and every flex child that holds text gets min-width:0. Shorten the label before the number is ever clipped.
+- Declare a size only where the widget really reads well. A 1x1 carrying a title, a subtitle and a legend is broken by construction: if the content needs two rows, declare 1x2, not 1x1. Declaring fewer sizes is better than declaring one that looks wrong.
+- Adapt across sizes from the size the page received (html[data-size="1x1"] ...), with flex/grid, percentages and clamp() — never fixed widths. @container queries are fine when the shape has to change.
+- No header, no page title, no tabs, no buttons, no legend inside a widget: it is a glance. A click opens the destination, which the app handles.
+- Without ?widget the page keeps working as the full screen, with the widget blocks hidden.
+
+LOOK — every screen and every widget follows this, no exceptions:
+- Colors come ONLY from the variables above; they are already defined in the page and change with the app theme. NEVER write a fixed color for text or background (color: #000, black, #111, white, #fff): in the dark theme the text disappears. Page: var(--background); surface: var(--card); soft fill: var(--muted); text: var(--foreground); secondary text: var(--muted-foreground); hairline: var(--border); the single accent: var(--primary), with var(--primary-foreground) on top of it.
+- Text: font-family: var(--font-sans). Calm and small — 10-11px UPPERCASE labels with letter-spacing .08em, 13-15px body, and ONE big number per screen (24-32px, weight 600, letter-spacing -0.02em, font-variant-numeric: tabular-nums). Never text under 9px.
+- Icons: inline SVG drawn in the lucide style — viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round", 16-18px, colored by currentColor. NEVER emoji: they look like a toy, render differently on every machine and clash with the rest of the app. No icon font and no CDN — the sandbox has none.
+- Surfaces: var(--card) with 1px solid var(--border) and border-radius var(--radius) (10px for something inside a card). Flat: no heavy shadows, no gradients.
+- Spacing on a 4px grid (4/8/12/16/24), generous. One idea per screen: a title, the thing, and air.
+- A widget inherits all of this at miniature scale: 1x1 is one number plus one word (10-18px); 2x2 may add a tiny inline SVG sparkline. No header, no buttons, no legend.
 
 Hard limits of the page (a closed sandbox): NO direct network — no fetch to the internet from the page (use orbit.http), no CDN scripts, no external images, fonts or iframes. Write plain HTML/CSS/JavaScript (ES modules between your own files are fine); draw charts with inline SVG or <canvas>. Files: index.html is the entry; add style.css, app.js, etc. with fragment_write_file and reference them relatively (<link href="style.css">, <script src="app.js">). Allowed file types: html, css, js, mjs, json, svg, txt, csv, md.
 After writing, the panel reloads by itself. Call fragment_logs to read the page's console and errors and fix what is broken.`
@@ -94,19 +119,55 @@ export function createFragmentTools(sessionId: string) {
             'A lucide icon that represents the fragment, in kebab-case ("wallet", "chart-bar", "timer", "notebook-pen", "dumbbell"). Always pick one that fits; it shows in the sidebar, the header and the gallery.',
           ),
         kind: z
-          .enum(['screen', 'panel', 'widget'])
+          .enum(['screen', 'panel'])
           .optional()
           .describe(
-            'Where it is meant to live. "screen" (default): a full page of the app. "panel": a compact tab of the side panel, designed for a narrow column. "widget": a small card for the home screen (keep it tiny and glanceable). Use the kind the user asked for; it changes how much room the layout has.',
+            'Where it is meant to live. "screen" (default): a full page of the app. "panel": a compact tab of the side panel, designed for a narrow column. Use the kind the user asked for; it changes how much room the layout has.',
           ),
         usesAi: z
           .boolean()
           .optional()
           .describe('true when the page calls orbit.ai.generate — the user will be asked to allow it'),
+        usesNotify: z
+          .boolean()
+          .optional()
+          .describe('true when the page calls orbit.notify (reminders/toasts) — the user will be asked to allow it'),
+        usesMicrophone: z
+          .boolean()
+          .optional()
+          .describe(
+            'true when the page records audio with getUserMedia (voice notes, cloning, dictation) — the user will be asked to allow the microphone',
+          ),
+        widgets: z
+          .array(
+            z.object({
+              id: z.string().describe('URL-safe id: lowercase letters, digits and hyphens ("hoje", "total-do-mes")'),
+              name: z.string().describe('Short name shown while choosing the widget'),
+              sizes: z
+                .array(z.enum(['1x1', '2x1', '1x2', '2x2']))
+                .min(1)
+                .describe('Every size this widget knows how to draw (a 1x1 is a single 72px cell)'),
+              destination: z
+                .string()
+                .optional()
+                .describe('Screen of this fragment a click on the widget opens (the page reads it from the URL)'),
+              description: z.string().optional().describe('One line shown while choosing the widget'),
+            }),
+          )
+          .max(8)
+          .optional()
+          .describe(
+            'Small versions of this screen for the board beside the chat. Only when the person asked for widgets: the same page renders each one when loaded with ?widget=<id>&size=<size>.',
+          ),
       }),
-      execute: async ({ name, html, icon, kind, usesAi }) => {
+      execute: async ({ name, html, icon, kind, usesAi, usesNotify, usesMicrophone, widgets }) => {
         try {
-          const manifest = await createFragment({ name, html, icon, kind, requests: usesAi ? ['ai'] : [], sessionId })
+          const requests = [
+            ...(usesAi ? (['ai'] as const) : []),
+            ...(usesNotify ? (['notify'] as const) : []),
+            ...(usesMicrophone ? (['microphone'] as const) : []),
+          ]
+          const manifest = await createFragment({ name, html, icon, kind, requests: [...requests], widgets, sessionId })
           return {
             fragmentId: manifest.id,
             message: await opened(manifest.id, manifest.revision, `Fragment "${manifest.name}" created`),
@@ -252,6 +313,62 @@ export function createFragmentTools(sessionId: string) {
         return usesModels
           ? 'Declared. The user must allow "models" for this fragment before orbit.models works; build the picker so it handles err.code === "permission_denied".'
           : 'orbit.models is no longer requested by this fragment; the header model control is back.'
+      },
+    }),
+
+    fragment_set_notify: tool({
+      description:
+        'Declares whether the fragment sends notifications through orbit.notify (show/schedule). This only ASKS: the user still has to allow "notify" in the tab, you cannot allow it. Notifications arrive with the app open — a reminder that must survive Orbit being closed is a routine, not this.',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, usesNotify: z.boolean() }),
+      execute: async ({ fragmentId, usesNotify }) => {
+        const manifest = await setRequested(fragmentId, 'notify', usesNotify)
+        if (!manifest) return notFound(fragmentId)
+        panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
+        return usesNotify
+          ? 'Declared. The user must allow "notify" for this fragment before orbit.notify works; handle err.code === "permission_denied" (and orbit.permissions.request) in the UI.'
+          : 'orbit.notify is no longer requested by this fragment; its scheduled notifications are discarded.'
+      },
+    }),
+
+    fragment_set_microphone: tool({
+      description:
+        'Declares whether the fragment records audio with navigator.mediaDevices.getUserMedia. This only ASKS: the notice above the fragment appears the first time the page really records (or right away), and the user allows it there — and can turn it off in the fragment details. Declare it when the page has a record button (voice notes, voice cloning, dictation).',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, usesMicrophone: z.boolean() }),
+      execute: async ({ fragmentId, usesMicrophone }) => {
+        const manifest = await setRequested(fragmentId, 'microphone', usesMicrophone)
+        if (!manifest) return notFound(fragmentId)
+        panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
+        return usesMicrophone
+          ? 'Declared. The notice is up above the fragment; after the person allows it there, the page can record (macOS asks once for the whole app at that moment). Handle NotAllowedError and read orbit.permissions.state("microphone") to explain it in the screen.'
+          : 'The microphone is no longer requested by this fragment; recording stops working on the next load.'
+      },
+    }),
+
+    fragment_set_widgets: tool({
+      description:
+        'Replaces the widgets this fragment offers to the board beside the chat. Each one is the SAME page rendered with ?widget=<id>&size=<size> in a fixed box: 1x1 = 72x72, 2x1 = 152x72, 1x2 = 72x152, 2x2 = 152x152. Declare only the sizes the page really reads well at — a 1x1 holds one value and one short label and nothing else; if the content needs two rows, declare 1x2. Pass an empty list to offer none. It never changes what the person already placed on the board.',
+      inputSchema: z.object({
+        fragmentId: FragmentIdSchema,
+        widgets: z
+          .array(
+            z.object({
+              id: z.string().describe('URL-safe id, the same the page reads from the URL'),
+              name: z.string(),
+              sizes: z.array(z.enum(['1x1', '2x1', '1x2', '2x2'])).min(1),
+              destination: z.string().optional(),
+              description: z.string().optional(),
+            }),
+          )
+          .max(8),
+      }),
+      execute: async ({ fragmentId, widgets }) => {
+        const manifest = await setFragmentWidgets(fragmentId, widgets)
+        if (!manifest) return notFound(fragmentId)
+        return manifest.widgets.length === 0
+          ? 'The fragment no longer offers widgets.'
+          : `Declared ${manifest.widgets.length} widget(s): ${manifest.widgets
+              .map((w) => `${w.id} (${w.sizes.join(', ')})`)
+              .join('; ')}. The person chooses whether and where to place them.`
       },
     }),
 

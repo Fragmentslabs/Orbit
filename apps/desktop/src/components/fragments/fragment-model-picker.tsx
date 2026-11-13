@@ -12,10 +12,13 @@ export function FragmentModelPicker({
   manifest,
   open,
   onOpenChange,
+  triggerClassName = "h-7 text-xs",
 }: {
   manifest: FragmentManifest
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** The trigger's own box — the details tab wants it wider than the header's. */
+  triggerClassName?: string
 }) {
   const { t } = useTranslation()
   return (
@@ -28,7 +31,7 @@ export function FragmentModelPicker({
       }
       nullLabel={t("fragments.modelFollowChat")}
       hideRotationOptions
-      triggerClassName="h-7 text-xs"
+      triggerClassName={triggerClassName}
       open={open}
       onOpenChange={onOpenChange}
       hideTrigger={open !== undefined}

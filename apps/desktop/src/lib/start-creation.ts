@@ -2,12 +2,18 @@ import type { SessionMode, SpecialistProfile } from "@shared/chat"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 
-export type CreationKind = "document" | "design" | "slides" | "motion"
+export type CreationKind = "document" | "design" | "slides" | "motion" | "routine" | "fragment"
 
-/** The pieces that have a specialist agent: starting one also picks that agent for the new chat. */
+/**
+ * The pieces that have a specialist agent: starting one also picks that agent for the new
+ * chat. A fragment is a normal chat with the fragment agent — not an embedded chat hidden
+ * from the list — so the fragment it makes keeps that conversation as its own, the one
+ * edit mode talks to.
+ */
 const CREATION_AGENT: Partial<Record<CreationKind, SpecialistProfile>> = {
   design: "design",
   motion: "motion",
+  fragment: "fragment",
 }
 
 /**

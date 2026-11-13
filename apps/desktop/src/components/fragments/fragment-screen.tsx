@@ -1,36 +1,35 @@
 import { useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { Sparkles } from "lucide-react"
-import { ArtifactChatFeed } from "@/src/components/artifact/artifact-chat-feed"
+import { FragmentChatRail } from "@/src/components/fragments/fragment-chat-rail"
 import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
 import { useMarkArtifactSeen } from "@/src/hooks/use-artifact-activity"
-import { FragmentComposer } from "@/src/components/fragments/fragment-composer"
+import { useStacked } from "@/src/hooks/use-stacked"
 import { FragmentDetailsPanel } from "@/src/components/fragments/fragment-details-panel"
-import { ActionsFeed } from "@/src/components/actions-feed"
 import { FragmentAiBadge, FragmentFrame, useFragment } from "@/src/components/fragment-tab"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
-import { describeFragmentAction } from "./fragment-actions"
 import { FragmentUntrustedBanner } from "./share/fragment-untrusted-banner"
+
+/** The conversation needs its own column: below this it slides over the fragment instead. */
+const CHAT_COLUMN_PX = 880
 
 /**
  * One fragment on the page: the whole area is the fragment — no border, no bar of its own
- * (the app header carries back, icon, name, actions and the controls). EDIT mode, turned on
- * from the header, docks Orbit's prompt at the bottom edge and opens the activity feed on the
- * right, so the person sees what the agent is doing; the frame reloads on every write.
+ * (the app header carries back, icon, name, actions and the controls). EDIT mode opens its
+ * conversation as a column on the right: the chat, what the agent did and the prompt in ONE
+ * place, so the fragment gets narrower instead of being covered. Closing the column leaves
+ * edit mode.
  */
 export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
-  const { t } = useTranslation()
   const { manifest, missing } = useFragment(fragmentId)
   const leave = useFragmentsStore((s) => s.leave)
   const pickElement = useFragmentsStore((s) => s.pickElement)
   const stopInspecting = useFragmentsStore((s) => s.toggleInspecting)
+  const toggleEditing = useFragmentsStore((s) => s.toggleEditing)
   const reloads = useFragmentsStore((s) => s.reloads)
   const editing = useFragmentsStore((s) => s.editing)
   const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
   const inspecting = useFragmentsStore((s) => s.inspecting)
-  const [composerPinned, setComposerPinned] = useState(true)
-  const [feedPinned, setFeedPinned] = useState(false)
-  const [chatOpen, setChatOpen] = useState(false)
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const overlaid = useStacked(root, CHAT_COLUMN_PX)
 
   // A fragment deleted from anywhere sends the page back to the gallery.
   useEffect(() => {
@@ -58,46 +57,31 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
   if (!manifest) return <div className="flex-1" />
 
   return (
-    <div className="relative flex min-h-0 flex-1 overflow-hidden bg-background">
-      <FragmentFrame
-        manifest={manifest}
-        sessionId={manifest.sessionId}
-        reloads={reloads}
-        inspecting={inspecting}
-        onInspect={(element) => {
-          if (element) pickElement({ id: manifest.id, name: manifest.name }, element)
-          else stopInspecting()
-        }}
-        className="absolute inset-0 size-full border-0 bg-white"
-      />
+    <div ref={setRoot} className="relative flex min-h-0 flex-1 overflow-hidden bg-background">
+      <div className="relative min-w-0 flex-1 overflow-hidden">
+        <FragmentFrame
+          manifest={manifest}
+          sessionId={manifest.sessionId}
+          reloads={reloads}
+          inspecting={inspecting}
+          onInspect={(element) => {
+            if (element) pickElement({ id: manifest.id, name: manifest.name }, element)
+            else stopInspecting()
+          }}
+          className="absolute inset-0 size-full border-0 bg-white"
+        />
 
-      {/* The fragment asked for the model: only the person can say yes. */}
-      <FragmentAiBadge manifest={manifest} />
+        {/* The fragment asked for the model: only the person can say yes. */}
+        <FragmentAiBadge manifest={manifest} />
 
-      <FragmentUntrustedBanner fragmentId={manifest.id} />
+        <FragmentUntrustedBanner fragmentId={manifest.id} />
 
-      {detailsOpen && <FragmentDetailsPanel manifest={manifest} />}
+        {detailsOpen && <FragmentDetailsPanel manifest={manifest} />}
+      </div>
 
       {editing && sessionId && (
-        <>
-          <ActionsFeed
-            sessionId={sessionId}
-            pinned={feedPinned}
-            onTogglePin={() => setFeedPinned((v) => !v)}
-            title={t("fragments.activity")}
-            icon={Sparkles}
-            filter={(part) => part.tool.startsWith("fragment_")}
-            describe={(part) => describeFragmentAction(t, part)}
-          />
-          <ArtifactChatFeed chat={chat} title={manifest.name} pinned={chatOpen} onTogglePin={() => setChatOpen((v) => !v)} />
-          <FragmentComposer
-            sessionId={sessionId}
-            pinned={composerPinned}
-            onTogglePin={() => setComposerPinned((v) => !v)}
-          />
-        </>
+        <FragmentChatRail chat={chat} sessionId={sessionId} overlaid={overlaid} onClose={toggleEditing} />
       )}
     </div>
   )
 }
-

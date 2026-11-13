@@ -68,7 +68,7 @@ export async function handleFragmentRequest(request: Request): Promise<Response>
       'X-Content-Type-Options': 'nosniff',
       // The files are rewritten in place while the agent edits: no cache.
       'Cache-Control': 'no-store',
-      // The page lives in an opaque origin: its own module scripts need CORS.
+      // The page lives in its own origin (orbit-fragment://<id>): its module scripts need CORS.
       'Access-Control-Allow-Origin': '*',
     },
   })

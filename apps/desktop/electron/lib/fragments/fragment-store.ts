@@ -12,6 +12,7 @@ import type {
   FragmentMetaPatch,
   FragmentPins,
   FragmentUpdatedEvent,
+  FragmentWidget,
 } from '@shared/fragments'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import {
@@ -34,6 +35,7 @@ import {
   sanitizeFragmentModel,
   sanitizeFragmentPins,
   sanitizeFragmentReasoning,
+  sanitizeFragmentWidgets,
 } from '@shared/fragment-rules'
 import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from './fragment-provenance'
 
@@ -135,6 +137,7 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
       grants: sanitizeFragmentCaps(parsed.grants),
       hosts: sanitizeFragmentHosts(parsed.hosts),
       mcp: sanitizeFragmentMcp(parsed.mcp),
+      widgets: sanitizeFragmentWidgets(parsed.widgets),
       revision: typeof parsed.revision === 'number' ? parsed.revision : 1,
       createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0,
@@ -188,6 +191,8 @@ export async function createFragment(input: {
   kind?: FragmentKind
   icon?: string
   requests?: FragmentCapability[]
+  /** The widgets the fragment offers to the board (sanitized before it is written). */
+  widgets?: FragmentWidget[]
   sessionId?: string
   /** Extra files of `src/` (an import). Already validated by the caller; written as they are. */
   files?: Array<{ path: string; data: Buffer }>
@@ -213,6 +218,7 @@ export async function createFragment(input: {
     grants: [],
     hosts: [],
     mcp: [],
+    widgets: sanitizeFragmentWidgets(input.widgets),
     revision: 1,
     createdAt: now,
     updatedAt: now,
@@ -335,6 +341,21 @@ export function setFragmentMcp(id: string, access: unknown): Promise<FragmentMan
     const mcp: FragmentMcpAccess[] = sanitizeFragmentMcp(access)
     const next = { ...manifest, mcp }
     if (!mcpIsSubset(mcp, manifest.mcp)) next.grants = next.grants.filter((c) => c !== 'mcp')
+    await writeManifestFile(next)
+    emitUpdated(next)
+    return next
+  })
+}
+
+/**
+ * The agent declares the widgets the fragment offers. It does not touch what the person
+ * placed on the board — that lives with the person, not in the manifest.
+ */
+export function setFragmentWidgets(id: string, widgets: unknown): Promise<FragmentManifest | null> {
+  return serialized(id, async () => {
+    const manifest = await readManifestFile(id)
+    if (!manifest) return null
+    const next = { ...manifest, widgets: sanitizeFragmentWidgets(widgets) }
     await writeManifestFile(next)
     emitUpdated(next)
     return next

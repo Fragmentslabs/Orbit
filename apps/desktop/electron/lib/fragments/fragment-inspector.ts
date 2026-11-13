@@ -3,7 +3,7 @@
  * element under the pointer and reports the one that was clicked; the host decides what
  * to do with it. Dormant until asked, so a fragment that never gets inspected pays nothing.
  *
- * The page is an opaque origin: the host cannot read its DOM, so the picker has to live
+ * The page is another origin: the host cannot read its DOM, so the picker has to live
  * here. What leaves is a small description (tag, selector, text, html), clipped — the same
  * shape the panel browser reports for a selected element.
  */

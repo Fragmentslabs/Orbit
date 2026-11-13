@@ -67,7 +67,7 @@ describe('import', () => {
     const manifest = (await store.getFragment(done.fragmentId))!
     expect(manifest.grants).toEqual([])
     expect(manifest.requests).toEqual(['ai'])
-    expect(manifest.pinned).toEqual({ sidebar: false, panel: false, home: false })
+    expect(manifest.pinned).toEqual({ sidebar: false, panel: false })
     expect(await store.storeKeys(done.fragmentId)).toEqual([])
     expect(await store.readFragmentFile(done.fragmentId, 'app.js')).toBe('console.log(1)')
 

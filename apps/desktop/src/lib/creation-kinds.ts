@@ -1,4 +1,4 @@
-import { Clapperboard, FileText, LayoutGrid, Presentation } from "lucide-react"
+import { AppWindow, CalendarClock, Clapperboard, FileText, LayoutGrid, Presentation } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import type { CreationKind } from "@/src/lib/start-creation"
 
@@ -8,4 +8,6 @@ export const CREATIONS: { kind: CreationKind; Icon: LucideIcon; tone: string }[]
   { kind: "design", Icon: LayoutGrid, tone: "bg-violet-500/15 text-violet-400" },
   { kind: "slides", Icon: Presentation, tone: "bg-amber-500/15 text-amber-400" },
   { kind: "motion", Icon: Clapperboard, tone: "bg-emerald-500/15 text-emerald-400" },
+  { kind: "fragment", Icon: AppWindow, tone: "bg-teal-500/15 text-teal-400" },
+  { kind: "routine", Icon: CalendarClock, tone: "bg-primary/15 text-primary" },
 ]

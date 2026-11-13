@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 /** A titled block of the details panel. */
 export function DetailsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-b border-border/60 px-4 py-3 last:border-b-0">
+    <section className="border-b border-sidebar-border/60 px-4 py-3 last:border-b-0">
       <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
       <div className="flex flex-col gap-1.5 text-xs">{children}</div>
     </section>

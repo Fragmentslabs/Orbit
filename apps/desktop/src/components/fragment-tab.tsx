@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AppWindow, Maximize2, RotateCw, Sparkles, Trash2, X } from "lucide-react"
+import { AppWindow, Bell, Maximize2, Mic, RotateCw, Sparkles, Trash2, X } from "lucide-react"
 import { FRAGMENT_CAPABILITIES, FRAGMENT_READ_ONLY_METHODS, FRAGMENT_SCHEME } from "@shared/fragments"
 import type { FragmentManifest } from "@shared/fragments"
 import {
@@ -22,9 +22,12 @@ import { usePanelStore } from "@/src/stores/panel-store"
 /**
  * A fragment on screen: a sandboxed iframe that loads `orbit-fragment://<id>/`.
  *
- * Same confinement as the artifact — `sandbox="allow-scripts"` WITHOUT
- * `allow-same-origin`, so the page lives in an opaque origin with no access to the
- * Orbit window — and, on top of it, a CSP served by the scheme that closes the network.
+ * Same confinement as the artifact — the page has no access to the Orbit window — and, on
+ * top of it, a CSP served by the scheme that closes the network. It also carries
+ * `allow-same-origin` because it is the origin Chromium needs to let the page use the
+ * microphone (an opaque one is refused outright); what it reaches is the fragment's OWN
+ * origin, `orbit-fragment://<id>`, never the app's. No permission comes with it: the
+ * microphone is decided in the main process, by the manifest's grant.
  *
  * The page talks to Orbit through `window.orbit`, whose calls arrive here as
  * postMessage. This component is only the courier: it forwards them to the main process,
@@ -37,7 +40,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
  * the Fragments page (see fragments/fragment-screen.tsx).
  */
 
-const SANDBOX = "allow-scripts"
+const SANDBOX = "allow-scripts allow-same-origin"
 
 /** What inspect mode reports about the clicked element. */
 export interface InspectedElement {
@@ -94,11 +97,20 @@ export function FragmentFrame({
   readOnly = false,
   inspecting = false,
   onInspect,
+  widget,
+  size,
+  screen,
 }: {
   manifest: FragmentManifest
   sessionId?: string
   reloads: number
   className?: string
+  /** Which widget of the fragment to render: the page reads it from the URL and draws only that. */
+  widget?: string
+  /** The size it declared ("1x1", "2x1"…): the page fills exactly that box. */
+  size?: string
+  /** The screen of the fragment to open (a widget's destination): the page reads it from the URL. */
+  screen?: string
   /** Inspect mode: the page highlights what is under the pointer and reports the click. */
   inspecting?: boolean
   /** The element the person clicked (`null` = they pressed Escape). Only called while `inspecting`. */
@@ -122,10 +134,12 @@ export function FragmentFrame({
   inspectingRef.current = inspecting
   onInspectRef.current = onInspect
   const fragmentId = manifest.id
-  const loadKey = `${fragmentId}:${manifest.revision}:${reloads}`
+  const loadKey = `${fragmentId}:${manifest.revision}:${reloads}:${widget ?? ""}:${size ?? ""}:${screen ?? ""}`
   // New token per load: only the page THIS load produced can talk to Orbit.
   const token = useMemo(() => crypto.randomUUID(), [loadKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const src = `${FRAGMENT_SCHEME}://${fragmentId}/index.html?rev=${manifest.revision}&__t=${token}`
+  const widgetQuery = widget ? `&widget=${encodeURIComponent(widget)}${size ? `&size=${encodeURIComponent(size)}` : ""}` : ""
+  const screenQuery = screen ? `&screen=${encodeURIComponent(screen)}` : ""
+  const src = `${FRAGMENT_SCHEME}://${fragmentId}/index.html?rev=${manifest.revision}&__t=${token}${widgetQuery}${screenQuery}`
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -176,7 +190,7 @@ export function FragmentFrame({
     return () => window.removeEventListener("message", onMessage)
   }, [fragmentId, sessionId, token, preview, readOnly])
 
-  // Mirrors the app theme into the page (it is an opaque origin and does not see our classes).
+  // Mirrors the app theme into the page (its own origin does not see our classes).
   const sendTheme = useCallback(() => {
     const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
     frameRef.current?.contentWindow?.postMessage({ type: "orbit:theme", theme }, "*")
@@ -195,21 +209,25 @@ export function FragmentFrame({
   }, [sendTheme])
 
   return (
-    <iframe
-      key={loadKey}
-      ref={frameRef}
-      src={src}
-      title={manifest.name}
-      sandbox={SANDBOX}
-      allow=""
-      referrerPolicy="no-referrer"
-      onLoad={() => {
-        sendTheme()
-        sendInspect()
-      }}
-      tabIndex={preview ? -1 : undefined}
-      className={className ?? "w-full flex-1 border-0 bg-white"}
-    />
+    <>
+      <iframe
+        key={loadKey}
+        ref={frameRef}
+        src={src}
+        title={manifest.name}
+        sandbox={SANDBOX}
+        // The Permissions Policy only lets the page ASK for the microphone; the answer is
+        // decided in the main process. A thumbnail or a widget never gets even the ask.
+        allow={preview || readOnly ? "" : "microphone"}
+        referrerPolicy="no-referrer"
+        onLoad={() => {
+          sendTheme()
+          sendInspect()
+        }}
+        tabIndex={preview ? -1 : undefined}
+        className={className ?? "w-full flex-1 border-0 bg-white"}
+      />
+    </>
   )
 }
 
@@ -220,16 +238,25 @@ export function FragmentFrame({
  */
 export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
   const { t } = useTranslation()
-  const [dismissed, dismiss] = useDismissed(`orbit-fragment-ai-badge:${manifest.id}`)
+  const [dismissed, dismiss, reset] = useDismissed(`orbit-fragment-ai-badge:${manifest.id}`)
   // One ask at a time: the first capability the fragment wants and the person has not allowed.
   // Closing only hides the ask: the fragment's menu and details still offer to allow it.
   const pending = FRAGMENT_CAPABILITIES.find((c) => manifest.requests.includes(c) && !manifest.grants.includes(c))
+  // The page called orbit.permissions.request: the ask comes back even if it was dismissed.
+  useEffect(
+    () =>
+      fragmentApi.onPermissionAsk((event) => {
+        if (event.fragmentId === manifest.id) reset()
+      }),
+    [manifest.id, reset],
+  )
   if (dismissed || !pending) return null
+  const AskIcon = pending === "notify" ? Bell : pending === "microphone" ? Mic : Sparkles
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
       <div className="pointer-events-auto flex max-w-full animate-in items-center gap-2.5 rounded-full border border-primary/25 bg-background/90 py-1.5 pl-2 pr-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur-md duration-300 fade-in-0 slide-in-from-top-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <Sparkles className="size-3.5" />
+          <AskIcon className="size-3.5" />
         </span>
         <span className="min-w-0 truncate text-xs text-foreground">{t(`fragments.ask.${pending}`, { what: describeAccess(manifest, pending) })}</span>
         <Button
@@ -253,7 +280,7 @@ export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
 }
 
 /** A choice to hide something, remembered per key. Storage can be blocked: it then lasts until the view closes. */
-function useDismissed(key: string): [boolean, () => void] {
+function useDismissed(key: string): [boolean, () => void, () => void] {
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(key) === "1"
@@ -269,7 +296,15 @@ function useDismissed(key: string): [boolean, () => void] {
       /* the choice is a convenience */
     }
   }, [key])
-  return [dismissed, dismiss]
+  const reset = useCallback(() => {
+    setDismissed(false)
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      /* the choice is a convenience */
+    }
+  }, [key])
+  return [dismissed, dismiss, reset]
 }
 
 /** Confirmation before a fragment and everything it saved is removed. */
@@ -312,23 +347,36 @@ export function DeleteFragmentDialog({
 export function FragmentTab({
   fragmentId,
   title,
+  route,
   sessionId,
 }: {
   fragmentId?: string
   title: string
+  /** The screen to open first (a widget's destination). */
+  route?: string
   sessionId?: string
 }) {
   if (!fragmentId) return <FragmentPicker sessionId={sessionId} />
-  return <FragmentPanelView key={fragmentId} fragmentId={fragmentId} title={title} sessionId={sessionId} />
+  return (
+    <FragmentPanelView
+      key={`${fragmentId}:${route ?? ""}`}
+      fragmentId={fragmentId}
+      title={title}
+      route={route}
+      sessionId={sessionId}
+    />
+  )
 }
 
 function FragmentPanelView({
   fragmentId,
   title,
+  route,
   sessionId,
 }: {
   fragmentId: string
   title: string
+  route?: string
   sessionId?: string
 }) {
   const { t } = useTranslation()
@@ -388,7 +436,7 @@ function FragmentPanelView({
       />
       <div className="relative flex min-h-0 flex-1 flex-col">
         {manifest && <FragmentAiBadge manifest={manifest} />}
-        {manifest && <FragmentFrame manifest={manifest} sessionId={sessionId} reloads={reloads} />}
+        {manifest && <FragmentFrame manifest={manifest} sessionId={sessionId} reloads={reloads} screen={route} />}
       </div>
       <DeleteFragmentDialog open={confirmDelete} onOpenChange={setConfirmDelete} fragmentId={fragmentId} />
     </div>
