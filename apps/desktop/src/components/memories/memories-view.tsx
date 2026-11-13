@@ -17,6 +17,8 @@ import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { type FilterGroup, MemoryFilterSelects, MemoryFilters } from "./memory-filters"
 import { MemoryListItem } from "./memory-list-item"
 import { MemoryGraph } from "./memory-graph"
+import { KIND_ICON } from "./memory-kind-icon"
+import { MemorySummary } from "./memory-summary"
 import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 /**
@@ -168,6 +170,18 @@ export function MemoriesView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, scope, projectFilter])
 
+  // Números do topo da coluna da direita: o que está em vista (escopo + projeto) e como
+  // se divide por tipo; as propostas ficam fora da lista, mas contam aqui.
+  const stats = useMemo(
+    () => ({
+      total: basePool.length,
+      project: basePool.filter((m) => m.kind === "project").length,
+      general: basePool.filter((m) => m.kind === "general").length,
+      proposals: proposals.length,
+    }),
+    [basePool, proposals],
+  )
+
   const kindPool = useMemo(
     () => (kindFilter === ALL ? basePool : basePool.filter((m) => m.kind === kindFilter)),
     [basePool, kindFilter],
@@ -186,6 +200,23 @@ export function MemoriesView() {
   // Filter menu: only the options that exist in the view, each with its count.
   const filterGroups = useMemo<FilterGroup[]>(() => {
     const groups: FilterGroup[] = []
+
+    groups.push({
+      id: "kind",
+      label: t("memories.filters.kind"),
+      value: kindFilter,
+      onChange: setKindFilter,
+      options: [
+        { value: ALL, label: t("memories.filters.all"), count: basePool.length },
+        ...kinds.map((kind) => ({
+          value: kind,
+          label: t(`memories.kinds.${kind}`, { defaultValue: KIND_LABEL[kind] }),
+          count: basePool.filter((m) => m.kind === kind).length,
+          color: KIND_COLOR[kind],
+          icon: KIND_ICON[kind],
+        })),
+      ],
+    })
 
     if (scope !== "chat" && projects.length > 1) {
       const counts = new Map<string, number>()
@@ -206,22 +237,6 @@ export function MemoriesView() {
         ],
       })
     }
-
-    groups.push({
-      id: "kind",
-      label: t("memories.filters.kind"),
-      value: kindFilter,
-      onChange: setKindFilter,
-      options: [
-        { value: ALL, label: t("memories.filters.all"), count: basePool.length },
-        ...kinds.map((kind) => ({
-          value: kind,
-          label: t(`memories.kinds.${kind}`, { defaultValue: KIND_LABEL[kind] }),
-          count: basePool.filter((m) => m.kind === kind).length,
-          color: KIND_COLOR[kind],
-        })),
-      ],
-    })
 
     const counts = new Map<ProjectCategory, number>()
     for (const m of kindPool) if (m.category) counts.set(m.category, (counts.get(m.category) ?? 0) + 1)
@@ -425,7 +440,12 @@ export function MemoriesView() {
         </div>
       </div>
 
-      {!stacked && <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} />}
+      {!stacked && (
+        <div className="flex w-60 shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-l pl-3">
+          <MemorySummary {...stats} />
+          <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} />
+        </div>
+      )}
     </div>
   )
 }

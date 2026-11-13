@@ -17,6 +17,14 @@ export const KIND_BADGE: Record<MemoryKind, string> = {
   project: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
 }
 
+/** Kind badge of the list card: border and text in the kind color, as in the routines pill. */
+export const KIND_PILL: Record<MemoryKind, string> = {
+  core: "border-blue-500/40 text-blue-600 dark:text-blue-400",
+  seasonal: "border-amber-500/40 text-amber-600 dark:text-amber-400",
+  general: "border-violet-500/40 text-violet-600 dark:text-violet-400",
+  project: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+}
+
 /** Solid color per kind (nodes of the SVG tree) */
 export const KIND_COLOR: Record<MemoryKind, string> = {
   core: "#3b82f6",

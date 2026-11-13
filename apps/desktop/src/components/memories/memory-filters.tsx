@@ -1,17 +1,22 @@
+import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
  * Filter menu on the right of the Memories page — same shape as the section menu of
- * the Tools page: groups separated by a line, each option with its count.
+ * the Tools page: groups separated by a line, each option with its count. The column
+ * itself (width, border, scroll) belongs to the page, which puts the summary cards
+ * above it.
  */
 
 export interface FilterOption {
   value: string
   label: string
   count: number
-  /** Color dot before the label (the kind colors, same as the card strip). */
+  /** Color of the option (kind colors, same as the icons on the cards). */
   color?: string
+  /** Icon before the label; wins over the plain dot when present. */
+  icon?: LucideIcon
 }
 
 export interface FilterGroup {
@@ -39,13 +44,15 @@ function FilterItem({ option, active, onClick }: {
           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
       )}
     >
-      {option.color && (
+      {option.icon ? (
+        <option.icon className="size-3.5 shrink-0" style={{ color: option.color }} aria-hidden />
+      ) : option.color ? (
         <span
           className="size-2 shrink-0 rounded-full"
           style={{ backgroundColor: option.color }}
           aria-hidden
         />
-      )}
+      ) : null}
       <span className="min-w-0 flex-1 truncate">{option.label}</span>
       <span className="text-[11px] font-normal tabular-nums text-muted-foreground">{option.count}</span>
     </button>
@@ -54,7 +61,7 @@ function FilterItem({ option, active, onClick }: {
 
 export function MemoryFilters({ groups, label }: { groups: FilterGroup[]; label: string }) {
   return (
-    <nav aria-label={label} className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-l pl-3">
+    <nav aria-label={label} className="flex flex-col gap-0.5">
       {groups.map((group, i) => (
         <div key={group.id} className="flex flex-col gap-0.5">
           {i > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" />}

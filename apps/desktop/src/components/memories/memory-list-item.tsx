@@ -4,12 +4,14 @@ import { FileText } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { Memory } from "@shared/memory"
-import { KIND_COLOR } from "./meta"
+import { KIND_BADGE, KIND_LABEL, KIND_PILL } from "./meta"
+import { KIND_ICON } from "./memory-kind-icon"
 
 /**
- * Compact card of the memories list: a bullet with the kind color before the title, the tags
- * below and the number of uses in the corner. Everything else (weight, dates,
- * connections, editing) lives in the detail tab of the side panel — one click away.
+ * Compact card of the memories list: the kind as an icon on the left and as a badge on the
+ * right, the tags below the title and the number of uses in the corner. Everything else
+ * (weight, dates, connections, editing) lives in the detail tab of the side panel — one
+ * click away.
  */
 function MemoryListItemImpl({ memory, selected, onOpen }: {
   memory: Memory
@@ -20,6 +22,7 @@ function MemoryListItemImpl({ memory, selected, onOpen }: {
 }) {
   const { t } = useTranslation()
   const title = memory.title?.trim() || memory.text
+  const Icon = KIND_ICON[memory.kind]
 
   return (
     <button
@@ -30,12 +33,13 @@ function MemoryListItemImpl({ memory, selected, onOpen }: {
         selected && "border-primary/70",
       )}
     >
-      {/* The kind as a bullet before the title — the same dot the routine cards have. */}
+      {/* O tipo pelo ícone, na cor que ele tem na árvore — o mesmo desenho do filtro. */}
       <span
-        className="mt-[7px] size-2 shrink-0 rounded-full"
-        style={{ backgroundColor: KIND_COLOR[memory.kind] }}
+        className={cn("grid size-[26px] shrink-0 place-items-center rounded-lg", KIND_BADGE[memory.kind])}
         aria-hidden
-      />
+      >
+        <Icon className="size-3.5" />
+      </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="line-clamp-2 text-sm font-medium leading-snug">{title}</span>
         {memory.tags.length > 0 ? (
@@ -49,12 +53,24 @@ function MemoryListItemImpl({ memory, selected, onOpen }: {
           <span className="line-clamp-1 text-xs text-muted-foreground">{memory.text}</span>
         ) : null}
       </span>
-      <span
-        className="flex shrink-0 items-start gap-1.5 text-[11px] tabular-nums text-muted-foreground"
-        title={t("memories.uses", { count: memory.hits })}
-      >
-        {memory.hasDoc && <FileText className="mt-px size-3" aria-hidden />}
-        {memory.hits}
+      {/* Selo do tipo em cima e usos embaixo — a coluna da direita, como na lista de rotinas. */}
+      <span className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch">
+        <span
+          className={cn(
+            "inline-flex min-w-[62px] items-center justify-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] capitalize leading-none",
+            KIND_PILL[memory.kind],
+          )}
+        >
+          <span className="size-1 shrink-0 rounded-full bg-current" aria-hidden />
+          {t(`memories.kinds.${memory.kind}`, { defaultValue: KIND_LABEL[memory.kind] })}
+        </span>
+        <span
+          className="flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground"
+          title={t("memories.uses", { count: memory.hits })}
+        >
+          {memory.hasDoc && <FileText className="size-3" aria-hidden />}
+          {memory.hits}
+        </span>
       </span>
     </button>
   )
