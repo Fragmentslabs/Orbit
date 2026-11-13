@@ -24,8 +24,9 @@ interface CoverShot {
 
 async function captureCover(id: string, folder: string): Promise<CoverShot | null> {
   const canvas = await readDesignCanvas(folder).catch(() => null)
-  if (!canvas || canvas.order.length === 0) return null
-  const file = canvas.order[0]
+  // The cover is a SCREEN: a loose piece (no frame) is not one.
+  const file = canvas?.order.find((f) => canvas.boards[f] && !canvas.boards[f].free)
+  if (!canvas || !file) return null
   const board = canvas.boards[file]
   if (!board) return null
   const width = Math.max(40, Math.round(board.w))

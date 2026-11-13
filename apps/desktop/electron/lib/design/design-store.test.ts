@@ -29,6 +29,7 @@ vi.mock('electron', async () => {
 })
 
 const {
+  addDesignBoard,
   designIdFor,
   designIdForName,
   designIdForPath,
@@ -36,6 +37,7 @@ const {
   readDesignBoard,
   registerDesign,
   registerDesignProtocol,
+  removeDesignBoard,
   resolveDesignFile,
   unregisterDesign,
   updateDesignBoard,
@@ -166,6 +168,47 @@ describe('writeDesignBoard / readDesignBoard / updateDesignBoard', () => {
     // w/h clamped to the canvas limits (40–8000), rounded position.
     expect(canvas.boards['Main.html']).toEqual({ x: 120, y: -40, w: 40, h: 8000, title: 'Hero' })
     await expect(updateDesignBoard(id, 'Other.html', { x: 1 })).rejects.toThrow(/not in canvas.json/)
+  })
+})
+
+describe('addDesignBoard / removeDesignBoard (loose pieces)', () => {
+  it('creates a board with its file and index entry, and removes both again', async () => {
+    const folder = path.join(tempRoot, 'sess1', 'loose-canvas')
+    await mkdir(folder, { recursive: true })
+    await writeFile(
+      path.join(folder, 'canvas.json'),
+      JSON.stringify({ v: 1, boards: { 'A.html': { x: 0, y: 0, w: 800, h: 600 }, 'B.html': { x: 900, y: 0, w: 800, h: 600 } }, order: ['A.html', 'B.html'] }),
+      'utf8',
+    )
+    await writeFile(path.join(folder, 'A.html'), '<p>a</p>', 'utf8')
+    await writeFile(path.join(folder, 'B.html'), '<p>b</p>', 'utf8')
+    const { id } = await registerDesign(folder, { sessionId: 'sess1' })
+    const { readDesignCanvas } = await import('./design-canvas')
+
+    // A loose piece may be tiny: the 40px floor of a frame does not apply to it.
+    await addDesignBoard(id, 'piece-1.html', '<b>hi</b>', { x: 10.6, y: -5, w: 24, h: 18, free: true, title: 'hi' })
+    let canvas = await readDesignCanvas(folder)
+    expect(canvas.boards['piece-1.html']).toEqual({ title: 'hi', x: 11, y: -5, w: 24, h: 18, free: true })
+    expect(canvas.order).toEqual(['A.html', 'B.html', 'piece-1.html'])
+    expect(await readDesignBoard(id, 'piece-1.html')).toBe('<b>hi</b>')
+
+    // Bringing one back (undo) puts it where it was in the stacking order, and a frame keeps its floor.
+    await addDesignBoard(id, 'piece-2.html', '<i>x</i>', { x: 0, y: 0, w: 5, h: 5 }, 1)
+    canvas = await readDesignCanvas(folder)
+    expect(canvas.order).toEqual(['A.html', 'piece-2.html', 'B.html', 'piece-1.html'])
+    expect(canvas.boards['piece-2.html']).toEqual({ x: 0, y: 0, w: 40, h: 40 })
+
+    // The `free` mark survives a move/resize of the piece.
+    await updateDesignBoard(id, 'piece-1.html', { x: 50, w: 2 })
+    canvas = await readDesignCanvas(folder)
+    expect(canvas.boards['piece-1.html']).toMatchObject({ x: 50, w: 2, free: true })
+
+    await removeDesignBoard(id, 'piece-1.html')
+    canvas = await readDesignCanvas(folder)
+    expect(canvas.boards['piece-1.html']).toBeUndefined()
+    expect(canvas.order).toEqual(['A.html', 'piece-2.html', 'B.html'])
+    await expect(readDesignBoard(id, 'piece-1.html')).rejects.toThrow()
+    await expect(addDesignBoard(id, '../x.html', '', { x: 0, y: 0, w: 1, h: 1 })).rejects.toThrow(/invalid artboard/)
   })
 })
 

@@ -120,6 +120,13 @@ export const DESIGN_RUNTIME = `(() => {
   // on, on every structural change — never before that, and never after the
   // panel closes (the same request with want:false).
   let treeWanted = false
+  // A LOOSE piece (an element on the canvas with no frame): the page is that piece alone. Its
+  // root elements move the whole artboard, and the page reports its own size to the panel.
+  const isFree = document.documentElement.hasAttribute('data-orbit-free')
+  let boardDrag = null
+  let dropGuide = null
+  let dropFrame = null
+  let lastSize = ''
 
   const post = (message) => {
     try { parent.postMessage(Object.assign({ source: SOURCE }, message), '*') } catch (_) {}
@@ -425,6 +432,31 @@ export const DESIGN_RUNTIME = `(() => {
     for (const el of group) if (el !== selected) extras.push(rectOf(el))
     post({ type: 'rects', selected: rectOf(selected), hover: rectOf(hovered), group: extras })
     syncDots()
+    sendSize()
+  }
+
+  // The size of a loose piece: where its content ends. Only sent when it changes, and never in the
+  // middle of a drag (the ghost is not content).
+  const sendSize = () => {
+    if (!isFree || drag) return
+    let w = 0
+    let h = 0
+    for (const node of Array.prototype.slice.call(document.body.childNodes)) {
+      if (node.nodeType === 1) {
+        if (isInjected(node) || SKIP.has(node.tagName)) continue
+      } else if (node.nodeType !== 3 || !(node.data || '').trim()) continue
+      const r = rectOf(node)
+      if (!r) continue
+      w = Math.max(w, r.x + r.w)
+      h = Math.max(h, r.y + r.h)
+    }
+    w = Math.ceil(w)
+    h = Math.ceil(h)
+    if (!w || !h) return
+    const key = w + 'x' + h
+    if (key === lastSize) return
+    lastSize = key
+    post({ type: 'size', w, h })
   }
 
   /** The target of a click: the element, but a whole <svg> counts as one. */
@@ -639,11 +671,17 @@ export const DESIGN_RUNTIME = `(() => {
   /** "Real" children of a parent: the guides and the drag ghost do not count. */
   const realChildren = (parent) => Array.prototype.filter.call(parent.children, (child) => !isInjected(child))
 
-  /** Applies an order (slot → original index) preserving the text nodes. */
-  const applyOrder = (parent, order) => {
+  /**
+   * Applies an order (slot → original index) preserving the text nodes. "base" is the ORIGINAL
+   * list of children the indexes refer to: during a drag the DOM has already been rearranged, and
+   * an order that is always computed from the original (like the one the panel writes to the
+   * source) has to be read against it — not against whatever arrangement is on screen.
+   */
+  const applyOrder = (parent, order, base) => {
     const nodes = Array.prototype.slice.call(parent.childNodes)
-    const elements = nodes.filter((node) => node.nodeType === 1 && !isInjected(node))
-    if (elements.length !== order.length) return
+    const current = nodes.filter((node) => node.nodeType === 1 && !isInjected(node))
+    const elements = base || current
+    if (current.length !== order.length || elements.length !== order.length) return
     const next = order.map((index) => elements[index])
     let k = 0
     for (const node of nodes) parent.appendChild(node.nodeType === 1 && !isInjected(node) ? next[k++] : node)
@@ -689,37 +727,86 @@ export const DESIGN_RUNTIME = `(() => {
     drag.frame.style.display = 'none'
   }
 
-  const showGuides = (target) => {
-    if (!drag) return
+  // Frame + insertion line: where a drop lands. The same two elements serve the drag that starts
+  // here and the drag that arrives from ANOTHER artboard (see 'dropAt').
+  const drawGuides = (guide, frame, target) => {
     const box = contentBox(target.parent)
     const kids = realChildren(target.parent)
     const reference = kids[target.index] || null
     const last = kids[kids.length - 1] || null
-    drag.frame.style.display = 'block'
-    drag.frame.style.left = box.left + 'px'
-    drag.frame.style.top = box.top + 'px'
-    drag.frame.style.width = box.width + 'px'
-    drag.frame.style.height = box.height + 'px'
-    drag.guide.style.display = 'block'
+    frame.style.display = 'block'
+    frame.style.left = box.left + 'px'
+    frame.style.top = box.top + 'px'
+    frame.style.width = box.width + 'px'
+    frame.style.height = box.height + 'px'
+    guide.style.display = 'block'
     if (axisOf(target.parent) === 'x') {
       const x = reference ? reference.getBoundingClientRect().left : (last ? last.getBoundingClientRect().right : box.left)
-      drag.guide.style.left = (x - 1) + 'px'
-      drag.guide.style.top = box.top + 'px'
-      drag.guide.style.width = '2px'
-      drag.guide.style.height = box.height + 'px'
+      guide.style.left = (x - 1) + 'px'
+      guide.style.top = box.top + 'px'
+      guide.style.width = '2px'
+      guide.style.height = box.height + 'px'
     } else {
       const y = reference ? reference.getBoundingClientRect().top : (last ? last.getBoundingClientRect().bottom : box.top)
-      drag.guide.style.left = box.left + 'px'
-      drag.guide.style.top = (y - 1) + 'px'
-      drag.guide.style.width = box.width + 'px'
-      drag.guide.style.height = '2px'
+      guide.style.left = box.left + 'px'
+      guide.style.top = (y - 1) + 'px'
+      guide.style.width = box.width + 'px'
+      guide.style.height = '2px'
     }
+  }
+
+  const showGuides = (target) => {
+    if (!drag) return
+    drawGuides(drag.guide, drag.frame, target)
+  }
+
+  const GUIDE_CSS =
+    'position:fixed !important;min-width:0 !important;min-height:0 !important;max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;box-sizing:border-box !important;pointer-events:none !important;z-index:2147483646 !important;background:#0d99ff !important;border-radius:1px !important;box-shadow:0 0 0 1px rgba(255,255,255,0.7) !important'
+  const FRAME_CSS =
+    'position:fixed !important;min-width:0 !important;min-height:0 !important;max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;box-sizing:border-box !important;pointer-events:none !important;z-index:2147483646 !important;outline:2px dashed #0d99ff !important;outline-offset:-2px !important;border-radius:2px !important;background:rgba(13,153,255,0.05) !important'
+
+  const makeGuide = (css) => {
+    const el = document.createElement('div')
+    el.setAttribute('data-orbit-guide', '')
+    el.style.cssText = css
+    el.style.display = 'none'
+    document.body.appendChild(el)
+    return el
+  }
+
+  const clearDrop = () => {
+    for (const el of [dropGuide, dropFrame]) if (el && el.parentNode) el.parentNode.removeChild(el)
+    dropGuide = null
+    dropFrame = null
+  }
+
+  /**
+   * Where something dropped at (x, y) — coming from ANOTHER artboard — would land: the innermost
+   * container under the pointer (a box with children; text, images and buttons are not places to
+   * drop INTO), and the position among its children by the pointer's side of each center.
+   */
+  const dropLanding = (x, y) => {
+    const hit = document.elementFromPoint(x, y)
+    if (!hit) return null
+    let parent = hit
+    while (parent && parent !== document.body && parent !== document.documentElement && (kindOf(parent) !== 'box' || realChildren(parent).length === 0)) parent = parent.parentElement
+    if (!parent || parent === document.documentElement) parent = document.body
+    const kids = realChildren(parent)
+    const axis = axisOf(parent)
+    const point = axis === 'x' ? x : y
+    let index = kids.length
+    for (let i = 0; i < kids.length; i += 1) {
+      const rect = kids[i].getBoundingClientRect()
+      const mid = axis === 'x' ? rect.left + rect.width / 2 : rect.top + rect.height / 2
+      if (point < mid) { index = i; break }
+    }
+    return { parent, index }
   }
 
   /** Returns the siblings to the original order (identity) — cancel, or aim outside the parent. */
   const restoreSiblings = (d) => {
     if (d.order.every((value, i) => value === i)) return false
-    applyOrder(d.parent, d.siblings.map((_, i) => i))
+    applyOrder(d.parent, d.siblings.map((_, i) => i), d.siblings)
     d.order = d.order.map((_, i) => i)
     d.index = d.originIndex
     return true
@@ -827,18 +914,8 @@ export const DESIGN_RUNTIME = `(() => {
       return clone
     })
     document.body.appendChild(wrapper)
-    const guide = document.createElement('div')
-    guide.setAttribute('data-orbit-guide', '')
-    guide.style.cssText =
-      'position:fixed !important;min-width:0 !important;min-height:0 !important;max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;box-sizing:border-box !important;pointer-events:none !important;z-index:2147483646 !important;background:#0d99ff !important;border-radius:1px !important;box-shadow:0 0 0 1px rgba(255,255,255,0.7) !important'
-    document.body.appendChild(guide)
-    const frame = document.createElement('div')
-    frame.setAttribute('data-orbit-guide', '')
-    frame.style.cssText =
-      'position:fixed !important;min-width:0 !important;min-height:0 !important;max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;box-sizing:border-box !important;pointer-events:none !important;z-index:2147483646 !important;outline:2px dashed #0d99ff !important;outline-offset:-2px !important;border-radius:2px !important;background:rgba(13,153,255,0.05) !important'
-    document.body.appendChild(frame)
-    guide.style.display = 'none'
-    frame.style.display = 'none'
+    const guide = makeGuide(GUIDE_CSS)
+    const frame = makeGuide(FRAME_CSS)
     const styles = members.map((el) => ({ el, opacity: el.style.opacity, pointerEvents: el.style.pointerEvents }))
     for (const el of members) {
       el.style.opacity = '0.25'
@@ -879,12 +956,52 @@ export const DESIGN_RUNTIME = `(() => {
       // The current order of the selected items (indices inside reorderMembers).
       relative: reorderMembers.map((_, i) => i),
       picked: restricted ? members[0] : null,
+      // The pointer has left the artboard: the panel owns the drag from there (another artboard
+      // or the empty canvas), and what is shown here goes back to rest.
+      outside: false,
+      rects: rects.map((r) => ({ x: r.left, y: r.top, w: r.width, h: r.height })),
+      grab: { x: x - left, y: y - top },
     }
     document.documentElement.classList.add('__orbit-drag')
     hovered = null
     post({ type: 'hover', path: null, rect: null })
     post({ type: 'select', path: pathOf(selected), info: infoFor(selected), shift: false, group: groupPaths() })
     sendRects()
+    if (!restricted) postCross('start', null)
+  }
+
+  const postCross = (phase, e) => {
+    if (!drag) return
+    post({
+      type: 'crossDrag',
+      phase,
+      x: e ? e.clientX : 0,
+      y: e ? e.clientY : 0,
+      mod: Boolean(e && (e.metaKey || e.ctrlKey)),
+      paths: drag.members.map((el) => pathOf(el)).filter((path) => path),
+      rects: drag.rects,
+      grab: drag.grab,
+    })
+  }
+
+  const goOutside = (e) => {
+    if (!drag || drag.restricted) return
+    if (!drag.outside) {
+      drag.outside = true
+      drag.target = null
+      hideGuides()
+      // The live reordering goes back to the original order: the paths must keep matching the
+      // source while the panel decides where the elements go.
+      if (restoreSiblings(drag)) sendRects()
+      drag.clone.style.setProperty('visibility', 'hidden', 'important')
+    }
+    postCross('move', e)
+  }
+
+  const comeBack = () => {
+    drag.outside = false
+    drag.clone.style.removeProperty('visibility')
+    postCross('back', null)
   }
 
   const moveDrag = (e) => {
@@ -894,6 +1011,11 @@ export const DESIGN_RUNTIME = `(() => {
     drag.clone.style.setProperty('transform', 'translate(' + dx + 'px,' + dy + 'px)', 'important')
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return
     drag.moved = true
+    if (!drag.restricted) {
+      const outside = e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
+      if (outside) { goOutside(e); return }
+      if (drag.outside) comeBack()
+    }
     if (drag.restricted) {
       // Drag by the circle: the dragged item changes place AMONG THE
       // SELECTED ONES. The siblings that were not selected stay where
@@ -910,7 +1032,7 @@ export const DESIGN_RUNTIME = `(() => {
       const order = drag.siblings.map((_, i) => i)
       for (let j = 0; j < relative.length; j += 1) order[drag.reorderIndexes[j]] = drag.reorderIndexes[relative[j]]
       if (order.every((value, i) => value === drag.order[i])) return
-      flip(drag.reorderMembers, () => applyOrder(drag.parent, order))
+      flip(drag.reorderMembers, () => applyOrder(drag.parent, order, drag.siblings))
       drag.order = order
       drag.relative = relative
       sendRects()
@@ -938,13 +1060,13 @@ export const DESIGN_RUNTIME = `(() => {
     // siblings: the new order is the "others" up to there, the block, and the rest.
     const otherOrder = drag.siblings.map((_, i) => i).filter((i) => drag.memberIndexes.indexOf(i) < 0)
     const nextOrder = otherOrder.slice(0, index).concat(drag.memberIndexes, otherOrder.slice(index))
-    flip(drag.others.concat(drag.members), () => applyOrder(drag.parent, nextOrder))
+    flip(drag.others.concat(drag.members), () => applyOrder(drag.parent, nextOrder, drag.siblings))
     drag.order = nextOrder
     drag.index = index
     sendRects()
   }
 
-  const endDrag = (commit) => {
+  const endDrag = (commit, e) => {
     if (!drag) return
     const d = drag
     drag = null
@@ -962,6 +1084,16 @@ export const DESIGN_RUNTIME = `(() => {
       return
     }
     suppressClick = true
+    if (d.outside) {
+      // Dropped outside the artboard: the DOM is already in the original order (it was put back
+      // when the pointer left) and the panel moves the elements in the SOURCE — here nothing changes.
+      drag = d
+      postCross(commit ? 'end' : 'cancel', e)
+      drag = null
+      post({ type: 'select', path: pathOfNode(selected), info: infoFor(selected), shift: false, group: groupPaths() })
+      sendRects()
+      return
+    }
     const target = commit && d.target && d.target.parent !== d.parent && !d.members.some((el) => el === d.target.parent || el.contains(d.target.parent)) ? d.target : null
     if (!commit) {
       // Undoes it in the DOM as the source does: the elements go back to the original order,
@@ -1001,6 +1133,11 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   window.addEventListener('pointermove', (e) => {
+    if (boardDrag) {
+      boardDrag.moved = true
+      post({ type: 'boardDrag', phase: 'move', sx: e.screenX, sy: e.screenY, x: e.clientX, y: e.clientY, mod: e.metaKey || e.ctrlKey })
+      return
+    }
     if (drag) { moveDrag(e); return }
     if (!pendingDown) return
     if (Math.abs(e.clientX - pendingDown.x) + Math.abs(e.clientY - pendingDown.y) < 4) return
@@ -1010,6 +1147,17 @@ export const DESIGN_RUNTIME = `(() => {
     // turned into a drag, the edition is dropped (the "real" double click does not move).
     // On another element, the text being edited is confirmed before dragging.
     if (editing) finishEditing(editing.el !== p.el)
+    // In a loose piece the root IS the piece: dragging it moves the artboard on the canvas. What is
+    // deeper drags like anywhere else (and can still leave the piece).
+    if (isFree && p.el.parentElement === document.body) {
+      selected = p.el
+      group = [p.el]
+      boardDrag = { moved: false }
+      post({ type: 'select', path: pathOf(selected), info: infoFor(selected), shift: false, group: groupPaths() })
+      sendRects()
+      post({ type: 'boardDrag', phase: 'start', sx: e.screenX, sy: e.screenY, x: e.clientX, y: e.clientY, mod: e.metaKey || e.ctrlKey })
+      return
+    }
     // With more than one selected, dragging ANY PART of a member takes the
     // whole group along (and that is how the group can leave the parent). Clicking
     // (without dragging) keeps selecting the element under the pointer.
@@ -1021,15 +1169,30 @@ export const DESIGN_RUNTIME = `(() => {
     if (drag) moveDrag(e)
   }, true)
 
-  window.addEventListener('pointerup', () => {
+  const endBoardDrag = (e) => {
+    if (!boardDrag) return
+    boardDrag = null
+    suppressClick = true
+    post({ type: 'boardDrag', phase: 'end', sx: e.screenX, sy: e.screenY, x: e.clientX, y: e.clientY, mod: e.metaKey || e.ctrlKey })
+  }
+
+  window.addEventListener('pointerup', (e) => {
     pendingDown = null
-    if (drag) endDrag(true)
+    endBoardDrag(e)
+    if (drag) endDrag(true, e)
   }, true)
 
-  window.addEventListener('pointercancel', () => {
+  window.addEventListener('pointercancel', (e) => {
     pendingDown = null
-    if (drag) endDrag(false)
+    endBoardDrag(e)
+    if (drag) endDrag(false, e)
   }, true)
+
+  // The pointer left the artboard WITHOUT the browser keeping the drag with us: the panel takes it
+  // from here (it listens to the pointer itself while a drag is outside).
+  document.documentElement.addEventListener('mouseleave', (e) => {
+    if (drag && drag.moved && !drag.restricted) goOutside(e)
+  })
 
   const LINK_SKIP = /^(#|https?:|mailto:|tel:|javascript:|data:|blob:)/i
   document.addEventListener('click', (e) => {
@@ -1189,6 +1352,31 @@ export const DESIGN_RUNTIME = `(() => {
       return
     }
     if (msg.type === 'blur') { finishEditing(true); return }
+    // Something is being dragged over this artboard from ANOTHER one (or from a loose piece): show
+    // where it would land and tell the panel the address, so a drop knows where to insert.
+    if (msg.type === 'dropAt') {
+      if (!msg.active) { clearDrop(); return }
+      const target = dropLanding(msg.x, msg.y)
+      const parentPath = target ? pathOf(target.parent) : null
+      if (!target || !parentPath) {
+        clearDrop()
+        post({ type: 'dropTarget', parent: null, index: 0 })
+        return
+      }
+      if (!dropGuide) {
+        dropGuide = makeGuide(GUIDE_CSS)
+        dropFrame = makeGuide(FRAME_CSS)
+      }
+      drawGuides(dropGuide, dropFrame, target)
+      post({ type: 'dropTarget', parent: parentPath, index: target.index })
+      return
+    }
+    // The panel took the drag over (the pointer is outside): drop what was in progress here.
+    if (msg.type === 'dragAbort') {
+      if (drag) endDrag(false, null)
+      boardDrag = null
+      return
+    }
     if (msg.type === 'select') {
       selected = byPath(msg.path)
       if (selected === document.body) selected = null
@@ -1341,6 +1529,12 @@ export const DESIGN_RUNTIME = `(() => {
     // only the Layers use it — the panel asks for the 'tree' message when it is in
     // view, and only then it is built (see design-tab.tsx).
     post({ type: 'ready', width: doc.scrollWidth, height: doc.scrollHeight, links: links() })
+    if (isFree) {
+      sendSize()
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(sendSize).observe(document.body)
+      window.addEventListener('load', sendSize)
+      document.addEventListener('load', sendSize, true)
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready)
   else ready()

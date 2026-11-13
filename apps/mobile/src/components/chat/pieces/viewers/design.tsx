@@ -69,6 +69,11 @@ function boardTitle(value: unknown): string | undefined {
   return typeof title === 'string' && title.trim() ? title.trim() : undefined
 }
 
+/** A loose piece of the canvas (an element with no frame) is not a screen of the piece. */
+function isLoose(value: unknown): boolean {
+  return Boolean(value && typeof value === 'object' && (value as { free?: unknown }).free === true)
+}
+
 function boardXy(value: unknown): { x: number; y: number } {
   const board = (value ?? {}) as { x?: unknown; y?: unknown }
   const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : 0)
@@ -95,14 +100,14 @@ export function parseDesignCanvas(raw: unknown): DesignScreen[] {
   const seen = new Set<string>()
   const push = (file: unknown) => {
     if (typeof file !== 'string' || !isScreenFile(file) || seen.has(file)) return
-    if (!Object.prototype.hasOwnProperty.call(boards, file)) return
+    if (!Object.prototype.hasOwnProperty.call(boards, file) || isLoose(boards[file])) return
     seen.add(file)
     screens.push({ file, title: boardTitle(boards[file]) })
   }
 
   if (Array.isArray(canvas.order)) for (const file of canvas.order) push(file)
 
-  const rest = Object.keys(boards).filter((file) => !seen.has(file) && isScreenFile(file))
+  const rest = Object.keys(boards).filter((file) => !seen.has(file) && isScreenFile(file) && !isLoose(boards[file]))
   rest.sort((a, b) => {
     const left = boardXy(boards[a])
     const right = boardXy(boards[b])

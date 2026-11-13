@@ -85,6 +85,8 @@ export async function renderDesignBoards(
     if (only && !only.includes(file)) continue
     const board = canvas.boards[file]
     if (!board) continue
+    // "Export all" is the SCREENS: a loose piece is only exported when it was asked for by name.
+    if (!only && board.free) continue
     const width = clampSide(board.w)
     const height = clampSide(board.h)
     const title = board.title?.trim() || file.replace(/\.html?$/i, '')

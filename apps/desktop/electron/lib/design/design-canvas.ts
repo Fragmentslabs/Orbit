@@ -20,6 +20,13 @@ export interface DesignBoard {
   y: number
   w: number
   h: number
+  /**
+   * A LOOSE piece: an element (or text) that lives on the canvas without a frame around it.
+   * It is still a board — an HTML file with the element inside — but with no chrome, no
+   * background and the size of its content, so everything that edits a board (selection,
+   * source edits, undo) works on it unchanged.
+   */
+  free?: boolean
 }
 
 export interface DesignCanvas {

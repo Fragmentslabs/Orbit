@@ -303,17 +303,61 @@ export async function updateDesignBoard(
     const canvas = await readDesignCanvas(folder)
     const board = canvas.boards[file]
     if (!board) throw new Error(`artboard not in canvas.json: ${file}`)
-    const num = (value: unknown, min: number, max: number): number | undefined =>
-      typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : undefined
+    // A loose piece may be tiny (an icon, a line of text): a frame may not.
+    const min = board.free ? 1 : 40
     canvas.boards[file] = {
       ...board,
       ...(typeof patch.title === 'string' ? { title: patch.title.slice(0, 120) || undefined } : {}),
-      ...(num(patch.x, -100_000, 100_000) !== undefined ? { x: num(patch.x, -100_000, 100_000) as number } : {}),
-      ...(num(patch.y, -100_000, 100_000) !== undefined ? { y: num(patch.y, -100_000, 100_000) as number } : {}),
-      ...(num(patch.w, 40, 8000) !== undefined ? { w: num(patch.w, 40, 8000) as number } : {}),
-      ...(num(patch.h, 40, 8000) !== undefined ? { h: num(patch.h, 40, 8000) as number } : {}),
+      ...(boardNumber(patch.x, -100_000, 100_000) !== undefined ? { x: boardNumber(patch.x, -100_000, 100_000) as number } : {}),
+      ...(boardNumber(patch.y, -100_000, 100_000) !== undefined ? { y: boardNumber(patch.y, -100_000, 100_000) as number } : {}),
+      ...(boardNumber(patch.w, min, 8000) !== undefined ? { w: boardNumber(patch.w, min, 8000) as number } : {}),
+      ...(boardNumber(patch.h, min, 8000) !== undefined ? { h: boardNumber(patch.h, min, 8000) as number } : {}),
     }
     await writeDesignCanvas(folder, canvas)
+  })
+}
+
+function boardNumber(value: unknown, min: number, max: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : undefined
+}
+
+/**
+ * Adds an artboard to the canvas: writes its file and registers it in canvas.json, in one
+ * step under the canvas lock. It is what creates a LOOSE piece (an element dropped or pasted
+ * on the empty canvas) — and what undo uses to bring one back. `index` is its place in the
+ * stacking order (the end when omitted).
+ */
+export async function addDesignBoard(id: string, file: string, html: string, board: DesignBoard, index?: number): Promise<void> {
+  const { folder, target } = await boardTarget(id, file)
+  await withAssetLock(`design:${folder}`, async () => {
+    const canvas = await readDesignCanvas(folder)
+    const min = board.free ? 1 : 40
+    await writeFileAtomic(target, html)
+    canvas.boards[file] = {
+      ...(typeof board.title === 'string' && board.title ? { title: board.title.slice(0, 120) } : {}),
+      x: boardNumber(board.x, -100_000, 100_000) ?? 0,
+      y: boardNumber(board.y, -100_000, 100_000) ?? 0,
+      w: boardNumber(board.w, min, 8000) ?? 100,
+      h: boardNumber(board.h, min, 8000) ?? 100,
+      ...(board.free ? { free: true as const } : {}),
+    }
+    const order = canvas.order.filter((f) => f !== file)
+    const at = typeof index === 'number' && Number.isInteger(index) ? Math.min(order.length, Math.max(0, index)) : order.length
+    order.splice(at, 0, file)
+    canvas.order = order
+    await writeDesignCanvas(folder, canvas)
+  })
+}
+
+/** Removes an artboard: its entry in canvas.json and its file. */
+export async function removeDesignBoard(id: string, file: string): Promise<void> {
+  const { folder, target } = await boardTarget(id, file)
+  await withAssetLock(`design:${folder}`, async () => {
+    const canvas = await readDesignCanvas(folder)
+    delete canvas.boards[file]
+    canvas.order = canvas.order.filter((f) => f !== file)
+    await writeDesignCanvas(folder, canvas)
+    await fsp.rm(target, { force: true })
   })
 }
 

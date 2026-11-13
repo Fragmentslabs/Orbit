@@ -356,6 +356,8 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
               throw new Error(`artboard "${file}" is new — pass html with its full content`)
             }
             canvas.boards[file] = {
+              // A loose piece the person made stays loose when the agent touches it.
+              ...(existingBoard?.free ? { free: true as const } : {}),
               title: title ?? existingBoard?.title,
               x: x ?? existingBoard?.x ?? 0,
               y: y ?? existingBoard?.y ?? 0,
@@ -378,7 +380,7 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
 
     design_read: tool({
       description:
-        'Returns the layout (canvas.json: artboards, position, size, plus the shared stylesheets) of a design canvas (of this conversation by name, or any one by id), or — with `file` — one file\'s current content (an artboard .html or a stylesheet .css). The user may have asked for changes since you wrote it, and edits need the exact text.',
+        'Returns the layout (canvas.json: artboards, position, size, plus the shared stylesheets) of a design canvas (of this conversation by name, or any one by id), or — with `file` — one file\'s current content (an artboard .html or a stylesheet .css). The user may have asked for changes since you wrote it, and edits need the exact text. An artboard marked `free: true` is a LOOSE piece the user left on the canvas outside any frame (an element or some text): it is still an HTML file you can edit, but it is not a screen — never link to it or count it as one.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,

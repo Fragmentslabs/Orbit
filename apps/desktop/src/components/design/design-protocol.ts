@@ -69,6 +69,37 @@ export type RuntimeMessage =
   | { type: "textEdited"; path: ElementPath; html: string }
   | { type: "reorder"; parent: ElementPath; order: number[] }
   | { type: "move"; paths: ElementPath[]; parent: ElementPath; index: number }
+  | {
+      /**
+       * A drag of elements out of an artboard. `start` opens it (with what is being dragged),
+       * `move` says the pointer is OUTSIDE the artboard — from there the panel draws the ghost and
+       * decides where the elements land (another artboard, or the empty canvas) —, `back` says it
+       * returned, and `end`/`cancel` close it. `x`/`y` are in artboard pixels (they can be negative
+       * or past the edge).
+       */
+      type: "crossDrag"
+      phase: "start" | "move" | "back" | "end" | "cancel"
+      x: number
+      y: number
+      mod: boolean
+      paths: ElementPath[]
+      /** Rectangles of the dragged elements when the drag started (artboard pixels). */
+      rects: DesignRect[]
+      /** Where inside the dragged block the pointer grabbed it. */
+      grab: { x: number; y: number }
+    }
+  | {
+      /** The drag of a LOOSE piece: the artboard itself moves on the canvas (screen coordinates). */
+      type: "boardDrag"
+      phase: "start" | "move" | "end"
+      sx: number
+      sy: number
+      x: number
+      y: number
+      mod: boolean
+    }
+  | { type: "dropTarget"; parent: ElementPath | null; index: number }
+  | { type: "size"; w: number; h: number }
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
@@ -260,6 +291,36 @@ export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
       if (!Number.isInteger(m.index) || (m.index as number) < 0 || (m.index as number) > 5000) return null
       return { type: "move", paths, parent, index: m.index as number }
     }
+    case "crossDrag": {
+      if (!isNum(m.x) || !isNum(m.y)) return null
+      const PHASES = ["start", "move", "back", "end", "cancel"] as const
+      const phase = PHASES.find((p) => p === m.phase)
+      if (!phase) return null
+      const grab = m.grab as { x?: unknown; y?: unknown } | null
+      return {
+        type: "crossDrag",
+        phase,
+        x: m.x,
+        y: m.y,
+        mod: m.mod === true,
+        paths: asPathList(m.paths),
+        rects: asRectList(m.rects),
+        grab: { x: grab && isNum(grab.x) ? grab.x : 0, y: grab && isNum(grab.y) ? grab.y : 0 },
+      }
+    }
+    case "boardDrag": {
+      if (!isNum(m.sx) || !isNum(m.sy)) return null
+      const phase = m.phase === "start" || m.phase === "move" || m.phase === "end" ? m.phase : null
+      if (!phase) return null
+      return { type: "boardDrag", phase, sx: m.sx, sy: m.sy, x: isNum(m.x) ? m.x : 0, y: isNum(m.y) ? m.y : 0, mod: m.mod === true }
+    }
+    case "dropTarget": {
+      const parent = m.parent === null ? null : asPath(m.parent, false)
+      if (m.parent !== null && !parent) return null
+      return { type: "dropTarget", parent, index: Number.isInteger(m.index) && (m.index as number) >= 0 ? (m.index as number) : 0 }
+    }
+    case "size":
+      return isNum(m.w) && isNum(m.h) && m.w >= 0 && m.h >= 0 ? { type: "size", w: Math.min(m.w, 20_000), h: Math.min(m.h, 20_000) } : null
     default:
       return null
   }
@@ -701,4 +762,327 @@ export function stepOrder(count: number, index: number, direction: "up" | "down"
   order[index] = target
   order[target] = index
   return order
+}
+
+// ----------------------------------------------------------------- clipboard
+
+/**
+ * What Copy keeps: the markup of the copied nodes AND what they need to look the same somewhere
+ * else — the artboard's own `<style>` blocks and linked stylesheets, since the classes the markup
+ * uses are defined there and not in the elements. Pure data: it lives in memory, never in the DOM
+ * of the app.
+ */
+export interface DesignClip {
+  /** The nodes, serialized in DOM order (a loose text node becomes a `<span>`). */
+  items: string[]
+  /** The text of every `<style>` in the head of the origin. */
+  styles: string[]
+  /** The `href` of every stylesheet linked in the head of the origin, as written. */
+  links: string[]
+  /** `class`/`style` of the origin `<html>` and `<body>` — they carry the inherited typography. */
+  html: Record<string, string>
+  body: Record<string, string>
+  /** The canvas and the artboard it came from. */
+  designId: string | null
+  file: string
+  /** How the block was laid out on screen: size, and how several siblings sat next to each other. */
+  size: { w: number; h: number }
+  layout: { direction: "row" | "column"; gap: number } | null
+  /** A short name for the piece (the Layers row of a loose piece). */
+  label: string
+}
+
+/** The block the rectangles cover, and — with several — whether they sit in a row or a column. */
+export function layoutFromRects(rects: DesignRect[]): { size: { w: number; h: number }; layout: DesignClip["layout"] } {
+  if (rects.length === 0) return { size: { w: 0, h: 0 }, layout: null }
+  const left = Math.min(...rects.map((r) => r.x))
+  const top = Math.min(...rects.map((r) => r.y))
+  const right = Math.max(...rects.map((r) => r.x + r.w))
+  const bottom = Math.max(...rects.map((r) => r.y + r.h))
+  const size = { w: Math.max(1, Math.round(right - left)), h: Math.max(1, Math.round(bottom - top)) }
+  if (rects.length < 2) return { size, layout: null }
+  const centersX = rects.map((r) => r.x + r.w / 2)
+  const centersY = rects.map((r) => r.y + r.h / 2)
+  const direction = Math.max(...centersX) - Math.min(...centersX) >= Math.max(...centersY) - Math.min(...centersY) ? "row" : "column"
+  // The gap is what is left between neighbours along the axis (never negative).
+  const sorted = rects.slice().sort((a, b) => (direction === "row" ? a.x - b.x : a.y - b.y))
+  let total = 0
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = sorted[i - 1]
+    total += Math.max(0, direction === "row" ? sorted[i].x - (prev.x + prev.w) : sorted[i].y - (prev.y + prev.h))
+  }
+  return { size, layout: { direction, gap: Math.round(total / (sorted.length - 1)) } }
+}
+
+const attrsOf = (el: Element | null, names: string[]): Record<string, string> => {
+  const out: Record<string, string> = {}
+  if (!el) return out
+  for (const name of names) {
+    const value = el.getAttribute(name)
+    if (value) out[name] = value
+  }
+  return out
+}
+
+/** The node of a path: an element, or the loose text node a negative last index addresses. */
+function nodeAt(doc: Document, path: ElementPath): Node | null {
+  return elementAt(doc, path) ?? textNodeAt(doc, path)
+}
+
+function serializeNode(node: Node): string {
+  if (node.nodeType === 3) {
+    const span = node.ownerDocument!.createElement("span")
+    span.textContent = (node as Text).data
+    return span.outerHTML
+  }
+  return (node as Element).outerHTML
+}
+
+function labelFor(node: Node): string {
+  const text = (node.textContent ?? "").replace(/\s+/g, " ").trim()
+  if (text) return text.slice(0, 28)
+  return node.nodeType === 1 ? (node as Element).tagName.toLowerCase() : "text"
+}
+
+/**
+ * Copies the nodes of `paths` out of the SOURCE of an artboard. The addresses are resolved before
+ * anything is read, in DOM order — the same contract as removeNodes/duplicateNodes.
+ */
+export function buildClip(
+  html: string,
+  paths: ElementPath[],
+  meta: { designId: string | null; file: string; rects?: DesignRect[] },
+): DesignClip | null {
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  const nodes: Node[] = []
+  for (const path of paths) {
+    const node = nodeAt(doc, path)
+    // Nesting counts once: a node inside another copied node is already in its markup.
+    if (node && nodes.indexOf(node) < 0) nodes.push(node)
+  }
+  const top = nodes.filter((node) => !nodes.some((other) => other !== node && other.contains(node)))
+  if (top.length === 0) return null
+  top.sort((a, b) => (a.compareDocumentPosition(b) & 4 ? -1 : 1))
+  const { size, layout } = layoutFromRects(meta.rects ?? [])
+  return {
+    items: top.map(serializeNode),
+    styles: Array.from(doc.head.querySelectorAll("style"))
+      .filter((el) => !el.hasAttribute("data-orbit-fonts") && !el.hasAttribute("data-orbit-free"))
+      .map((el) => el.textContent ?? "")
+      .filter((text) => text.trim()),
+    links: Array.from(doc.head.querySelectorAll('link[rel~="stylesheet"][href]'))
+      .map((el) => el.getAttribute("href") ?? "")
+      .filter((href) => href && !/^(https?:|data:|\/\/)/i.test(href)),
+    html: attrsOf(doc.documentElement, ["class", "style", "lang"]),
+    body: attrsOf(doc.body, ["class", "style"]),
+    designId: meta.designId,
+    file: meta.file,
+    size,
+    layout,
+    label: labelFor(top[0]),
+  }
+}
+
+/**
+ * Drops the top-level `html { }` / `body { }` rules of a stylesheet. A pasted block of CSS must
+ * not restyle the page it lands in: those two rules describe the ORIGIN document, and the
+ * elements keep their own classes either way. At-rules (`@media`, `@font-face`…) and `:root`
+ * (the design tokens) stay.
+ */
+export function stripPageRules(css: string): string {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, "")
+  let out = ""
+  let depth = 0
+  let start = 0
+  let preludeEnd = -1
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i]
+    if (ch === ";" && depth === 0) {
+      // `@import …;` / `@charset …;`: a statement of its own, not the start of the next rule.
+      out += `${source.slice(start, i + 1).trim()}\n`
+      start = i + 1
+    } else if (ch === "{") {
+      if (depth === 0) preludeEnd = i
+      depth += 1
+    } else if (ch === "}") {
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) {
+        const prelude = source.slice(start, preludeEnd).trim()
+        const block = source.slice(start, i + 1)
+        const selectors = prelude.split(",").map((part) => part.trim().toLowerCase())
+        const page = !prelude.startsWith("@") && selectors.every((sel) => sel === "html" || sel === "body")
+        if (!page) out += `${block}\n`
+        start = i + 1
+      }
+    }
+  }
+  const rest = source.slice(start).trim()
+  if (rest && depth === 0 && !rest.includes("{")) out += rest
+  return out.trim()
+}
+
+export type PasteAt =
+  | { kind: "end" }
+  | { kind: "inside"; parent: ElementPath; index: number }
+  | { kind: "after"; path: ElementPath }
+
+export interface PasteContext {
+  /** Pasting into the file it came from: everything the markup needs is already there. */
+  sameFile: boolean
+  /** Same canvas, so a `<link href>` still resolves; otherwise the stylesheet has to travel inline. */
+  sameDesign: boolean
+  /** The text of the stylesheets of `clip.links`, by `href` (read when the canvas is another). */
+  inlineCss?: Record<string, string>
+}
+
+/** The path of an element of a document (empty for the body). */
+export function pathOfElement(doc: Document, el: Element): ElementPath | null {
+  const path: number[] = []
+  let node: Element | null = el
+  while (node && node !== doc.body) {
+    const up: Element | null = node.parentElement
+    if (!up) return null
+    path.unshift(Array.prototype.indexOf.call(up.children, node))
+    node = up
+  }
+  return node === doc.body ? path : null
+}
+
+/**
+ * Brings the styles of the clip into the head of the destination — only what is not there yet.
+ * `page` strips the origin's html/body rules (a frame keeps its own page); a loose piece has no
+ * page of its own, so it keeps them.
+ */
+function mergeClipStyles(doc: Document, clip: DesignClip, ctx: PasteContext, page: boolean): void {
+  const have = new Set(Array.from(doc.head.querySelectorAll("style")).map((el) => (el.textContent ?? "").trim()))
+  const linked = new Set(Array.from(doc.head.querySelectorAll("link[href]")).map((el) => el.getAttribute("href")))
+  const add = (css: string) => {
+    const text = page ? stripPageRules(css) : css.trim()
+    if (!text || have.has(text)) return
+    have.add(text)
+    const style = doc.createElement("style")
+    style.setAttribute("data-orbit-pasted", "")
+    style.textContent = `\n${text}\n`
+    doc.head.appendChild(style)
+  }
+  for (const href of clip.links) {
+    if (linked.has(href)) continue
+    if (ctx.sameDesign) {
+      const link = doc.createElement("link")
+      link.setAttribute("rel", "stylesheet")
+      link.setAttribute("href", href)
+      doc.head.appendChild(link)
+      linked.add(href)
+    } else if (ctx.inlineCss?.[href]) add(ctx.inlineCss[href])
+  }
+  for (const css of clip.styles) add(css)
+}
+
+function nodesOf(doc: Document, items: string[]): Node[] {
+  const out: Node[] = []
+  for (const item of items) {
+    const holder = doc.createElement("template")
+    holder.innerHTML = item
+    for (const node of Array.from(holder.content.childNodes)) {
+      if (node.nodeType === 1 || (node.nodeType === 3 && (node.textContent ?? "").trim())) out.push(doc.importNode(node, true))
+    }
+  }
+  return out
+}
+
+/**
+ * Pastes the clip into the SOURCE of an artboard. Returns the new HTML and the paths of what was
+ * inserted (so the panel can select them).
+ */
+export function pasteClip(html: string, clip: DesignClip, at: PasteAt, ctx: PasteContext): { html: string; paths: ElementPath[] } {
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  let parent: Element | null = doc.body
+  let index = doc.body.children.length
+  if (at.kind === "inside") {
+    parent = elementAt(doc, at.parent)
+    index = at.index
+  } else if (at.kind === "after") {
+    const el = elementAt(doc, at.path)
+    parent = el?.parentElement ?? null
+    index = el ? Array.prototype.indexOf.call(el.parentElement?.children ?? [], el) + 1 : 0
+  }
+  if (!parent) throw new Error("paste: target not found in the artboard source")
+  index = Math.max(0, Math.min(parent.children.length, index))
+  const parentPath = pathOfElement(doc, parent)
+  if (!parentPath) throw new Error("paste: target not found in the artboard source")
+  const nodes = nodesOf(doc, clip.items)
+  if (nodes.length === 0) throw new Error("paste: nothing to paste")
+  if (!ctx.sameFile) mergeClipStyles(doc, clip, ctx, true)
+  const reference = parent.children[index] ?? null
+  const paths: ElementPath[] = []
+  let offset = 0
+  for (const node of nodes) {
+    parent.insertBefore(node, reference)
+    // Text between elements does not count in the path; elements do.
+    if (node.nodeType === 1) {
+      paths.push([...parentPath, index + offset])
+      offset += 1
+    }
+  }
+  return { html: serializeHtml(doc, html), paths }
+}
+
+/**
+ * The document of a LOOSE piece: the copied nodes alone on a transparent page, with the styles of
+ * the artboard they came from. `width` is the size the block had on screen, so a `width: 100%`
+ * keeps meaning what it meant. `data-orbit-free` tells the bridge this page is one piece (it
+ * moves as a whole and reports its own size).
+ */
+export function looseDocument(clip: DesignClip, width: number, ctx: PasteContext): string {
+  const doc = new DOMParser().parseFromString("<!doctype html><html><head><meta charset=\"utf-8\"></head><body></body></html>", "text/html")
+  for (const [name, value] of Object.entries(clip.html)) doc.documentElement.setAttribute(name, value)
+  for (const [name, value] of Object.entries(clip.body)) doc.body.setAttribute(name, value)
+  doc.documentElement.setAttribute("data-orbit-free", "")
+  mergeClipStyles(doc, clip, { ...ctx, sameFile: false }, false)
+  const w = Math.max(1, Math.round(width))
+  const layout = clip.layout && clip.items.length > 1 ? `display:flex !important;flex-direction:${clip.layout.direction};gap:${clip.layout.gap}px;` : "display:block !important;"
+  const reset = doc.createElement("style")
+  reset.setAttribute("data-orbit-free", "")
+  reset.textContent =
+    `html,body{margin:0 !important;padding:0 !important;background:transparent !important;min-height:0 !important;height:auto !important}` +
+    `body{${layout}width:${w}px !important;border:0 !important}` +
+    `body>*{margin:0 !important}`
+  doc.head.appendChild(reset)
+  for (const node of nodesOf(doc, clip.items)) doc.body.appendChild(node)
+  return serializeHtml(doc, "<!doctype html>")
+}
+
+/** Does the document have anything left in its body (an element, or text that is not blank)? */
+export function hasContent(html: string): boolean {
+  const body = new DOMParser().parseFromString(html, "text/html").body
+  return body.children.length > 0 || (body.textContent ?? "").trim().length > 0
+}
+
+/** A file name for a new loose piece, unique among `taken`. */
+export function looseFileName(taken: Iterable<string>): string {
+  const used = new Set(Array.from(taken, (name) => name.toLowerCase()))
+  for (let i = 0; i < 1000; i += 1) {
+    const name = `piece-${Date.now().toString(36)}${i ? `-${i}` : ""}.html`
+    if (!used.has(name)) return name
+  }
+  return `piece-${Math.random().toString(36).slice(2, 10)}.html`
+}
+
+/** Name for a duplicate of an artboard file: `Hero.html` → `Hero-copy.html`, `Hero-copy-2.html`… */
+export function copyFileName(file: string, taken: Iterable<string>): string {
+  const used = new Set(Array.from(taken, (name) => name.toLowerCase()))
+  const match = /^(.*?)(\.html?)$/i.exec(file)
+  const base = (match?.[1] ?? file).replace(/-copy(-\d+)?$/i, "")
+  const ext = match?.[2] ?? ".html"
+  for (let i = 1; i < 1000; i += 1) {
+    const name = `${base}-copy${i > 1 ? `-${i}` : ""}${ext}`
+    if (!used.has(name.toLowerCase())) return name
+  }
+  return `${base}-copy-${Date.now().toString(36)}${ext}`
+}
+
+/** The paths of the ELEMENTS directly in the body of a document (all of a loose piece's content). */
+export function rootPaths(html: string): ElementPath[] {
+  const body = new DOMParser().parseFromString(html, "text/html").body
+  return Array.from(body.children, (_, i) => [i])
 }

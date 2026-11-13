@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Code2,
   Copy,
+  ClipboardPaste,
   Download,
   Eye,
   EyeOff,
@@ -28,7 +29,9 @@ import {
   PanelRightOpen,
   Play,
   Plus,
+  Redo2,
   RotateCw,
+  Scissors,
   SlidersHorizontal,
   Square,
   Undo2,
@@ -59,26 +62,37 @@ import { DesignProperties, type DesignBoardView, type DesignPropertiesTarget } f
 import {
   DESIGN_SOURCE,
   applyWrap,
+  buildClip,
+  copyFileName,
   duplicateNodes,
   boardForHref,
   editHtml,
+  hasContent,
   isTextPath,
+  layoutFromRects,
+  looseDocument,
+  looseFileName,
   moveElements,
   parseRuntimeMessage,
+  pasteClip,
   planLayerMove,
   planWrap,
   removeNodes,
   reorderChildren,
+  rootPaths,
   samePath,
   setInlineStyle,
   setTextNode,
   stepOrder,
+  type DesignClip,
   type DesignElementInfo,
   type DesignRect,
   type DesignTreeNode,
   type DropMode,
   type ElementPath,
   type LayerMovePlan,
+  type PasteAt,
+  type PasteContext,
   type WrapPlan,
 } from "@/src/components/design/design-protocol"
 import { designApi } from "@/src/lib/ipc"
@@ -115,7 +129,7 @@ import { Truncate } from "@/components/ui/truncated-text"
 interface DesignCanvasFile {
   v: number
   title?: string
-  boards: Record<string, { title?: string; x: number; y: number; w: number; h: number }>
+  boards: Record<string, { title?: string; x: number; y: number; w: number; h: number; free?: boolean }>
   order: string[]
 }
 
@@ -143,6 +157,74 @@ type Drag =
 
 type InspectorTab = "properties" | "layers" | "code"
 
+/** Where a board sits in canvas.json: the part of a history step that is about the INDEX. */
+interface BoardMeta {
+  board: { title?: string; x: number; y: number; w: number; h: number; free?: boolean }
+  index: number
+}
+
+/**
+ * One step of the history (undo/redo): the source of EVERY artboard it touched, before and after,
+ * and — when it created or removed a board (a loose piece appearing, a frame emptied) — the place
+ * that board had in canvas.json. One step can span several files, which is what lets a drag from
+ * one artboard to another undo as one gesture.
+ */
+interface HistoryEntry {
+  files: Record<string, { before: string | null; after: string | null }>
+  boards?: Record<string, { before: BoardMeta | null; after: BoardMeta | null }>
+}
+
+/**
+ * What Copy keeps, shared by every Design tab of the window: some nodes (with the styles they
+ * need), or a whole artboard.
+ */
+type TabClip =
+  | { kind: "nodes"; clip: DesignClip }
+  | { kind: "board"; designId: string; file: string; html: string; board: { title?: string; w: number; h: number; free?: boolean } }
+let sharedClip: TabClip | null = null
+
+/** A drag in progress that left its artboard: the elements, the ghost and the place they would land. */
+interface CrossDrag {
+  file: string
+  paths: ElementPath[]
+  rects: DesignRect[]
+  grab: { x: number; y: number }
+  /** The pointer is outside the artboard the drag started in. */
+  outside: boolean
+  /** Pointer in CANVAS coordinates. */
+  point: { x: number; y: number } | null
+  /** The artboard under the pointer (a drop target), and the landing it reported. */
+  over: string | null
+  target: { file: string; parent: ElementPath; index: number } | null
+}
+
+/** The drag of a loose piece: the artboard itself follows the pointer. */
+interface FreeDrag {
+  file: string
+  startSX: number
+  startSY: number
+  origin: { x: number; y: number }
+  /** Pointer in canvas coordinates where the drag started. */
+  anchor: { x: number; y: number }
+  over: string | null
+  target: { file: string; parent: ElementPath; index: number } | null
+  last: { x: number; y: number }
+}
+
+const HISTORY_LIMIT = 100
+/** How long the size a loose piece reports is held before it is written to canvas.json. */
+const SIZE_PERSIST_MS = 250
+/** Where a pasted loose piece lands relative to the one it was copied from. */
+const PASTE_OFFSET = 24
+const looseMeta = (b: { title?: string; x: number; y: number; w: number; h: number; free?: boolean }): BoardMeta["board"] => ({
+  ...(b.title ? { title: b.title } : {}),
+  x: b.x,
+  y: b.y,
+  w: b.w,
+  h: b.h,
+  ...(b.free ? { free: true } : {}),
+})
+
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const FIT_PADDING = 56
@@ -152,7 +234,6 @@ const INSPECTOR_MIN_PX = 180
 const INSPECTOR_MAX_PX = 640
 const INSPECTOR_DEFAULT_PX = 288
 const INSPECTOR_MAX_RATIO = 0.7
-const UNDO_LIMIT = 50
 /** How long the disk change notice is ignored after a write of
  *  OURS that is already applied live — reloading there would only blink the screen. */
 const QUIET_MS = 1500
@@ -263,7 +344,18 @@ function DesignEditor({
   const inspectorRef = useRef<HTMLDivElement | null>(null)
   /** Canvas + inspector: it is the room the drag of the card can use. */
   const layoutRef = useRef<HTMLDivElement | null>(null)
+  /** The iframe that is ON SCREEN for each artboard (rebuilt after every render). */
   const iframes = useRef(new Map<string, HTMLIFrameElement>())
+  /**
+   * Every iframe that exists, by frame key. An artboard that reloads is mounted TWICE for a moment:
+   * the old document stays on screen while the new one loads hidden beside it, and only when it has
+   * loaded do they swap — so a reload (undo, redo, the agent writing) never shows a blank frame.
+   */
+  const frameRefs = useRef(new Map<string, HTMLIFrameElement>())
+  const frameFiles = useRef(new Map<string, string>())
+  /** The frame key each artboard is showing right now. */
+  const shownKeys = useRef<Record<string, string>>({})
+  const [, setFrameTick] = useState(0)
 
   const [state, setState] = useState<LoadState>({ status: "loading" })
   const [view, setView] = useState<View>({ x: 0, y: 0, zoom: 1 })
@@ -344,11 +436,21 @@ function DesignEditor({
   /** Last size of the element on resize — outside the state, so the re-renders
    *  in the middle of the drag (every step returns `info`) do not lose it. */
   const resizeLast = useRef<{ w: number; h: number } | null>(null)
-  const [undoCount, setUndoCount] = useState(0)
+  /** History: the steps that can be undone, and the ones undone that can be redone. */
+  const undoStack = useRef<HistoryEntry[]>([])
+  const redoStack = useRef<HistoryEntry[]>([])
+  const [, setHistoryVersion] = useState(0)
+  /** The drag that left its artboard (ghost + drop target) and the drag of a loose piece. */
+  const crossRef = useRef<CrossDrag | null>(null)
+  const freeDragRef = useRef<FreeDrag | null>(null)
+  const [ghost, setGhost] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  /** The frame a drag is about to drop into (outlined on the canvas). */
+  const [dropOver, setDropOver] = useState<string | null>(null)
+  /** A loose piece is being dragged: the iframes stand aside so the panel sees the pointer. */
+  const [freeDragging, setFreeDragging] = useState(false)
+  const sizeTimers = useRef(new Map<string, number>())
 
   const quietUntil = useRef(0)
-  const undoStacks = useRef(new Map<string, string[]>())
-  const lastEdited = useRef<string | null>(null)
   const writeChains = useRef(new Map<string, Promise<void>>())
   const pendingStyles = useRef(new Map<string, { file: string; path: ElementPath; styles: Record<string, string>; timer: number }>())
   const autoFit = useRef(true)
@@ -385,7 +487,7 @@ function DesignEditor({
   /** Artboards hidden by the eye (view state; never written to the files). */
   const [hiddenBoards, setHiddenBoards] = useState<Set<string>>(() => new Set())
   /** Right-click menu: where it is and what it acts on. */
-  const [menu, setMenu] = useState<{ x: number; y: number; scope: "element" | "frame"; file: string } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; scope: "element" | "frame" | "canvas"; file: string; at?: { x: number; y: number } } | null>(null)
   const exportDesign = useCallback(
     async (format: "pdf" | "png", files?: string[]) => {
       if (!designId || exporting) return
@@ -687,26 +789,77 @@ function DesignEditor({
   )
 
   // ---------------------------------------------------------------- editing
-  const pushUndo = useCallback((file: string, html: string) => {
-    const stack = undoStacks.current.get(file) ?? []
-    stack.push(html)
-    if (stack.length > UNDO_LIMIT) stack.shift()
-    undoStacks.current.set(file, stack)
-    lastEdited.current = file
-    setUndoCount((n) => n + 1)
+  /** A new step: whatever was undone can no longer be redone. */
+  const pushHistory = useCallback((entry: HistoryEntry) => {
+    undoStack.current.push(entry)
+    if (undoStack.current.length > HISTORY_LIMIT) undoStack.current.shift()
+    redoStack.current = []
+    setHistoryVersion((n) => n + 1)
   }, [])
 
-  /** Writes to the SAME artboard in a queue: two edits in a row cannot read the
-   *  same source and one erase the other. */
-  const chain = useCallback((file: string, task: () => Promise<void>) => {
-    const previous = writeChains.current.get(file) ?? Promise.resolve()
-    const next = previous
-      .catch(() => {})
-      .then(task)
-      .catch((err: unknown) => setSaveError(err instanceof Error ? err.message : String(err)))
-    writeChains.current.set(file, next)
+  const pushUndo = useCallback(
+    (file: string, before: string, after: string) => pushHistory({ files: { [file]: { before, after } } }),
+    [pushHistory],
+  )
+
+  /** Writes to the artboards in a queue: two edits in a row cannot read the same source and one
+   *  erase the other. A step that touches several files waits for all of them. */
+  const chainAll = useCallback((files: string[], task: () => Promise<void>) => {
+    const previous = Promise.all(files.map((file) => (writeChains.current.get(file) ?? Promise.resolve()).catch(() => {})))
+    const next = previous.then(task).catch((err: unknown) => setSaveError(err instanceof Error ? err.message : String(err)))
+    for (const file of files) writeChains.current.set(file, next)
     return next
   }, [])
+  const chain = useCallback((file: string, task: () => Promise<void>) => chainAll([file], task), [chainAll])
+
+  /** Keeps the local copy of canvas.json in step with a board created or removed by the panel. */
+  const putBoardLocal = useCallback((file: string, meta: BoardMeta | null) => {
+    setState((prev) => {
+      if (prev.status !== "ready") return prev
+      const boards = { ...prev.canvas.boards }
+      let order = prev.canvas.order.filter((f) => f !== file)
+      if (meta) {
+        boards[file] = meta.board
+        order.splice(Math.min(order.length, Math.max(0, meta.index)), 0, file)
+      } else {
+        delete boards[file]
+        order = order.filter((f) => f !== file)
+      }
+      return { status: "ready", canvas: { ...prev.canvas, boards, order } }
+    })
+    setOverrides((prev) => {
+      if (!(file in prev)) return prev
+      const next = { ...prev }
+      delete next[file]
+      return next
+    })
+    if (!meta && selectionRef.current?.file === file) {
+      setSelection(null)
+      setInfo(null)
+      setSelRect(null)
+      setGroupRects([])
+      setGroupPaths([])
+    }
+  }, [])
+
+  /** Removes a board (a loose piece that was emptied or deleted) as ONE step of the history. */
+  const dropBoard = useCallback(
+    (file: string) => {
+      if (!designId) return Promise.resolve()
+      const board = boardsRef.current.find((b) => b.file === file)
+      if (!board) return Promise.resolve()
+      const meta: BoardMeta = { board: looseMeta(board), index: boardsRef.current.indexOf(board) }
+      return chain(file, async () => {
+        const before = await designApi.readBoard(designId, file)
+        pushHistory({ files: { [file]: { before, after: null } }, boards: { [file]: { before: meta, after: null } } })
+        quietUntil.current = Date.now() + QUIET_MS
+        await designApi.removeBoard(designId, file)
+        putBoardLocal(file, null)
+        setCodeVersion((n) => n + 1)
+      })
+    },
+    [chain, designId, pushHistory, putBoardLocal],
+  )
 
   /**
    * Applies the change to the SOURCE of the artboard. `quiet`: the change is already on screen
@@ -720,14 +873,25 @@ function DesignEditor({
         const before = await designApi.readBoard(designId, file)
         const after = mutate(before)
         if (after === before) return
-        pushUndo(file, before)
+        const board = boardsRef.current.find((b) => b.file === file)
+        if (board?.free && !hasContent(after)) {
+          // A loose piece is its content: when the last element goes, the piece goes with it.
+          const meta: BoardMeta = { board: looseMeta(board), index: boardsRef.current.indexOf(board) }
+          pushHistory({ files: { [file]: { before, after: null } }, boards: { [file]: { before: meta, after: null } } })
+          quietUntil.current = Date.now() + QUIET_MS
+          await designApi.removeBoard(designId, file)
+          putBoardLocal(file, null)
+          setCodeVersion((n) => n + 1)
+          return
+        }
+        pushUndo(file, before, after)
         if (quiet) quietUntil.current = Date.now() + QUIET_MS
         await designApi.writeBoard(designId, file, after)
         setSaveError(null)
         setCodeVersion((n) => n + 1)
       })
     },
-    [chain, designId, pushUndo],
+    [chain, designId, pushHistory, pushUndo, putBoardLocal],
   )
 
   const mutateSource = useCallback(
@@ -841,9 +1005,15 @@ function DesignEditor({
             const merged = { ...board, ...patch, title: patch.title === "" ? undefined : (patch.title ?? board.title) }
             return { status: "ready", canvas: { ...prev.canvas, boards: { ...prev.canvas.boards, [file]: merged } } }
           })
+          // Only what was written stops being an override: a drag in progress keeps its own.
           setOverrides((prev) => {
+            const current = prev[file]
+            if (!current) return prev
+            const rest = { ...current }
+            for (const key of Object.keys(patch)) delete rest[key as keyof typeof rest]
             const next = { ...prev }
-            delete next[file]
+            if (Object.keys(rest).length > 0) next[file] = rest
+            else delete next[file]
             return next
           })
         })
@@ -854,7 +1024,15 @@ function DesignEditor({
 
   const deleteSelected = useCallback(() => {
     const sel = selectionRef.current
-    if (!sel || !sel.path || sel.path.length === 0) return
+    if (!sel) return
+    if (!sel.path || sel.path.length === 0) {
+      // The whole artboard: only a loose piece can be deleted this way (a frame is the agent's).
+      if (boardsRef.current.find((b) => b.file === sel.file)?.free) {
+        select(null)
+        void dropBoard(sel.file)
+      }
+      return
+    }
     const { file, path: target } = sel
     // With a group, it deletes the whole group (the multiple selection is a single thing).
     const group = groupPathsRef.current.filter((p) => p.length > 0)
@@ -863,30 +1041,58 @@ function DesignEditor({
     void mutateSourceHtml(file, (html) => removeNodes(html, paths), true).then(() => {
       post(file, { type: "remove", paths })
     })
-  }, [mutateSourceHtml, post, select])
+  }, [dropBoard, mutateSourceHtml, post, select])
 
-  const undo = useCallback(() => {
-    if (!designId) return
-    const file = selectionRef.current?.file && undoStacks.current.get(selectionRef.current.file)?.length
-      ? selectionRef.current.file
-      : lastEdited.current
-    if (!file) return
-    const stack = undoStacks.current.get(file)
-    const previous = stack?.pop()
-    if (previous === undefined) return
-    setUndoCount((n) => n + 1)
-    void chain(file, async () => {
-      await designApi.writeBoard(designId, file, previous)
+  /** Applies one history step in one direction: rewrites each file, and re-creates or removes the
+   *  boards the step created or removed. */
+  const applyEntry = useCallback(
+    async (entry: HistoryEntry, direction: "undo" | "redo") => {
+      if (!designId) return
+      for (const [file, change] of Object.entries(entry.files)) {
+        const html = direction === "undo" ? change.before : change.after
+        const meta = entry.boards?.[file]
+        const board = meta ? (direction === "undo" ? meta.before : meta.after) : undefined
+        if (board === null) {
+          await designApi.removeBoard(designId, file)
+          putBoardLocal(file, null)
+        } else if (board) {
+          await designApi.addBoard(designId, file, html ?? "", board.board, board.index)
+          putBoardLocal(file, board)
+        } else if (html !== null) {
+          await designApi.writeBoard(designId, file, html)
+        }
+      }
+      setSaveError(null)
       setCodeVersion((n) => n + 1)
-    })
-  }, [chain, designId])
+    },
+    [designId, putBoardLocal],
+  )
+
+  const stepHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      if (!designId) return
+      const from = direction === "undo" ? undoStack.current : redoStack.current
+      const to = direction === "undo" ? redoStack.current : undoStack.current
+      const entry = from.pop()
+      if (!entry) return
+      to.push(entry)
+      setHistoryVersion((n) => n + 1)
+      // The quiet window exists for edits that are ALREADY on screen. An undo is the opposite — the
+      // screen has to catch up to the file — so a recent edit must not swallow its reload.
+      quietUntil.current = 0
+      void chainAll(Object.keys(entry.files), () => applyEntry(entry, direction))
+    },
+    [applyEntry, chainAll, designId],
+  )
+  const undo = useCallback(() => stepHistory("undo"), [stepHistory])
+  const redo = useCallback(() => stepHistory("redo"), [stepHistory])
 
   const saveCode = useCallback(
     async (file: string, html: string) => {
       if (!designId) return
       const before = await designApi.readBoard(designId, file)
       if (before === html) return
-      pushUndo(file, before)
+      pushUndo(file, before, html)
       await designApi.writeBoard(designId, file, html)
     },
     [designId, pushUndo],
@@ -920,10 +1126,54 @@ function DesignEditor({
     if (active && active !== document.body && rootRef.current?.contains(active) && !active.closest(".cm-editor")) active.blur()
   }, [])
 
-  const fileOf = useCallback((source: MessageEventSource | null) => {
-    for (const [file, frame] of iframes.current) if (frame.contentWindow && frame.contentWindow === source) return file
+  /** The frame (and its artboard) a message came from — shown or still loading in the background. */
+  const frameOf = useCallback((source: MessageEventSource | null) => {
+    for (const [key, frame] of frameRefs.current) {
+      const file = frameFiles.current.get(key)
+      if (file && frame.contentWindow && frame.contentWindow === source) return { key, file }
+    }
     return null
   }, [])
+
+  /** The key of the frame an artboard SHOULD be showing now (it changes on every reload). */
+  const wantedKey = (file: string) => `${file}:${reloads}:${fileVersions[file] ?? 0}`
+
+  /**
+   * The new document of a reloaded artboard has loaded: it takes the place of the old one in the
+   * same frame of the screen, and the old one is unmounted. What the panel knew about the old
+   * document (outlines, info) is asked again of the new one.
+   */
+  const promote = useCallback(
+    (file: string, key: string) => {
+      if (shownKeys.current[file] === key) return
+      shownKeys.current = { ...shownKeys.current, [file]: key }
+      const frame = frameRefs.current.get(key)
+      if (frame) iframes.current.set(file, frame)
+      const sel = selectionRef.current
+      if (sel?.file === file && sel.path && sel.path.length > 0) {
+        const group = groupPathsRef.current.filter((p) => p.length > 0)
+        post(file, { type: "select", path: sel.path, group: group.length ? group : [sel.path] })
+      }
+      setFrameTick((n) => n + 1)
+    },
+    [post],
+  )
+
+  // After every render the shown frame of each mounted artboard is recorded (a first mount shows
+  // what it wants) and the artboard → iframe map is rebuilt from what is really on screen.
+  useLayoutEffect(() => {
+    const next: Record<string, string> = {}
+    const map = new Map<string, HTMLIFrameElement>()
+    for (const board of boards) {
+      if (!mounted.has(board.file)) continue
+      const key = shownKeys.current[board.file] ?? wantedKey(board.file)
+      next[board.file] = key
+      const frame = frameRefs.current.get(key)
+      if (frame) map.set(board.file, frame)
+    }
+    shownKeys.current = next
+    iframes.current = map
+  })
 
   /**
    * "Wrap" the selection: the elements become children of a new div, which enters
@@ -1033,6 +1283,470 @@ function DesignEditor({
     else toggleHidden(sel.file, null)
   }, [toggleHidden])
 
+  // ------------------------------------------- clipboard, loose pieces and drops
+  const selRectRef = useRef(selRect)
+  selRectRef.current = selRect
+  const groupRectsRef = useRef(groupRects)
+  groupRectsRef.current = groupRects
+
+  /** A point of the screen, in canvas coordinates. */
+  const canvasPoint = useCallback((clientX: number, clientY: number) => {
+    const el = viewportRef.current
+    const v = viewRef.current
+    if (!el) return { x: 0, y: 0 }
+    const r = el.getBoundingClientRect()
+    return { x: (clientX - r.left - v.x) / v.zoom, y: (clientY - r.top - v.y) / v.zoom }
+  }, [])
+
+  const viewportCenter = useCallback(() => {
+    const el = viewportRef.current
+    const v = viewRef.current
+    if (!el) return { x: 0, y: 0 }
+    return { x: (el.clientWidth / 2 - v.x) / v.zoom, y: (el.clientHeight / 2 - v.y) / v.zoom }
+  }, [])
+
+  /** Is a canvas point under the canvas itself (and not under the inspector or the header)? */
+  const pointInViewport = useCallback((point: { x: number; y: number }) => {
+    const el = viewportRef.current
+    const v = viewRef.current
+    if (!el) return false
+    const sx = point.x * v.zoom + v.x
+    const sy = point.y * v.zoom + v.y
+    return sx >= 0 && sy >= 0 && sx <= el.clientWidth && sy <= el.clientHeight
+  }, [])
+
+  /** What the styles of a clip need to travel to where it is going. */
+  const pasteContextFor = useCallback(
+    async (clip: DesignClip, file: string | null): Promise<PasteContext> => {
+      const sameDesign = clip.designId === designId
+      const ctx: PasteContext = { sameFile: sameDesign && clip.file === file, sameDesign }
+      if (!sameDesign && clip.designId && clip.links.length > 0) {
+        // Another canvas: its `<link href="base.css">` means nothing here, so the sheet is read
+        // from there and goes in as a block of CSS.
+        const inlineCss: Record<string, string> = {}
+        for (const href of clip.links) {
+          try {
+            const res = await fetch(`${DESIGN_SCHEME}://${clip.designId}/${encodeFile(href)}`)
+            if (res.ok) inlineCss[href] = await res.text()
+          } catch {
+            // that sheet is not reachable: the markup still comes, only less styled
+          }
+        }
+        ctx.inlineCss = inlineCss
+      }
+      return ctx
+    },
+    [designId],
+  )
+
+  /** The document, the index entry and the place of a new loose piece. */
+  const planLoose = useCallback((clip: DesignClip, origin: { x: number; y: number }, ctx: PasteContext) => {
+    const file = looseFileName(boardsRef.current.map((b) => b.file))
+    const w = Math.max(1, Math.round(clip.size.w) || 200)
+    const h = Math.max(1, Math.round(clip.size.h) || 80)
+    const html = looseDocument(clip, w, ctx)
+    const meta: BoardMeta = {
+      board: { title: clip.label, x: Math.round(origin.x), y: Math.round(origin.y), w, h, free: true },
+      index: boardsRef.current.length,
+    }
+    return { file, html, meta }
+  }, [])
+
+  /**
+   * Moves nodes from one artboard to another artboard, or out onto the empty canvas as a loose
+   * piece — as ONE step of the history. The source loses the nodes (and a loose piece that is
+   * left empty goes away), the destination gets them with the styles they need.
+   */
+  const transfer = useCallback(
+    async (args: {
+      from: string
+      paths: ElementPath[]
+      rects: DesignRect[]
+      to: { kind: "frame"; file: string; parent: ElementPath; index: number } | { kind: "canvas"; origin: { x: number; y: number } }
+    }) => {
+      if (!designId) return
+      const { from, paths, rects, to } = args
+      if (to.kind === "frame" && to.file === from) return
+      const files = to.kind === "frame" ? [from, to.file] : [from]
+      let selectAfter: Selection | null = null
+      let groupAfter: ElementPath[] = []
+      await chainAll(files, async () => {
+        const htmlFrom = await designApi.readBoard(designId, from)
+        const clip = buildClip(htmlFrom, paths, { designId, file: from, rects })
+        if (!clip) return
+        const afterFrom = removeNodes(htmlFrom, paths)
+        const entry: HistoryEntry = { files: {}, boards: {} }
+        if (to.kind === "frame") {
+          const htmlTo = await designApi.readBoard(designId, to.file)
+          const pasted = pasteClip(htmlTo, clip, { kind: "inside", parent: to.parent, index: to.index }, await pasteContextFor(clip, to.file))
+          entry.files[to.file] = { before: htmlTo, after: pasted.html }
+          selectAfter = { file: to.file, path: pasted.paths[0] ?? null }
+          groupAfter = pasted.paths
+        } else {
+          const plan = planLoose(clip, to.origin, await pasteContextFor(clip, null))
+          entry.files[plan.file] = { before: null, after: plan.html }
+          entry.boards![plan.file] = { before: null, after: plan.meta }
+          const single = clip.items.length === 1
+          selectAfter = { file: plan.file, path: single ? [0] : null }
+          groupAfter = single ? [[0]] : []
+        }
+        const source = boardsRef.current.find((b) => b.file === from)
+        if (source?.free && !hasContent(afterFrom)) {
+          entry.files[from] = { before: htmlFrom, after: null }
+          entry.boards![from] = { before: { board: looseMeta(source), index: boardsRef.current.indexOf(source) }, after: null }
+        } else {
+          entry.files[from] = { before: htmlFrom, after: afterFrom }
+        }
+        quietUntil.current = 0
+        await applyEntry(entry, "redo")
+        pushHistory(entry)
+      })
+      if (selectAfter) {
+        setSelection(selectAfter)
+        setGroupPaths(groupAfter)
+        setInfo(null)
+        setSelRect(null)
+        setGroupRects([])
+      }
+    },
+    [applyEntry, chainAll, designId, pasteContextFor, planLoose, pushHistory],
+  )
+
+  /** Copies the selection: some nodes (with their styles), or the whole artboard when it is the one selected. */
+  const copySelected = useCallback(async (): Promise<boolean> => {
+    const sel = selectionRef.current
+    if (!sel || !designId) return false
+    const board = boardsRef.current.find((b) => b.file === sel.file)
+    if (!board) return false
+    const html = await designApi.readBoard(designId, sel.file)
+    if (!sel.path || sel.path.length === 0) {
+      sharedClip = {
+        kind: "board",
+        designId,
+        file: sel.file,
+        html,
+        board: { ...(board.title ? { title: board.title } : {}), w: board.w, h: board.h, ...(board.free ? { free: true } : {}) },
+      }
+      return true
+    }
+    const group = groupPathsRef.current.filter((p) => p.length > 0)
+    const paths = group.some((p) => samePath(p, sel.path!)) ? group : [...group, sel.path]
+    const rects = [selRectRef.current, ...groupRectsRef.current].filter((r): r is DesignRect => Boolean(r))
+    const clip = buildClip(html, paths, { designId, file: sel.file, rects })
+    if (!clip) return false
+    sharedClip = { kind: "nodes", clip }
+    return true
+  }, [designId])
+
+  const cutSelected = useCallback(async () => {
+    if (await copySelected()) deleteSelected()
+  }, [copySelected, deleteSelected])
+
+  /**
+   * Pastes what was copied. With a frame (or an element in it) selected it goes INTO that frame —
+   * after the element, or at the end. With a loose piece selected, or nothing, it lands on the
+   * canvas as a loose piece of its own. `where` (a right click on the canvas) overrides both.
+   */
+  const paste = useCallback(
+    async (where?: { x: number; y: number }) => {
+      const entry = sharedClip
+      if (!entry || !designId) return
+      const sel = selectionRef.current
+      const selBoard = sel ? boardsRef.current.find((b) => b.file === sel.file) : undefined
+      if (entry.kind === "board") {
+        const taken = boardsRef.current.map((b) => b.file)
+        const file = entry.board.free ? looseFileName(taken) : copyFileName(entry.file, taken)
+        const original = entry.designId === designId ? boardsRef.current.find((b) => b.file === entry.file) : undefined
+        const at = where
+          ? { x: where.x, y: where.y }
+          : original
+            ? entry.board.free
+              ? { x: original.x + PASTE_OFFSET, y: original.y + PASTE_OFFSET }
+              : { x: original.x + original.w + 80, y: original.y }
+            : (() => {
+                const c = viewportCenter()
+                return { x: c.x - entry.board.w / 2, y: c.y - entry.board.h / 2 }
+              })()
+        const meta: BoardMeta = {
+          board: {
+            ...(entry.board.title ? { title: entry.board.title } : {}),
+            x: Math.round(at.x),
+            y: Math.round(at.y),
+            w: entry.board.w,
+            h: entry.board.h,
+            ...(entry.board.free ? { free: true } : {}),
+          },
+          index: boardsRef.current.length,
+        }
+        const step: HistoryEntry = { files: { [file]: { before: null, after: entry.html } }, boards: { [file]: { before: null, after: meta } } }
+        await chainAll([file], async () => {
+          quietUntil.current = 0
+          await applyEntry(step, "redo")
+          pushHistory(step)
+        })
+        setSelection({ file, path: null })
+        setGroupPaths([])
+        return
+      }
+      const clip = entry.clip
+      if (!where && sel && selBoard && !selBoard.free) {
+        const file = sel.file
+        let at: PasteAt = { kind: "end" }
+        if (sel.path && sel.path.length > 0) {
+          const members = [...groupPathsRef.current.filter((p) => p.length > 0), sel.path]
+          const last = members.reduce((a, b) => (pathOrder(a, b) >= 0 ? a : b))
+          at = { kind: "after", path: isTextPath(last) ? last.slice(0, -1) : last }
+          if (at.path.length === 0) at = { kind: "end" }
+        }
+        const ctx = await pasteContextFor(clip, file)
+        let pasted: ElementPath[] = []
+        // Not quiet: the structure changed, so the artboard reloads (without a blank frame).
+        await mutateSourceHtml(
+          file,
+          (html) => {
+            const result = pasteClip(html, clip, at, ctx)
+            pasted = result.paths
+            return result.html
+          },
+          false,
+        )
+        if (pasted.length > 0) {
+          setSelection({ file, path: pasted[0] })
+          setGroupPaths(pasted)
+          setInfo(null)
+          setSelRect(null)
+          setGroupRects([])
+        }
+        return
+      }
+      const w = clip.size.w || 200
+      const h = clip.size.h || 80
+      const origin = where
+        ? where
+        : selBoard?.free
+          ? { x: selBoard.x + PASTE_OFFSET, y: selBoard.y + PASTE_OFFSET }
+          : (() => {
+              const c = viewportCenter()
+              return { x: c.x - w / 2, y: c.y - h / 2 }
+            })()
+      const ctx = await pasteContextFor(clip, null)
+      const plan = planLoose(clip, origin, ctx)
+      const step: HistoryEntry = {
+        files: { [plan.file]: { before: null, after: plan.html } },
+        boards: { [plan.file]: { before: null, after: plan.meta } },
+      }
+      await chainAll([plan.file], async () => {
+        quietUntil.current = 0
+        await applyEntry(step, "redo")
+        pushHistory(step)
+      })
+      const single = clip.items.length === 1
+      setSelection({ file: plan.file, path: single ? [0] : null })
+      setGroupPaths(single ? [[0]] : [])
+    },
+    [applyEntry, chainAll, designId, mutateSourceHtml, pasteContextFor, planLoose, pushHistory, viewportCenter],
+  )
+
+  // ---- drag between artboards and of loose pieces ----
+  /** The frame (not a loose piece) under a canvas point that can take a drop. */
+  const frameAt = useCallback((x: number, y: number, skip: string): DesignBoardView | null => {
+    const list = boardsRef.current
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const b = list[i]
+      if (b.free || b.file === skip || !iframes.current.has(b.file)) continue
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b
+    }
+    return null
+  }, [])
+
+  /** Points a drag at the frame under `point` (outlines it, asks it where the drop would land). */
+  const aimAt = useCallback(
+    (state: { over: string | null; target: { file: string; parent: ElementPath; index: number } | null }, point: { x: number; y: number }, skip: string, enabled: boolean) => {
+      const frame = enabled ? frameAt(point.x, point.y, skip) : null
+      if (state.over && state.over !== frame?.file) {
+        post(state.over, { type: "dropAt", active: false })
+        state.target = null
+      }
+      state.over = frame?.file ?? null
+      if (frame) post(frame.file, { type: "dropAt", active: true, x: point.x - frame.x, y: point.y - frame.y })
+      setDropOver(frame?.file ?? null)
+    },
+    [frameAt, post],
+  )
+
+  /**
+   * While a drag is outside its artboard the iframe may or may not keep the pointer (it does in
+   * Chromium, but nothing here depends on it): the panel listens to the pointer too, and whichever
+   * hears the release first closes the drag. Every handler below is idempotent.
+   */
+  useEffect(() => {
+    const timers = sizeTimers.current
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
+
+  const trackers = useRef<Partial<Record<"cross" | "free", () => void>>>({})
+  const track = useCallback((key: "cross" | "free", onMove: (e: PointerEvent) => void, onUp: (e: PointerEvent, canceled: boolean) => void) => {
+    trackers.current[key]?.()
+    const up = (e: PointerEvent) => onUp(e, false)
+    const cancel = (e: PointerEvent) => onUp(e, true)
+    window.addEventListener("pointermove", onMove, true)
+    window.addEventListener("pointerup", up, true)
+    window.addEventListener("pointercancel", cancel, true)
+    trackers.current[key] = () => {
+      window.removeEventListener("pointermove", onMove, true)
+      window.removeEventListener("pointerup", up, true)
+      window.removeEventListener("pointercancel", cancel, true)
+      delete trackers.current[key]
+    }
+  }, [])
+  useEffect(() => {
+    const current = trackers.current
+    return () => {
+      current.cross?.()
+      current.free?.()
+    }
+  }, [])
+
+  const crossMove = useCallback(
+    (point: { x: number; y: number }, mod: boolean) => {
+      const c = crossRef.current
+      if (!c) return
+      c.outside = true
+      c.point = point
+      const size = layoutFromRects(c.rects).size
+      setGhost({ x: point.x - c.grab.x, y: point.y - c.grab.y, w: size.w, h: size.h })
+      // Ctrl/⌘ keeps the piece loose: it is not aimed at the frame under it.
+      aimAt(c, point, c.file, !mod)
+    },
+    [aimAt],
+  )
+
+  const crossBack = useCallback(() => {
+    const c = crossRef.current
+    if (!c) return
+    c.outside = false
+    c.point = null
+    c.target = null
+    if (c.over) post(c.over, { type: "dropAt", active: false })
+    c.over = null
+    setGhost(null)
+    setDropOver(null)
+  }, [post])
+
+  const crossFinish = useCallback(
+    async (commit: boolean, point: { x: number; y: number } | null, mod: boolean) => {
+      const c = crossRef.current
+      if (!c) return
+      crossRef.current = null
+      trackers.current.cross?.()
+      setGhost(null)
+      setDropOver(null)
+      if (c.over) post(c.over, { type: "dropAt", active: false })
+      // If the artboard never heard the release (it lost the pointer), it drops its own drag now.
+      post(c.file, { type: "dragAbort" })
+      const p = point ?? c.point
+      if (!commit || !c.outside || !p || c.paths.length === 0) return
+      // Released over the inspector or the header: nothing is dropped there.
+      if (!pointInViewport(p)) return
+      const origin = boardsRef.current.find((b) => b.file === c.file)
+      if (origin && p.x >= origin.x && p.x <= origin.x + origin.w && p.y >= origin.y && p.y <= origin.y + origin.h) return
+      const frame = mod ? null : frameAt(p.x, p.y, c.file)
+      if (frame) {
+        const target = c.target && c.target.file === frame.file ? c.target : { file: frame.file, parent: [] as ElementPath, index: 99_999 }
+        await transfer({ from: c.file, paths: c.paths, rects: c.rects, to: { kind: "frame", file: target.file, parent: target.parent, index: target.index } })
+      } else {
+        await transfer({ from: c.file, paths: c.paths, rects: c.rects, to: { kind: "canvas", origin: { x: p.x - c.grab.x, y: p.y - c.grab.y } } })
+      }
+    },
+    [frameAt, pointInViewport, post, transfer],
+  )
+
+  const beginCross = useCallback(
+    (file: string, paths: ElementPath[], rects: DesignRect[], grab: { x: number; y: number }) => {
+      crossRef.current = { file, paths, rects, grab, outside: false, point: null, over: null, target: null }
+      track(
+        "cross",
+        (e) => crossMove(canvasPoint(e.clientX, e.clientY), e.metaKey || e.ctrlKey),
+        (e, canceled) => void crossFinish(!canceled, canvasPoint(e.clientX, e.clientY), e.metaKey || e.ctrlKey),
+      )
+    },
+    [canvasPoint, crossFinish, crossMove, track],
+  )
+
+  const freeMove = useCallback(
+    (sx: number, sy: number, mod: boolean) => {
+      const d = freeDragRef.current
+      if (!d) return
+      const { zoom: z } = viewRef.current
+      const dx = (sx - d.startSX) / z
+      const dy = (sy - d.startSY) / z
+      const x = Math.round(d.origin.x + dx)
+      const y = Math.round(d.origin.y + dy)
+      d.last = { x, y }
+      setOverrides((prev) => ({ ...prev, [d.file]: { ...prev[d.file], x, y } }))
+      aimAt(d, { x: d.anchor.x + dx, y: d.anchor.y + dy }, d.file, !mod)
+    },
+    [aimAt],
+  )
+
+  const freeFinish = useCallback(
+    async (mod: boolean) => {
+      const d = freeDragRef.current
+      if (!d || !designId) return
+      freeDragRef.current = null
+      trackers.current.free?.()
+      setFreeDragging(false)
+      setDropOver(null)
+      if (d.over) post(d.over, { type: "dropAt", active: false })
+      post(d.file, { type: "dragAbort" })
+      const moved = d.last.x !== d.origin.x || d.last.y !== d.origin.y
+      if (!mod && d.over) {
+        // Dropped on a frame: the piece becomes part of it (the piece itself goes away).
+        const target = d.target && d.target.file === d.over ? d.target : { file: d.over, parent: [] as ElementPath, index: 99_999 }
+        const html = await designApi.readBoard(designId, d.file)
+        await transfer({ from: d.file, paths: rootPaths(html), rects: [], to: { kind: "frame", file: target.file, parent: target.parent, index: target.index } })
+        // The piece keeps showing where it was dropped until its content is in the frame; if it
+        // was not removed (the move failed) it goes back to where canvas.json has it.
+        setOverrides((prev) => {
+          if (!(d.file in prev)) return prev
+          const next = { ...prev }
+          delete next[d.file]
+          return next
+        })
+        return
+      }
+      if (moved) updateBoard(d.file, { x: d.last.x, y: d.last.y })
+    },
+    [designId, post, transfer, updateBoard],
+  )
+
+  const beginFreeDrag = useCallback(
+    (file: string, msg: { sx: number; sy: number; x: number; y: number }) => {
+      const board = boardsRef.current.find((b) => b.file === file)
+      if (!board) return
+      freeDragRef.current = {
+        file,
+        startSX: msg.sx,
+        startSY: msg.sy,
+        origin: { x: board.x, y: board.y },
+        anchor: { x: board.x + msg.x, y: board.y + msg.y },
+        over: null,
+        target: null,
+        last: { x: board.x, y: board.y },
+      }
+      setFreeDragging(true)
+      track(
+        "free",
+        (e) => freeMove(e.screenX, e.screenY, e.metaKey || e.ctrlKey),
+        (e) => void freeFinish(e.metaKey || e.ctrlKey),
+      )
+    },
+    [freeFinish, freeMove, track],
+  )
+
   const handleKey = useCallback(
     (key: { key: string; code: string; ctrl: boolean; meta: boolean; shift: boolean; alt?: boolean; phase: "down" | "up" }): boolean => {
       if (key.key === " ") {
@@ -1043,7 +1757,26 @@ function DesignEditor({
       const mod = key.ctrl || key.meta
       const lower = key.key.toLowerCase()
       if (mod && lower === "z") {
-        undo()
+        if (key.shift) redo()
+        else undo()
+        return true
+      }
+      if (mod && lower === "y") {
+        redo()
+        return true
+      }
+      // Copy/cut only when something of the canvas is selected, paste only when there is something
+      // to paste: otherwise the shortcut belongs to whatever else has the selection (the chat).
+      if (mod && lower === "c" && selectionRef.current) {
+        void copySelected()
+        return true
+      }
+      if (mod && lower === "x" && selectionRef.current) {
+        void cutSelected()
+        return true
+      }
+      if (mod && lower === "v" && sharedClip) {
+        void paste()
         return true
       }
       if (mod && (key.key === "=" || key.key === "+")) {
@@ -1111,38 +1844,48 @@ function DesignEditor({
       }
       return false
     },
-    [deleteSelected, duplicateSelected, fit, select, stepSelected, toggleHiddenSelected, undo, wrapSelected, zoomCenter],
+    [copySelected, cutSelected, deleteSelected, duplicateSelected, fit, paste, redo, select, stepSelected, toggleHiddenSelected, undo, wrapSelected, zoomCenter],
   )
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      const file = fileOf(event.source)
-      if (!file) return
+      const frame = frameOf(event.source)
+      if (!frame) return
+      const { file, key } = frame
       const msg = parseRuntimeMessage(event.data)
       if (!msg) return
+      // A document still loading in the background (a reload in progress) only gets to say `ready`:
+      // everything else is the old document's business until the new one takes its place.
+      const shown = (shownKeys.current[file] ?? key) === key
+      if (!shown && msg.type !== "ready") return
       const sel = selectionRef.current
       switch (msg.type) {
         case "ready": {
           // New document (first load or reload): the tree that was
           // kept belongs to the previous HTML. If the Layers are in view it is requested
           // right away; otherwise, only when the panel opens (effect right below).
+          // The answers go to THIS document (it may not be the one on screen yet).
+          const reply = (message: Record<string, unknown>) =>
+            (event.source as Window | null)?.postMessage({ source: DESIGN_SOURCE, ...message }, "*")
           treeRequests.current.delete(file)
+          // The old tree stays until the new document sends its own (right below, when the Layers are
+          // in view): clearing it here made the Layers list collapse and refill on every reload.
           setTrees((prev) => {
-            const next = msg.tree ?? undefined
-            return prev[file] === next ? prev : { ...prev, [file]: next }
+            if (!msg.tree) return prev
+            return prev[file] === msg.tree ? prev : { ...prev, [file]: msg.tree }
           })
           setLinks((prev) => ({ ...prev, [file]: msg.links }))
           if (!msg.tree && layersVisibleRef.current) {
             treeRequests.current.add(file)
-            post(file, { type: "tree" })
+            reply({ type: "tree" })
           }
-          setGroupRects([])
-          post(file, modeFor(file))
+          if (shown) setGroupRects([])
+          reply(modeFor(file))
           // Reload (the agent edited, undo, code): the selection comes back at the SAME
           // address, if it still exists — and with the group, if there is one.
           if (sel?.file === file && sel.path && sel.path.length > 0) {
             const group = groupPathsRef.current.filter((p) => p.length > 0)
-            post(file, { type: "select", path: sel.path, group: group.length ? group : [sel.path] })
+            reply({ type: "select", path: sel.path, group: group.length ? group : [sel.path] })
           }
           break
         }
@@ -1246,6 +1989,52 @@ function DesignEditor({
             post(file, { type: "tree" })
           })
           break
+        case "crossDrag": {
+          const board = boardsRef.current.find((b) => b.file === file)
+          if (!board) break
+          if (msg.phase === "start") {
+            beginCross(file, msg.paths, msg.rects, msg.grab)
+            break
+          }
+          const c = crossRef.current
+          if (!c || c.file !== file) break
+          const point = { x: board.x + msg.x, y: board.y + msg.y }
+          if (msg.phase === "move") crossMove(point, msg.mod)
+          else if (msg.phase === "back") crossBack()
+          else {
+            if (msg.paths.length > 0) c.paths = msg.paths
+            void crossFinish(msg.phase === "end", point, msg.mod)
+          }
+          break
+        }
+        case "boardDrag":
+          if (msg.phase === "start") beginFreeDrag(file, msg)
+          else if (msg.phase === "move") freeMove(msg.sx, msg.sy, msg.mod)
+          else void freeFinish(msg.mod)
+          break
+        case "dropTarget": {
+          const aim = crossRef.current?.over === file ? crossRef.current : freeDragRef.current?.over === file ? freeDragRef.current : null
+          if (aim) aim.target = msg.parent ? { file, parent: msg.parent, index: msg.index } : null
+          break
+        }
+        case "size": {
+          // A loose piece is as big as its content: the artboard follows what the page reports.
+          const board = boardsRef.current.find((b) => b.file === file)
+          if (!board?.free) break
+          const w = Math.max(1, Math.round(msg.w))
+          const h = Math.max(1, Math.round(msg.h))
+          if (Math.abs(board.w - w) < 1 && Math.abs(board.h - h) < 1) break
+          setOverrides((prev) => ({ ...prev, [file]: { ...prev[file], w, h } }))
+          window.clearTimeout(sizeTimers.current.get(file))
+          sizeTimers.current.set(
+            file,
+            window.setTimeout(() => {
+              sizeTimers.current.delete(file)
+              updateBoard(file, { w, h })
+            }, SIZE_PERSIST_MS),
+          )
+          break
+        }
         case "move":
           // Same idea as the reorder, but swapping parents: the bridge has already moved the
           // element (or the block of the multiple selection) live; the source receives
@@ -1258,7 +2047,7 @@ function DesignEditor({
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [blurInspector, fileOf, handleKey, mutateSource, mutateSourceHtml, modeFor, post, startPlay, wheel])
+  }, [beginCross, beginFreeDrag, blurInspector, crossBack, crossFinish, crossMove, frameOf, freeFinish, freeMove, handleKey, mutateSource, mutateSourceHtml, modeFor, post, startPlay, updateBoard, wheel])
 
   // The DOM tree only serves the Layers — it is requested the moment the panel
   // comes into view (and again on every reload, in `ready`). With the panel closed
@@ -1493,6 +2282,8 @@ function DesignEditor({
 
   const panning = tool === "hand" || spaceHeld
   const dragging = drag !== null
+  /** A drag of elements has left its artboard: the panel has the pointer now. */
+  const crossOutside = ghost !== null
 
   // ----------------------------------------------------------------- render
   if (!designId) {
@@ -1518,7 +2309,8 @@ function DesignEditor({
   const grid = gridStep(zoom)
   const handle = 8 / zoom
   const line = 1.5 / zoom
-  const canUndo = undoCount >= 0 && Array.from(undoStacks.current.values()).some((s) => s.length > 0)
+  const canUndo = undoStack.current.length > 0
+  const canRedo = redoStack.current.length > 0
 
   const corners: Corner[] = ["nw", "ne", "sw", "se"]
   const cornerStyle = (corner: Corner, w: number, h: number) => ({
@@ -1701,10 +2493,17 @@ function DesignEditor({
   // it is not. ONE variable decides the layout and the icon, so the button can never point
   // at a side the card is not on.
   const mod = /mac|iphone|ipad/i.test(navigator.platform) ? "⌘" : "Ctrl+"
-  const contextItems = (m: { scope: "element" | "frame"; file: string }): DesignMenuItem[] => {
+  const contextItems = (m: { scope: "element" | "frame" | "canvas"; file: string; at?: { x: number; y: number } }): DesignMenuItem[] => {
+    const canPaste = sharedClip !== null
+    if (m.scope === "canvas") {
+      return [{ label: t("design.ctx.pasteHere"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste(m.at) }]
+    }
     if (m.scope === "frame") {
       const frameHidden = hiddenBoards.has(m.file)
       return [
+        { label: t("design.ctx.copyFrame"), icon: Copy, shortcut: `${mod}C`, onSelect: () => void copySelected() },
+        { label: t("design.ctx.paste"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste() },
+        { separator: true },
         { label: t("design.present.playHere"), icon: Play, disabled: !canPlay(m.file), onSelect: () => startPlay(m.file) },
         {
           label: t("design.present.playTab"),
@@ -1732,6 +2531,10 @@ function DesignEditor({
     const isHidden = Boolean(sel?.path && nodeAt(selTree, sel.path)?.hidden)
     const hasEl = Boolean(sel?.path && sel.path.length > 0)
     return [
+      { label: t("design.ctx.copy"), icon: Copy, shortcut: `${mod}C`, disabled: !hasEl, onSelect: () => void copySelected() },
+      { label: t("design.ctx.cut"), icon: Scissors, shortcut: `${mod}X`, disabled: !hasEl, onSelect: () => void cutSelected() },
+      { label: t("design.ctx.paste"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste() },
+      { separator: true },
       { label: t("design.ctx.duplicate"), icon: Copy, shortcut: `${mod}D`, disabled: !hasEl, onSelect: duplicateSelected },
       { label: t("design.ctx.delete"), icon: Trash2, shortcut: "⌫", disabled: !hasEl, destructive: true, onSelect: deleteSelected },
       { separator: true },
@@ -1828,6 +2631,11 @@ function DesignEditor({
               onClick={undo}
             >
               <Undo2 className="size-3.5" />
+            </Button>
+          </Hint>
+          <Hint label={t("design.redo")}>
+            <Button variant="ghost" size="icon-sm" disabled={!canRedo} aria-label={t("design.redo")} onClick={redo}>
+              <Redo2 className="size-3.5" />
             </Button>
           </Hint>
           <IconAction
@@ -1929,6 +2737,12 @@ function DesignEditor({
             if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.canvasLayer !== undefined) startPan(e, !panning)
             else if (e.button === 1) startPan(e, false)
           }}
+          onContextMenu={(e) => {
+            // The empty canvas: the place to paste a loose piece (the artboards have their own menus).
+            if (e.target !== e.currentTarget && (e.target as HTMLElement).dataset.canvasLayer === undefined) return
+            e.preventDefault()
+            setMenu({ x: e.clientX, y: e.clientY, scope: "canvas", file: "", at: canvasPoint(e.clientX, e.clientY) })
+          }}
         >
           {state.status === "loading" && (
             <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -1964,11 +2778,16 @@ function DesignEditor({
               const elementRect = selection?.file === board.file && selection.path ? selRect : null
               const groupRectList = selection?.file === board.file && selection.path ? groupRects : []
               const hoverRect = hover?.file === board.file && !dragging ? hover.rect : null
+              // A reload keeps the old document on screen until the new one has loaded (see `promote`).
+              const wantKey = wantedKey(board.file)
+              const shownKey = shownKeys.current[board.file] ?? wantKey
+              const frameKeys = shownKey === wantKey ? [wantKey] : [shownKey, wantKey]
               return (
                 <div key={board.file} className="absolute" style={{ left: board.x, top: board.y, width: board.w, height: board.h }}>
                   {/* Artboard header: the name on the left (clicking selects the frame,
                       dragging moves it) and, on the right, the presentation actions — only
                       where there is somewhere to navigate. Same scale as the canvas. */}
+                  {!board.free && (
                   <div
                     className="absolute left-0 flex items-center justify-between"
                     style={{ bottom: "100%", marginBottom: 4 / zoom, width: board.w, gap: 8 / zoom, fontSize: 11 / zoom, lineHeight: 1.3 }}
@@ -2043,35 +2862,58 @@ function DesignEditor({
                       </div>
                     )}
                   </div>
+                  )}
                   <div
-                    className="relative overflow-hidden bg-white shadow-sm"
+                    // A loose piece has no frame: no background, no shadow, no outline — only its content.
+                    className={cn("relative", !board.free && "overflow-hidden bg-white shadow-sm")}
                     style={{
                       width: board.w,
                       height: board.h,
                       visibility: hiddenBoards.has(board.file) ? "hidden" : undefined,
-                      outline: isPlaying
-                        ? `${2 / zoom}px solid var(--primary)`
-                        : `${1 / zoom}px solid color-mix(in oklab, var(--border) 80%, transparent)`,
+                      outline: board.free
+                        ? undefined
+                        : isPlaying
+                          ? `${2 / zoom}px solid var(--primary)`
+                          : `${1 / zoom}px solid color-mix(in oklab, var(--border) 80%, transparent)`,
                     }}
                   >
-                    <iframe
-                      ref={(el) => {
-                        if (el) iframes.current.set(board.file, el)
-                        else iframes.current.delete(board.file)
-                      }}
-                      // The key carries the FILE version: an artboard that has not
-                      // changed stays mounted (with its scroll and selection).
-                      key={`${board.file}:${reloads}:${fileVersions[board.file] ?? 0}`}
-                      // The file version enters through the key, not through the URL: that way
-                      // the address stays stable and the scheme's ETag can return 304.
-                      src={`${DESIGN_SCHEME}://${designId}/${encodeFile(board.file)}?v=${reloads}`}
-                      title={board.title ?? board.file}
-                      sandbox="allow-scripts"
-                      allow=""
-                      referrerPolicy="no-referrer"
-                      className="absolute top-0 left-0 border-0"
-                      style={{ width: board.w, height: board.h, pointerEvents: panning || dragging ? "none" : "auto" }}
-                    />
+                    {frameKeys.map((frameKey) => (
+                      <iframe
+                        ref={(el) => {
+                          if (el) {
+                            frameRefs.current.set(frameKey, el)
+                            frameFiles.current.set(frameKey, board.file)
+                          } else {
+                            frameRefs.current.delete(frameKey)
+                            frameFiles.current.delete(frameKey)
+                          }
+                        }}
+                        // The key carries the FILE version: an artboard that has not changed stays
+                        // mounted (with its scroll and selection). A new version mounts BESIDE the
+                        // old one and takes its place once loaded.
+                        key={frameKey}
+                        onLoad={() => {
+                          if (frameKey === wantedKey(board.file)) promote(board.file, frameKey)
+                        }}
+                        // The file version enters through the key, not through the URL: that way
+                        // the address stays stable and the scheme's ETag can return 304.
+                        src={`${DESIGN_SCHEME}://${designId}/${encodeFile(board.file)}?v=${reloads}`}
+                        title={board.title ?? board.file}
+                        sandbox="allow-scripts"
+                        allow=""
+                        referrerPolicy="no-referrer"
+                        className="absolute top-0 left-0 border-0"
+                        style={{
+                          width: board.w,
+                          height: board.h,
+                          pointerEvents: frameKey !== shownKey || panning || dragging || crossOutside || freeDragging ? "none" : "auto",
+                          // The document that is still loading is there, but not seen.
+                          opacity: frameKey !== shownKey ? 0 : undefined,
+                          // A transparent page over a dark app: without this the browser paints the frame opaque.
+                          colorScheme: board.free ? "light" : undefined,
+                        }}
+                      />
+                    ))}
                   </div>
 
                   {/* Outlines: drawn HERE, over the iframe — nothing enters the
@@ -2136,9 +2978,16 @@ function DesignEditor({
                       </div>
                     </div>
                   )}
+                  {dropOver === board.file && (
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{ outline: `${2 / zoom}px solid var(--primary)`, background: "color-mix(in oklab, var(--primary) 6%, transparent)" }}
+                    />
+                  )}
                   {isBoardSelected && (
                     <div className="pointer-events-none absolute inset-0" style={{ outline: `${line}px solid var(--primary)` }}>
-                      {corners.map((corner) => (
+                      {/* A loose piece is as big as its content: there is nothing to resize. */}
+                      {!board.free && corners.map((corner) => (
                         <div
                           key={corner}
                           className="pointer-events-auto absolute rounded-[1px] border-primary bg-background"
@@ -2155,11 +3004,26 @@ function DesignEditor({
                 </div>
               )
             })}
+            {/* The elements being dragged out of an artboard: a placeholder of their size under
+                the pointer, until they are dropped into an artboard or onto the empty canvas. */}
+            {ghost && (
+              <div
+                className="pointer-events-none absolute z-30 rounded-[2px]"
+                style={{
+                  left: ghost.x,
+                  top: ghost.y,
+                  width: ghost.w,
+                  height: ghost.h,
+                  border: `${1.5 / zoom}px dashed var(--primary)`,
+                  background: "color-mix(in oklab, var(--primary) 14%, transparent)",
+                }}
+              />
+            )}
           </div>
 
           {/* Hand / Space / drag in progress: a layer over the iframes, which
               would otherwise swallow the pointer. */}
-          {(panning || dragging) && (
+          {(panning || dragging || crossOutside || freeDragging) && (
             <div className="absolute inset-0 z-20" onPointerDown={(e) => panning && startPan(e, false)} />
           )}
         </div>

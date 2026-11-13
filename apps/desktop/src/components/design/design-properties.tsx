@@ -71,6 +71,8 @@ export interface DesignBoardView {
   y: number
   w: number
   h: number
+  /** A loose piece: an element on the canvas with no frame (see design-canvas.ts). */
+  free?: boolean
 }
 
 export type DesignPropertiesTarget =

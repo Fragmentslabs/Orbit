@@ -32,7 +32,7 @@ interface Board {
 }
 
 interface CanvasFile {
-  boards: Record<string, { title?: string; x: number; y: number; w: number; h: number }>
+  boards: Record<string, { title?: string; x: number; y: number; w: number; h: number; free?: boolean }>
   order: string[]
 }
 
@@ -111,7 +111,8 @@ export function DesignPresenter({
 
   const boards = useMemo<Board[]>(() => {
     if (!canvas) return []
-    return canvas.order.filter((file) => canvas.boards[file]).map((file) => ({ file, ...canvas.boards[file] }))
+    // The presentation walks SCREENS: the loose pieces on the canvas are not part of it.
+    return canvas.order.filter((file) => canvas.boards[file] && !canvas.boards[file].free).map((file) => ({ file, ...canvas.boards[file] }))
   }, [canvas])
   const files = useMemo(() => boards.map((b) => b.file), [boards])
   const board = boards.find((b) => b.file === current) ?? null

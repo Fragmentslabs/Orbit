@@ -34,11 +34,13 @@ import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
 import {
+  addDesignBoard,
   designIdForName,
   designIdForPath,
   readDesignBoard,
   getDesign,
   registerDesignProtocol,
+  removeDesignBoard,
   updateDesignBoard,
   writeDesignBoard,
 } from './lib/design/design-store'
@@ -1810,6 +1812,22 @@ app.whenReady().then(async () => {
       return updateDesignBoard(input.id, input.file, input.patch)
     },
   )
+  // A loose piece is born (or comes back, on undo) as a board of its own, and goes away when
+  // it is emptied: both touch canvas.json and the file together, under the canvas lock.
+  ipcMain.handle(
+    'design:addBoard',
+    async (
+      _event,
+      input: { id: string; file: string; html: string; board: { title?: string; x: number; y: number; w: number; h: number; free?: boolean }; index?: number },
+    ) => {
+      if (await remoteDesign(input.id)) throw new Error('This canvas belongs to another computer and is read-only here.')
+      return addDesignBoard(input.id, input.file, input.html, input.board, input.index)
+    },
+  )
+  ipcMain.handle('design:removeBoard', async (_event, input: { id: string; file: string }) => {
+    if (await remoteDesign(input.id)) throw new Error('This canvas belongs to another computer and is read-only here.')
+    return removeDesignBoard(input.id, input.file)
+  })
 
   // Export of the canvas requested by the design tab: PDF (one page per artboard)
   // or PNG (one image per artboard). Rendering is the main process's; canceling in
