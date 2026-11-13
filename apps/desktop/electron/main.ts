@@ -196,6 +196,7 @@ import { createTray, destroyTray, hasTray, refreshTray } from './lib/tray'
 import { setupAutoArchive } from './lib/auto-archive'
 import { BROWSER_PARTITION } from './lib/browser-script'
 import { clearBrowserPermissions, setupBrowserPermissions } from './lib/browser-permissions'
+import { setupFragmentPermissions } from './lib/fragments/fragment-permissions'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
 import { importSkillSelection } from './lib/skills/import'
@@ -2046,7 +2047,7 @@ app.whenReady().then(async () => {
   // abrupt shutdown would keep "running" on the board forever.
   void pipeline.reconcileExecutions().catch((err) => console.error('[pipeline] reconciliation failed:', err))
 
-  // Routines: scheduled chats (chat and code modes). The CRUD lives in
+  // Routines: scheduled chats, one model wherever the person is. The CRUD lives in
   // orbit-data/routines; the firing reuses the 'chat:send' path above, and the
   // mutations go back to the renderer through 'routines:event'.
   ipcMain.handle('routines:load', () => routines.loadAll())
@@ -2067,6 +2068,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('routines:rotateWebhook', (_e, id: string) => rotateWebhook(id))
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
+  // The routine's OWN chat: the screen opens it before any execution exists.
+  ipcMain.handle('routines:chatSession', (_e, id: string) => routines.chatSession(id))
+  // The routine's own folder (memory.md + scripts), ensured on first use.
+  ipcMain.handle('routines:folder', (_e, id: string) => routines.routineFolderInfo(id))
+  ipcMain.handle('routines:openFolder', (_e, id: string) => routines.openRoutineFolder(id))
   ipcMain.handle('routines:pruneRuns', (_e, sessionIds: string[]) => routines.pruneOrphanRuns(sessionIds))
   // Agent proposals (tool routines_manage): the conversation card lists,
   // approves and discards them. Approval creates the actual routine (with the
@@ -2956,6 +2962,9 @@ app.whenReady().then(async () => {
   // Camera, microphone, location etc. of the built-in browser sites:
   // asks the user per site (before, Electron approved everything silently).
   setupBrowserPermissions(BROWSER_PARTITION)
+  // The microphone of a fragment: the page's getUserMedia waits for the person's answer in
+  // the fragment's own dialog (the built-in browser has its partition; this is the app's).
+  setupFragmentPermissions()
 
   // Overlay (⇧⌘space): the window is born hidden — the shortcut cannot pay for the
   // renderer loading the first time. It is a page of its own (like the

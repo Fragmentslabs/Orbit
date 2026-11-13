@@ -27,11 +27,15 @@ import { ViewScopeToggle } from "@/src/components/view-scope-toggle"
 import { useAnalyticsStore } from "@/src/stores/analytics-store"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
+import { PipelineHeaderActions, PipelineHeaderTitle, PipelineSettingsButton } from "@/src/components/pipeline/pipeline-header"
 import { RoutinesView } from "@/src/components/routines/routines-view"
+import { RoutineDetailsButton, RoutineHeaderActions, RoutineHeaderTitle } from "@/src/components/routines/routine-header"
+import { RoutinesNewButton } from "@/src/components/routines/routines-new-button"
+import { useRoutinesStore } from "@/src/stores/routines-store"
 import { ToolsView } from "@/src/components/tools-view"
 import { UsageView } from "@/src/components/usage/usage-view"
 import { FragmentsView } from "@/src/components/fragments/fragments-view"
-import { FragmentHeaderActions } from "@/src/components/fragments/fragment-header-actions"
+import { FragmentDetailsButton, FragmentHeaderActions } from "@/src/components/fragments/fragment-header-actions"
 import { FragmentHeaderTitle } from "@/src/components/fragments/fragment-header"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
@@ -46,6 +50,8 @@ import { ChatSearch } from "@/src/components/chat-search"
 import { VoiceCallProvider } from "@/src/components/voice-call-host"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { LinkRouter } from "@/src/components/link-router"
+import { FragmentToasts } from "@/src/components/fragments/fragment-toasts"
+import { WidgetPanel } from "@/src/components/widgets/widget-panel"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -73,8 +79,8 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
   )
 }
 
-/** Memories and Routines: chat, code or both — until the user picks, it follows the workspace mode. */
-function PageScopeToggle({ page, workspaceMode }: { page: "memories" | "routines"; workspaceMode: "chat" | "code" }) {
+/** Memories: chat, code or both — until the user picks, it follows the workspace mode. */
+function PageScopeToggle({ page, workspaceMode }: { page: "memories"; workspaceMode: "chat" | "code" }) {
   const [scope, setScope] = useViewScope(page, workspaceMode)
   return <ViewScopeToggle value={scope} onChange={setScope} />
 }
@@ -124,6 +130,11 @@ function Layout() {
   // A fragment on screen takes the whole area (no padding) and puts back/icon/name in the header.
   const openFragmentId = useFragmentsStore((s) => s.activeId)
   const fragmentFullscreen = view === "fragments" && !!openFragmentId
+  // One routine open takes the page the same way: no padding, and the header shows the routine
+  // (back to the list, name, state) instead of the page title.
+  const openRoutine = useRoutinesStore((s) => (s.openId ? s.routines.find((r) => r.id === s.openId) : undefined))
+  const closeRoutine = useRoutinesStore((s) => s.open)
+  const routineScreen = view === "routines" && !!openRoutine
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -305,6 +316,9 @@ function Layout() {
   // OPEN pipeline (on the list there is none): the pipeline mode header reflects
   // its context — folders and branch. The model sits in each phase column: each
   // phase may have its own, so there is no "one" model of the pipeline.
+  const openPipeline = usePipelineStore((s) =>
+    s.openPipelineId ? (s.pipelines.find((p) => p.id === s.openPipelineId) ?? null) : null,
+  )
   const pipelineFolders = usePipelineStore((s) => {
     const pipeline = s.openPipelineId ? s.pipelines.find((p) => p.id === s.openPipelineId) : undefined
     return pipeline ? s.projects.find((p) => p.id === pipeline.projectId)?.folders ?? NO_FOLDERS : NO_FOLDERS
@@ -357,7 +371,18 @@ function Layout() {
           <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
               <main className="relative flex h-full min-w-0 flex-col">
                 <ChatHeader
-                  titleSlot={fragmentFullscreen && openFragmentId ? <FragmentHeaderTitle fragmentId={openFragmentId} /> : undefined}
+                  titleSlot={
+                    fragmentFullscreen && openFragmentId ? (
+                      <FragmentHeaderTitle fragmentId={openFragmentId} />
+                    ) : routineScreen && openRoutine ? (
+                      <RoutineHeaderTitle routine={openRoutine} onBack={() => closeRoutine(null)} />
+                    ) : view === "pipeline" && openPipeline ? (
+                      <PipelineHeaderTitle
+                        pipeline={openPipeline}
+                        onBack={() => usePipelineStore.getState().setOpenPipeline(null)}
+                      />
+                    ) : undefined
+                  }
                   title={
                     view === "memories"
                       ? t("sidebar.memories")
@@ -388,7 +413,7 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" || view === "analytics" || view === "fragments" ? undefined : folders[0]}
+                  repoPath={remoteEnv ? undefined : view === "pipeline" || view === "routines" || view === "memories" || view === "analytics" || view === "fragments" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // On the Pipeline page the header follows the OPEN pipeline,
@@ -413,12 +438,29 @@ function Layout() {
                   // The Memories page has no project or branch in the header (that is
                   // the conversation's context): it only says WHICH memories are showing.
                   extra={
-                    view === "memories" || view === "routines" ? (
-                      <PageScopeToggle page={view} workspaceMode={workspaceMode} />
+                    routineScreen && openRoutine ? (
+                      <RoutineHeaderActions routine={openRoutine} />
+                    ) : view === "routines" ? (
+                      <RoutinesNewButton />
+                    ) : view === "memories" ? (
+                      <PageScopeToggle page="memories" workspaceMode={workspaceMode} />
                     ) : view === "analytics" ? (
                       <UsageHeaderControls />
                     ) : fragmentFullscreen && openFragmentId ? (
                       <FragmentHeaderActions fragmentId={openFragmentId} />
+                    ) : view === "pipeline" && openPipeline ? (
+                      <PipelineHeaderActions pipeline={openPipeline} />
+                    ) : undefined
+                  }
+                  // The screen's own settings, right before the panel button: the routine's
+                  // panel and the fragment's details keep the same place on every screen.
+                  endActions={
+                    routineScreen && openRoutine ? (
+                      <RoutineDetailsButton />
+                    ) : fragmentFullscreen && openFragmentId ? (
+                      <FragmentDetailsButton fragmentId={openFragmentId} />
+                    ) : view === "pipeline" && openPipeline ? (
+                      <PipelineSettingsButton />
                     ) : undefined
                   }
                   onFoldersChange={
@@ -429,7 +471,7 @@ function Layout() {
                         : undefined
                   }
                 />
-                <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${fragmentFullscreen ? "" : "p-4"}`} style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
+                <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${fragmentFullscreen || routineScreen || view === "routines" ? "" : "p-4"}`} style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                   {remoteEnv ? null : <MissingFoldersBanner />}
                   {remoteEnv ? (
                     <RemoteChatView />
@@ -449,6 +491,9 @@ function Layout() {
                     <ChatView />
                   )}
                 </div>
+                {/* The widget board lives on the right edge of a conversation — and only
+                    while the side panel is closed, which is the strip it would share. */}
+                {!remoteEnv && view === "chat" && !rightPanelOpen && <WidgetPanel />}
               </main>
           </Panel>
           {rightPanelOpen && (
@@ -506,6 +551,8 @@ function App() {
             <WorkspaceSearchDialog />
             <SettingsDialogHost />
             <LinkRouter />
+            {/* Notifications scheduled by fragments: over any screen, with the fragment's icon. */}
+            <FragmentToasts />
             <RotationDialogHost />
             <SidebarProvider className="min-h-0 flex-1 overflow-hidden" open={open} onOpenChange={setOpen}>
               <Layout />

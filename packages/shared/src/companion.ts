@@ -601,7 +601,6 @@ export interface GenerateRoutineRequest {
   model: RoutineModel
   folders: string[]
   language?: string
-  mode?: 'chat' | 'code'
   visionAvailable?: boolean
 }
 

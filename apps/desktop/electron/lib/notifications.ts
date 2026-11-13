@@ -33,13 +33,17 @@ export async function getNotificationPrefs(): Promise<NotificationPrefs> {
   return { ...DEFAULTS, ...saved }
 }
 
-function mainWindow(): BrowserWindow | null {
-  return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null
+/**
+ * The window in front — NOT "the first one alive": the overlay window is created hidden at
+ * boot, before the main one, so the first would always be the hidden overlay.
+ */
+function frontWindow(): BrowserWindow | null {
+  const alive = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible())
+  return alive.find((w) => w.isFocused()) ?? alive[0] ?? null
 }
 
 function appVisible(): boolean {
-  const win = mainWindow()
-  return !!win && win.isVisible() && win.isFocused()
+  return BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isVisible() && w.isFocused())
 }
 
 /**
@@ -72,7 +76,7 @@ async function show(kind: keyof NotificationPrefs, n: NotificationBase): Promise
   const prefs = await getNotificationPrefs()
   if (!prefs[kind]) return
 
-  const win = mainWindow()
+  const win = frontWindow()
   const hasCustomSound = await customSoundAvailable()
   const notification = new Notification({ title: n.title, body: n.body, silent: hasCustomSound })
   if (hasCustomSound) void playSound('notification.wav')

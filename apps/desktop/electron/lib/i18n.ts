@@ -103,6 +103,18 @@ export const MESSAGES = {
   },
 
   // ── Scheduled routines ────────────────────────────────────────────────────
+  // ── Fragments ─────────────────────────────────────────────────────────────
+  /** Prefix of a notification sent by a fragment (the name of the fragment follows). */
+  'notif.fragment.title': {
+    'pt-BR': 'Fragmento',
+    en: 'Fragment',
+  },
+  // ── Routines ──────────────────────────────────────────────────────────────
+  /** Prefix of a notification sent by a routine (the name of the routine follows). */
+  'notif.routine.title': {
+    'pt-BR': 'Rotina',
+    en: 'Routine',
+  },
   'notif.routine.done': {
     'pt-BR': 'Rotina concluída',
     en: 'Routine finished',

@@ -13,6 +13,7 @@ import type {
   SearchHit,
   ReasoningConfig,
   SendMessageInput,
+  SessionInfo,
   SessionRevert,
   UnrevertResult,
 } from "@shared/chat"
@@ -70,6 +71,9 @@ import type {
   FragmentLogEntry,
   FragmentManifest,
   FragmentMetaPatch,
+  FragmentNotification,
+  FragmentNotifyEvent,
+  FragmentPermissionAskEvent,
   FragmentUpdatedEvent,
 } from "@shared/fragments"
 import type { FragmentDataEntry, FragmentDetails, FragmentRevisionInfo } from "@shared/fragment-details"
@@ -805,6 +809,14 @@ export const routinesApi = {
   remove: (id: string) => window.ipcRenderer.invoke("routines:remove", id) as Promise<void>,
   runNow: (id: string) =>
     window.ipcRenderer.invoke("routines:runNow", id) as Promise<string | null>,
+  /** The routine's own chat (created on first use) — what the routine screen opens. */
+  chatSession: (id: string) =>
+    window.ipcRenderer.invoke("routines:chatSession", id) as Promise<SessionInfo | null>,
+  /** The routine's own folder (memory.md + scripts), ensured on first use. */
+  folder: (id: string) =>
+    window.ipcRenderer.invoke("routines:folder", id) as Promise<{ folder: string; memory: string; scripts: string[] } | null>,
+  /** Opens the routine folder in the Finder. */
+  openFolder: (id: string) => window.ipcRenderer.invoke("routines:openFolder", id) as Promise<string | null>,
   /** Discards metrics of executions whose chat has already been deleted. */
   pruneRuns: (sessionIds: string[]) =>
     window.ipcRenderer.invoke("routines:pruneRuns", sessionIds) as Promise<number>,
@@ -863,6 +875,9 @@ export const fragmentApi = {
   list: () => window.ipcRenderer.invoke("fragment:list") as Promise<FragmentManifest[]>,
   get: (id: string) => window.ipcRenderer.invoke("fragment:get", id) as Promise<FragmentManifest | null>,
   provenance: (id: string) => window.ipcRenderer.invoke("fragment:provenance", id) as Promise<FragmentProvenance | null>,
+  /** The origin of every fragment, in one round trip (the library's source filters). */
+  provenances: () =>
+    window.ipcRenderer.invoke("fragment:provenances") as Promise<Record<string, FragmentProvenance>>,
   details: (id: string) => window.ipcRenderer.invoke("fragment:details", id) as Promise<FragmentDetails | null>,
   data: (id: string) => window.ipcRenderer.invoke("fragment:data", id) as Promise<FragmentDataEntry[] | null>,
   history: (id: string) => window.ipcRenderer.invoke("fragment:history", id) as Promise<FragmentRevisionInfo[]>,
@@ -897,6 +912,31 @@ export const fragmentApi = {
   onRemoved: (listener: (payload: { fragmentId: string }) => void) => {
     const wrapper = window.ipcRenderer.on("fragment:removed", (payload) => listener(payload as { fragmentId: string }))
     return () => window.ipcRenderer.off("fragment:removed", wrapper)
+  },
+  /** What this fragment scheduled (the details panel lists it; the page reads it too). */
+  notifications: (id: string) =>
+    window.ipcRenderer.invoke("fragment:notifications", id) as Promise<FragmentNotification[]>,
+  /** Cancels one schedule (or all of the fragment, without `notificationId`). */
+  cancelNotification: (id: string, notificationId?: string) =>
+    window.ipcRenderer.invoke("fragment:notification-cancel", id, notificationId) as Promise<number>,
+  /** A scheduled notification is due: the app draws the toast. */
+  onNotify: (listener: (event: FragmentNotifyEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("fragment:notify", (payload) => listener(payload as FragmentNotifyEvent))
+    return () => window.ipcRenderer.off("fragment:notify", wrapper)
+  },
+  /** A native banner (or the toast itself) was clicked: bring the fragment to screen. */
+  onOpenRequest: (listener: (payload: { id: string; title: string; sessionId?: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("fragment:open", (payload) =>
+      listener(payload as { id: string; title: string; sessionId?: string }),
+    )
+    return () => window.ipcRenderer.off("fragment:open", wrapper)
+  },
+  /** A capability the person has to decide about: re-open the notice over the fragment. */
+  onPermissionAsk: (listener: (payload: FragmentPermissionAskEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("fragment:permission-ask", (payload) =>
+      listener(payload as FragmentPermissionAskEvent),
+    )
+    return () => window.ipcRenderer.off("fragment:permission-ask", wrapper)
   },
 }
 

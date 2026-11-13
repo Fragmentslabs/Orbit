@@ -1231,7 +1231,6 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           req.model,
           req.folders,
           req.language,
-          req.mode,
           req.visionAvailable,
         )
         sendResponse(ws, requestId, true, result)

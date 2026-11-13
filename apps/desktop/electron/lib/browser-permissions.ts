@@ -145,6 +145,15 @@ async function ensureSystemAccess(kinds: Kind[], wc: WebContents | null): Promis
   return true
 }
 
+/**
+ * The app's own "yes" for the microphone (macOS), with the same dialogs a site gets here:
+ * the system prompt the first time, and the "open Settings" warning once it was refused.
+ * On the other platforms the system asks nothing, so it is a no-op.
+ */
+export function ensureMicrophoneAccess(wc: WebContents | null): Promise<boolean> {
+  return ensureSystemAccess(['microphone'], wc)
+}
+
 async function ask(origin: string, kinds: Kind[], wc: WebContents | null): Promise<boolean> {
   await loadRemembered()
   if (kinds.some((k) => decisionFor(origin, k) === 'deny')) return false
