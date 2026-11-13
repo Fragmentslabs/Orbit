@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import {
   evalCondition,
@@ -115,14 +115,19 @@ export const OrbitUiBlocks = memo(function OrbitUiBlocks({
   const scope = useMemo(() => ({ ...defaults, ...overrides }), [defaults, overrides])
   const layout = useMemo(() => layoutOf(blocks), [blocks])
 
+  const setValue = useCallback(
+    (id: string, value: Value) =>
+      setOverrides((prev) => (prev[id] === value ? prev : { ...prev, [id]: value })),
+    [],
+  )
   const state = useMemo<UiState>(
     () => ({
       scope,
       locale,
-      setValue: (id: string, value: Value) => setOverrides((prev) => ({ ...prev, [id]: value })),
+      setValue,
       send: sendToActiveSession,
     }),
-    [scope, locale],
+    [scope, locale, setValue],
   )
 
   if (blocks.length === 0 && !pending) return null

@@ -41,6 +41,7 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { ImageLightbox } from '~/components/chat/ImageLightbox'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 
 type SourceFilter = 'all' | MediaSource
 type PeriodFilter = 'all' | 'today' | 'week' | 'month'
@@ -196,6 +197,7 @@ export default function MediaScreen() {
   const refresh = useMediaStore((s) => s.refresh)
   const remove = useMediaStore((s) => s.remove)
   const removeOne = useMediaStore((s) => s.removeOne)
+  const confirm = useConfirm()
 
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<SourceFilter>('all')
@@ -343,10 +345,21 @@ export default function MediaScreen() {
   const removeSelected = useCallback(async () => {
     const ids = [...selected]
     if (ids.length === 0) return
+    const ok = await confirm({
+      title:
+        ids.length > 1
+          ? t('media.deleteSelectedTitle_other', { count: ids.length })
+          : t('media.deleteSelectedTitle_one', { count: ids.length }),
+      description: t('media.deleteSelectedBody'),
+      confirmLabel: t('media.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
     await remove(ids)
     exitSelection()
     setPreview((current) => (current && ids.includes(current.id) ? null : current))
-  }, [selected, remove, exitSelection])
+  }, [selected, remove, exitSelection, confirm, t])
 
   /** Opens the source chat of the image, switching the mode if needed. */
   const openInChat = useCallback(
@@ -612,13 +625,21 @@ export default function MediaScreen() {
                   )}
                   <Pressable
                     onPress={async () => {
+                      const ok = await confirm({
+                        title: t('media.deleteTitle'),
+                        description: t('media.deleteBody', { name: entryTitle(preview) }),
+                        confirmLabel: t('media.delete'),
+                        cancelLabel: t('sidebar.cancel'),
+                        destructive: true,
+                      })
+                      if (!ok) return
                       await removeOne(preview.id)
                       setPreview(null)
                     }}
                     style={[s.previewAction, { borderColor: 'rgba(255,255,255,0.2)' }]}
                   >
-                    <Trash2 size={15} color="#ff6b6b" />
-                    <Text style={[s.previewActionText, { color: '#ff6b6b' }]}>{t('media.delete')}</Text>
+                    <Trash2 size={15} color={tokens.destructive} />
+                    <Text style={[s.previewActionText, { color: tokens.destructive }]}>{t('media.delete')}</Text>
                   </Pressable>
                 </View>
               </View>

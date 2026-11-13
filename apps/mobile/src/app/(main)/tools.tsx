@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, SectionList, RefreshControl, StyleSheet, Alert, useWindowDimensions } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useRouter } from 'expo-router'
@@ -366,6 +367,7 @@ function ItemGap() {
 
 export default function ToolsScreen() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const setDraft = useDraftInput((s) => s.setDraft)
@@ -412,11 +414,15 @@ export default function ToolsScreen() {
     setSkillFormOpen(true)
   }
 
-  const handleDeleteSkill = (slug: string) => {
-    Alert.alert(t('toolsScreen.deleteSkillTitle'), t('toolsScreen.deleteSkillBody', { slug }), [
-      { text: t('toolsScreen.cancel'), style: 'cancel' },
-      { text: t('toolsScreen.delete'), style: 'destructive', onPress: () => void removeSkill(slug) },
-    ])
+  const handleDeleteSkill = async (slug: string) => {
+    const ok = await confirm({
+      title: t('toolsScreen.deleteSkillTitle'),
+      description: t('toolsScreen.deleteSkillBody', { slug }),
+      confirmLabel: t('toolsScreen.delete'),
+      cancelLabel: t('toolsScreen.cancel'),
+      destructive: true,
+    })
+    if (ok) void removeSkill(slug)
   }
 
   const handleImportSkill = async () => {
@@ -455,18 +461,17 @@ export default function ToolsScreen() {
     setMcpFormOpen(true)
   }
 
-  const handleDeleteMcp = (name: string) => {
-    Alert.alert(t('toolsScreen.deleteServerTitle'), t('toolsScreen.deleteServerBody', { name }), [
-      { text: t('toolsScreen.cancel'), style: 'cancel' },
-      {
-        text: t('toolsScreen.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const filtered = mcpServers.map((s) => s.config).filter((c) => c.name !== name)
-          await saveMcpConfig({ servers: filtered })
-        },
-      },
-    ])
+  const handleDeleteMcp = async (name: string) => {
+    const ok = await confirm({
+      title: t('toolsScreen.deleteServerTitle'),
+      description: t('toolsScreen.deleteServerBody', { name }),
+      confirmLabel: t('toolsScreen.delete'),
+      cancelLabel: t('toolsScreen.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    const filtered = mcpServers.map((s) => s.config).filter((c) => c.name !== name)
+    await saveMcpConfig({ servers: filtered })
   }
 
   // A SectionList instead of the ScrollView with three nested .map(): before

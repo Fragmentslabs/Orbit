@@ -110,7 +110,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           {critical ? (
-            <TriangleAlert size={16} color="#ef4444" />
+            <TriangleAlert size={16} color={tokens.destructive} />
           ) : (
             <ShieldAlert size={16} color={tokens.mutedForeground} />
           )}
@@ -153,7 +153,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
           <Text
             style={{
               fontSize: 11,
-              color: critical ? '#ef4444' : tokens.mutedForeground,
+              color: critical ? tokens.destructive : tokens.mutedForeground,
               lineHeight: 16,
               marginBottom: 10,
             }}

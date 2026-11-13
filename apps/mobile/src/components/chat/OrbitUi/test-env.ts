@@ -109,3 +109,49 @@ vi.mock('expo-asset', () => ({
 vi.mock('expo-file-system/legacy', () => ({
   readAsStringAsync: async () => '',
 }))
+
+/**
+ * Gesture and animation: the components are real, the native layers are not.
+ * The slider uses RNGH/Reanimated on the device; in jsdom only the rendered
+ * structure matters, so the gesture is a chainable no-op and the shared values
+ * keep their initial value.
+ */
+vi.mock('react-native-gesture-handler', () => {
+  const chain = () => {
+    const gesture: Record<string, unknown> = {}
+    for (const method of [
+      'maxPointers',
+      'activeOffsetX',
+      'failOffsetY',
+      'onStart',
+      'onUpdate',
+      'onEnd',
+      'onFinalize',
+      'maxDistance',
+      'minDistance',
+      'runOnJS',
+    ]) {
+      gesture[method] = () => gesture
+    }
+    return gesture
+  }
+  return {
+    Gesture: { Pan: chain, Tap: chain, Race: () => ({}) },
+    GestureDetector: ({ children }: { children: unknown }) => children,
+  }
+})
+
+vi.mock('react-native-reanimated', async () => {
+  const { View } = await import('react-native')
+  return {
+    __esModule: true,
+    default: { View },
+    runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
+    useSharedValue: (initial: unknown) => ({
+      value: initial,
+      get: () => initial,
+      set: () => {},
+    }),
+    useAnimatedStyle: () => ({}),
+  }
+})

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Alert } from 'react-native'
+import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ArrowLeft, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -22,6 +23,7 @@ import type { SelectedModel } from '~/stores/session-model-prefs'
  */
 export default function RotationEditorScreen() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -98,22 +100,17 @@ export default function RotationEditorScreen() {
     setPickerSlot(models.length)
   }
 
-  const confirmRemove = () => {
-    Alert.alert(
-      t('rotation.confirmRemove', { name: rotation.name }),
-      t('rotation.confirmRemoveDescription'),
-      [
-        { text: t('rotation.cancel'), style: 'cancel' },
-        {
-          text: t('rotation.remove'),
-          style: 'destructive',
-          onPress: () => {
-            remove(rotation.id)
-            router.back()
-          },
-        },
-      ],
-    )
+  const confirmRemove = async () => {
+    const ok = await confirm({
+      title: t('rotation.confirmRemove', { name: rotation.name }),
+      description: t('rotation.confirmRemoveDescription'),
+      confirmLabel: t('rotation.remove'),
+      cancelLabel: t('rotation.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    remove(rotation.id)
+    router.back()
   }
 
   const slotModel = pickerSlot === null ? null : models[pickerSlot] ?? null

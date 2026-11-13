@@ -5,7 +5,7 @@
  * (there is no hover).
  */
 import { memo, useEffect, useState } from 'react'
-import { View, Text, Pressable, TextInput, Modal, ScrollView, Alert, StyleSheet } from 'react-native'
+import { View, Text, Pressable, TextInput, Modal, ScrollView, StyleSheet } from 'react-native'
 import { ArrowUpCircle, FileText, Link2, Pencil, Trash2, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
@@ -14,6 +14,7 @@ import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
 import { KIND_COLOR, kindLabel, categoryLabel, canPromote, formatDate } from './meta'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 
 const WEIGHT_PRESETS = [0.2, 0.4, 0.6, 0.8, 1]
 
@@ -165,6 +166,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
   onSelectRelated?: (id: string) => void
 }) {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const remove = useMemoryStore((s) => s.remove)
   const promote = useMemoryStore((s) => s.promote)
 
@@ -174,18 +176,18 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
 
   const kindColor = KIND_COLOR[memory.kind]
 
-  const handleDelete = () => {
-    Alert.alert(
-      t('memoryCard.deleteTitle'),
-      t('memoryCard.deleteBody', {
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: t('memoryCard.deleteTitle'),
+      description: t('memoryCard.deleteBody', {
         text: memory.text,
         docSuffix: memory.hasDoc ? t('memoryCard.deleteBodyDocSuffix') : '',
       }),
-      [
-        { text: t('sidebar.cancel'), style: 'cancel' },
-        { text: t('sidebar.delete'), style: 'destructive', onPress: () => void remove(memory.id) },
-      ],
-    )
+      confirmLabel: t('sidebar.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (ok) void remove(memory.id)
   }
 
   return (
@@ -262,7 +264,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
           <Pencil size={15} color={tokens.mutedForeground} />
         </Pressable>
         <Pressable onPress={handleDelete} style={s.actionBtn}>
-          <Trash2 size={15} color="#ff3344" />
+          <Trash2 size={15} color={tokens.destructive} />
         </Pressable>
       </View>
 

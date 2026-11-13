@@ -15,7 +15,7 @@ export function SubAgentCard({ part }: { part: ToolPart }) {
 
   return (
     <View
-      className="my-1.5 w-full rounded-lg px-3 py-2"
+      className="my-1.5 w-full rounded-xl px-3 py-2"
       style={{
         borderWidth: 1,
         borderColor: tokens.border,

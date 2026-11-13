@@ -175,7 +175,6 @@ export function PromptInput({
   // sits below the text; measuring the resting height lets us lift it by exactly half the
   // excess instead of guessing a fixed offset. Zero when field and buttons already match.
   const [actionLift, setActionLift] = useState(0)
-  const oneLineFieldHeightRef = useRef(0)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   // FIXED padding: the KeyboardAvoidingView discounts this same value from the keyboard
   // height (negative keyboardVerticalOffset, in ChatScreen), so there is a single
@@ -672,12 +671,14 @@ export function PromptInput({
             style={{ flex: 1, paddingTop: INPUT_VERTICAL_PADDING, paddingBottom: INPUT_VERTICAL_PADDING }}
             onLayout={(event) => {
               const height = event.nativeEvent.layout.height
-              // The resting height is the smallest measured (one line) — growing never lowers
-              // it, so it is a safe single-line baseline to derive the lift from.
-              if (oneLineFieldHeightRef.current === 0 || height < oneLineFieldHeightRef.current) {
-                oneLineFieldHeightRef.current = height
-                setActionLift(Math.max(0, (height - ACTION_SIZE) / 2))
-              }
+              // The native field lays out a little taller than its line box (32 for a 24
+              // line on iOS), so the row grows past the buttons and half of that excess is
+              // what centres the icons on the text. The baseline has to come from the
+              // EMPTY field — the resting state — and the LATEST one wins: the first pass
+              // reports the bare line box before the field settles, and keeping the
+              // smallest sample froze the lift at zero, leaving the icons a few pixels low.
+              if (text !== '') return
+              setActionLift(Math.max(0, (height - ACTION_SIZE) / 2))
             }}
           >
             <TextInput

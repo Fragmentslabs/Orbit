@@ -104,6 +104,8 @@
     "tools": "Tools",
     "settings": "Settings",
     "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect from this computer?",
+    "disconnectBody": "Orbit goes back to the connection screen. You will need the PIN to get back in.",
     "folders": "Folders",
     "chats": "Chats",
     "archived": "Archived",
@@ -148,6 +150,11 @@
     "loading": "Loading media...",
     "empty": "No media here yet.",
     "delete": "Delete",
+    "deleteTitle": "Delete media?",
+    "deleteBody": "\"{{name}}\" will be permanently deleted from the computer.",
+    "deleteSelectedTitle_one": "Delete {{count}} item?",
+    "deleteSelectedTitle_other": "Delete {{count}} items?",
+    "deleteSelectedBody": "The files will be permanently deleted from the computer.",
     "openInChat": "Open in chat",
     "selectedCount": "{{count}} selected",
     "usage_one": "{{count}} item · {{size}}",
@@ -459,6 +466,21 @@
     "runningBackground": "Running in the background…",
     "noFolder": "No working folder in this conversation — the subagent ran in chat mode, without file access.",
     "empty": "The subagent returned no text."
+  },
+  "proposalCard": {
+    "pending": "Pending",
+    "discarded": "Dismissed",
+    "connected": "Connected",
+    "skill": "Skill",
+    "mcp": "MCP",
+    "name": "Name",
+    "description": "Description",
+    "files": "Files",
+    "target": "Target",
+    "reason": "Reason",
+    "secrets": "Secrets",
+    "tools_one": "{{count}} tool available",
+    "tools_other": "{{count}} tools available"
   },
   "mcpProposal": {
     "building": "Preparing the connection.",
@@ -1126,21 +1148,14 @@
   "routines": {
     "title": "Routines",
     "subtitle": "Sessions that come back on their own: the agent runs the same prompt at the scheduled time.",
-    "subtitleChat": "Chat sessions that come back on their own — no working folders, just conversation and chat tools.",
-    "mode": {
-      "chat": "Chat mode",
-      "code": "Code mode"
-    },
     "create": {
       "title": "New routine",
       "describeHint": "Describe it in plain text. The model turns that into a title, prompt, schedule and modes — you review everything in the next step.",
       "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.",
-      "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
       "model": "Model",
       "generate": "Generate",
       "generating": "Generating…",
-      "noModel": "Choose a model to generate the routine.",
-      "modeChatHint": "Chat mode: the routine runs without working folders — just conversation and chat tools."
+      "noModel": "Choose a model to generate the routine."
     },
     "review": {
       "back": "Back",
@@ -1151,8 +1166,8 @@
       "modes": "Modes",
       "modesHint": "The agent suggested these based on the described work. Toggle them freely.",
       "folders": "Working folders",
-      "foldersHint": "Picked in this step — the routine always runs in them.",
-      "noFolders": "No folder open. Open a folder in code mode before creating the routine.",
+      "foldersHint": "Optional: extra folders the prompt can open, analyse and edit. Without them the routine only touches its own folder.",
+      "noFolders": "No working folders — the routine works only in its own folder.",
       "create": "Create routine"
     },
     "schedule": {
@@ -1234,7 +1249,6 @@
       "new": "New routine",
       "emptyTitle": "No routines yet",
       "emptySubtitle": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a post-deploy check.",
-      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
       "createFirst": "Create your first routine",
       "active": "Active",
       "paused": "Paused",

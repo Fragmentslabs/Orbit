@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
-import { AlertCircle, Check, KeyRound, Plug, RefreshCw } from 'lucide-react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { KeyRound, Plug, RefreshCw } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useToolsStore } from '~/stores/tools-store'
+import type { McpServerConfig, McpServerStatus, ToolPart } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import type { McpServerConfig, McpServerStatus, ToolPart } from '@orbit/shared'
+import { useToolsStore } from '~/stores/tools-store'
+import { MONO_FONT, ProposalAction, ProposalCard } from './ProposalCard'
 
 /**
  * Card of the MCP connection proposal (tools mcp_connect / mcp_update) — mirrors the
@@ -84,13 +85,11 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
     if (part.state === 'done') void fetchMcpStatus()
   }, [part.state, fetchMcpStatus])
 
-  const card = [s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]
-
   if (part.state === 'running') {
     return (
-      <View style={[card, s.row]}>
+      <View style={[s.wrap, s.loading, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <ActivityIndicator size="small" color={tokens.primary} />
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('mcpProposal.building')}</Text>
+        <Text style={[s.loadingText, { color: tokens.mutedForeground }]}>{t('mcpProposal.building')}</Text>
       </View>
     )
   }
@@ -130,26 +129,90 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
   }
 
   const wasDiscarded = dismissed.includes(name)
+  const connected = status?.state === 'connected'
+  const discardedHere = wasDiscarded && !status
+  const badge = connected
+    ? { label: t('proposalCard.connected'), tone: 'success' as const }
+    : discardedHere
+      ? { label: t('proposalCard.discarded') }
+      : { label: input.type }
+
+  const facts = [
+    ...(target ? [{ label: t('proposalCard.target'), value: target, mono: true }] : []),
+    ...(input.reason ? [{ label: t('proposalCard.reason'), value: input.reason }] : []),
+  ]
+
+  const note = connected
+    ? t('proposalCard.tools', { count: status?.toolNames.length ?? 0 })
+    : status?.error
+      ? t('mcpProposal.failed', { error: status.error })
+      : status && needsAuth(status)
+        ? t('mcpProposal.needsAuth')
+        : discardedHere
+          ? t('mcpProposal.discarded')
+          : undefined
+
+  const actions = connected || discardedHere ? undefined : !status ? (
+    <>
+      <ProposalAction
+        label={t('mcpProposal.discard')}
+        variant="ghost"
+        disabled={busy !== null}
+        onPress={() => persistDismissed([...new Set([...dismissed, name])])}
+      />
+      <ProposalAction
+        label={t('mcpProposal.connect')}
+        variant="primary"
+        disabled={busy !== null}
+        icon={
+          busy === 'connect' ? <ActivityIndicator size="small" color={tokens.primaryForeground} /> : undefined
+        }
+        onPress={() => void run('connect', connect)}
+      />
+    </>
+  ) : (
+    <>
+      <ProposalAction
+        label={busy === 'retry' ? t('mcpProposal.retrying') : t('mcpProposal.retry')}
+        variant="outline"
+        disabled={busy !== null}
+        icon={<RefreshCw size={13} color={tokens.foreground} />}
+        onPress={() => void run('retry', () => reconnectMcp(name))}
+      />
+      {needsAuth(status) && (
+        <ProposalAction
+          label={
+            busy === 'auth'
+              ? t('mcpProposal.authorizing')
+              : status.authorized
+                ? t('mcpProposal.reauthorize')
+                : t('mcpProposal.authorize')
+          }
+          variant="primary"
+          disabled={busy !== null}
+          icon={<KeyRound size={13} color={tokens.primaryForeground} />}
+          onPress={() => void run('auth', () => authorizeMcp(name))}
+        />
+      )}
+    </>
+  )
 
   return (
-    <View style={card}>
-      <View style={s.row}>
-        <View style={[s.iconWrap, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
-          <Plug size={16} color="#818cf8" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={s.titleRow}>
-            <Text style={[s.title, { color: tokens.foreground }]}>{name}</Text>
-            <Text style={[s.badge, { color: tokens.mutedForeground, borderColor: tokens.border }]}>{input.type}</Text>
-          </View>
-          {!!target && (
-            <Text style={[s.mono, { color: tokens.mutedForeground }]} numberOfLines={1}>
-              {target}
-            </Text>
-          )}
-          {!!input.reason && <Text style={[s.desc, { color: tokens.mutedForeground }]}>{input.reason}</Text>}
-          {secret.length > 0 && (
-            <View style={s.secrets}>
+    <View style={s.wrap}>
+      <ProposalCard
+        icon={<Plug size={16} color={tokens.mutedForeground} />}
+        kind={t('proposalCard.mcp')}
+        title={name}
+        badge={badge}
+        facts={facts}
+        note={note}
+        noteTone={status?.error ? 'destructive' : status && needsAuth(status) ? 'warning' : 'muted'}
+        actions={actions}
+      >
+        {secret.length > 0 ? (
+          <View style={s.secrets}>
+            <Text style={[s.secretsLabel, { color: tokens.mutedForeground }]}>{t('proposalCard.secrets')}</Text>
+            <View style={s.secretWrap}>
               {secret.map((item) => (
                 <View key={item.key} style={[s.secret, { backgroundColor: tokens.muted }]}>
                   <KeyRound size={11} color={tokens.mutedForeground} />
@@ -159,110 +222,34 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
                 </View>
               ))}
             </View>
-          )}
-        </View>
-      </View>
-
-      {status?.state === 'connected' ? (
-        <View style={s.row}>
-          <Check size={14} color="#22c55e" />
-          <Text style={[s.statusText, { color: '#22c55e' }]}>
-            {t('mcpProposal.connected', { count: status.toolNames.length })}
-          </Text>
-        </View>
-      ) : wasDiscarded && !status ? (
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('mcpProposal.discarded')}</Text>
-      ) : !status ? (
-        <View style={[s.actions, { borderTopColor: tokens.border }]}>
-          <Pressable
-            disabled={busy !== null}
-            onPress={() => persistDismissed([...new Set([...dismissed, name])])}
-            style={[s.btn, { borderColor: tokens.border }]}
-          >
-            <Text style={[s.btnText, { color: tokens.foreground }]}>{t('mcpProposal.discard')}</Text>
-          </Pressable>
-          <Pressable
-            disabled={busy !== null}
-            onPress={() => void run('connect', connect)}
-            style={[s.btn, { backgroundColor: tokens.primary, opacity: busy ? 0.6 : 1 }]}
-          >
-            {busy === 'connect' ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={[s.btnText, { color: '#fff' }]}>{t('mcpProposal.connect')}</Text>
-            )}
-          </Pressable>
-        </View>
-      ) : (
-        <View style={{ gap: 8 }}>
-          {!!status.error && (
-            <View style={s.row}>
-              <AlertCircle size={14} color="#ef4444" />
-              <Text style={[s.statusText, { color: '#ef4444', flex: 1 }]}>
-                {t('mcpProposal.failed', { error: status.error })}
-              </Text>
-            </View>
-          )}
-          {needsAuth(status) && !status.error && (
-            <Text style={[s.statusText, { color: '#f59e0b' }]}>{t('mcpProposal.needsAuth')}</Text>
-          )}
-          <View style={[s.actions, { borderTopColor: tokens.border }]}>
-            <Pressable
-              disabled={busy !== null}
-              onPress={() => void run('retry', () => reconnectMcp(name))}
-              style={[s.btn, s.btnRow, { borderColor: tokens.border }]}
-            >
-              <RefreshCw size={13} color={tokens.foreground} />
-              <Text style={[s.btnText, { color: tokens.foreground }]}>
-                {busy === 'retry' ? t('mcpProposal.retrying') : t('mcpProposal.retry')}
-              </Text>
-            </Pressable>
-            {needsAuth(status) && (
-              <Pressable
-                disabled={busy !== null}
-                onPress={() => void run('auth', () => authorizeMcp(name))}
-                style={[s.btn, s.btnRow, { backgroundColor: tokens.primary }]}
-              >
-                <KeyRound size={13} color="#fff" />
-                <Text style={[s.btnText, { color: '#fff' }]}>
-                  {busy === 'auth'
-                    ? t('mcpProposal.authorizing')
-                    : status.authorized
-                      ? t('mcpProposal.reauthorize')
-                      : t('mcpProposal.authorize')}
-                </Text>
-              </Pressable>
-            )}
           </View>
-        </View>
-      )}
+        ) : null}
+      </ProposalCard>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  card: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 8, marginVertical: 4, width: '100%' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  iconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 14, fontWeight: '600' },
-  badge: { fontSize: 10, borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  mono: { fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
-  desc: { fontSize: 12, lineHeight: 16, marginTop: 2 },
-  secrets: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  secret: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  secretText: { fontSize: 10, fontFamily: 'monospace' },
-  statusText: { fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 8, paddingTop: 10, borderTopWidth: 1 },
-  btn: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    paddingVertical: 8,
+  wrap: { marginVertical: 4, width: '100%' },
+  loading: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
   },
-  btnRow: { flexDirection: 'row', gap: 6 },
-  btnText: { fontSize: 12, fontWeight: '600' },
+  loadingText: { fontSize: 13 },
+  secrets: { gap: 6 },
+  secretsLabel: { fontSize: 11 },
+  secretWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  secret: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  secretText: { fontSize: 10, fontFamily: MONO_FONT },
 })

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
 import type { ReactElement } from 'react'
-import { View, Text, Pressable, Animated, Alert, Dimensions, SectionList } from 'react-native'
+import { View, Text, Pressable, Alert, Dimensions, SectionList } from 'react-native'
 import type { GestureResponderEvent, SectionListData, SectionListRenderItemInfo } from 'react-native'
+import Animated, {
+  runOnJS,
+  runOnUI,
+  useAnimatedReaction,
+  useAnimatedStyle,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
@@ -43,6 +49,7 @@ import { useDraftFolders } from '~/stores/draft-folders-store'
 import { Storage } from '~/lib/storage'
 import { Spin } from '~/components/ui/spin'
 import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { cn } from '~/lib/utils'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -101,6 +108,7 @@ type NavItem = {
 
 export function Sidebar() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen)
   const mode = useWorkspaceStore((s) => s.mode)
@@ -128,9 +136,34 @@ export function Sidebar() {
 
   // Drawer position lives in the animation module — the swipe gesture
   // (useSidebarSwipe) drags the same values during the touch.
+  // Whether the drawer is actually on screen — the backdrop only takes touches
+  // while it is. Tied to the ANIMATION, not to the store: if the two ever
+  // disagree, an invisible backdrop over the content would eat every tap and
+  // every scroll of the chat.
+  const [drawerVisible, setDrawerVisible] = useState(false)
+  useAnimatedReaction(
+    () => {
+      'worklet'
+      return drawerTranslateX.value > -DRAWER_WIDTH + 0.5
+    },
+    (visible, previous) => {
+      'worklet'
+      if (visible !== previous) runOnJS(setDrawerVisible)(visible)
+    }
+  )
+
   useEffect(() => {
-    animateDrawer(sidebarOpen)
+    // On the UI runtime, the same place the gesture creates the animation: the
+    // hamburger and the swipe can never end up on different paths.
+    runOnUI(animateDrawer)(sidebarOpen)
   }, [sidebarOpen])
+
+  // Both read the shared values on the UI thread: the drawer follows the finger
+  // and settles without waiting for a render.
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }))
+  const drawerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: drawerTranslateX.value }],
+  }))
 
   // ─── Selection mode (chats and folders) ──────────────────────────────────
   const [selectionMode, setSelectionMode] = useState(false)
@@ -215,26 +248,21 @@ export function Sidebar() {
 
   const totalSelected = selectedIds.size + selectedFolderIds.size
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const count = totalSelected
-    Alert.alert(
-      count > 1 ? t('sidebar.bulkDeleteTitle_other', { count }) : t('sidebar.bulkDeleteTitle_one', { count }),
-      t('sidebar.bulkDeleteBody'),
-      [
-        { text: t('sidebar.cancel'), style: 'cancel' },
-        {
-          text: t('sidebar.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            await Promise.all([
-              ...[...selectedIds].map((id) => deleteSession(id)),
-              ...[...selectedFolderIds].map((id) => deleteFolder(id)),
-            ])
-            exitSelectionMode()
-          },
-        },
-      ],
-    )
+    const ok = await confirm({
+      title: count > 1 ? t('sidebar.bulkDeleteTitle_other', { count }) : t('sidebar.bulkDeleteTitle_one', { count }),
+      description: t('sidebar.bulkDeleteBody'),
+      confirmLabel: t('sidebar.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    await Promise.all([
+      ...[...selectedIds].map((id) => deleteSession(id)),
+      ...[...selectedFolderIds].map((id) => deleteFolder(id)),
+    ])
+    exitSelectionMode()
   }
 
   // ─── Action menu (long-press) ────────────────────────────────────────────
@@ -283,11 +311,16 @@ export function Sidebar() {
           icon: Trash2,
           label: t('sidebar.delete'),
           destructive: true,
-          onPress: () =>
-            Alert.alert(t('sidebar.deleteConversationTitle'), t('sidebar.deleteConversationBody', { title: sessionMenuTarget.title }), [
-              { text: t('sidebar.cancel'), style: 'cancel' },
-              { text: t('sidebar.delete'), style: 'destructive', onPress: () => void deleteSession(sessionMenuTarget.id) },
-            ]),
+          onPress: async () => {
+            const ok = await confirm({
+              title: t('sidebar.deleteConversationTitle'),
+              description: t('sidebar.deleteConversationBody', { title: sessionMenuTarget.title }),
+              confirmLabel: t('sidebar.delete'),
+              cancelLabel: t('sidebar.cancel'),
+              destructive: true,
+            })
+            if (ok) void deleteSession(sessionMenuTarget.id)
+          },
         },
       ]
     : []
@@ -314,11 +347,16 @@ export function Sidebar() {
           icon: Trash2,
           label: t('sidebar.removeFolder'),
           destructive: true,
-          onPress: () =>
-            Alert.alert(t('sidebar.removeFolderTitle'), t('sidebar.removeFolderBody', { name: folderMenuTarget.name }), [
-              { text: t('sidebar.cancel'), style: 'cancel' },
-              { text: t('sidebar.removeFolder'), style: 'destructive', onPress: () => void deleteFolder(folderMenuTarget.id) },
-            ]),
+          onPress: async () => {
+            const ok = await confirm({
+              title: t('sidebar.removeFolderTitle'),
+              description: t('sidebar.removeFolderBody', { name: folderMenuTarget.name }),
+              confirmLabel: t('sidebar.removeFolder'),
+              cancelLabel: t('sidebar.cancel'),
+              destructive: true,
+            })
+            if (ok) void deleteFolder(folderMenuTarget.id)
+          },
         },
       ]
     : []
@@ -329,11 +367,19 @@ export function Sidebar() {
   }, [closeSidebar, router])
 
   const handleDisconnect = useCallback(async () => {
+    const ok = await confirm({
+      title: t('sidebar.disconnectTitle'),
+      description: t('sidebar.disconnectBody'),
+      confirmLabel: t('sidebar.disconnect'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
     disconnect()
     await clearSavedConfig()
     closeSidebar()
     router.replace('/connect')
-  }, [disconnect, clearSavedConfig, closeSidebar, router])
+  }, [confirm, t, disconnect, clearSavedConfig, closeSidebar, router])
 
   const handleNewChat = useCallback(() => {
     closeSidebar()
@@ -809,36 +855,40 @@ export function Sidebar() {
     <>
       {/* Backdrop */}
       <Animated.View
-        pointerEvents={sidebarOpen ? 'auto' : 'none'}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-          opacity: backdropOpacity,
-          zIndex: 50,
-        }}
+        pointerEvents={drawerVisible ? 'auto' : 'none'}
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            zIndex: 50,
+          },
+          backdropStyle,
+        ]}
       >
         <Pressable style={{ flex: 1 }} onPress={closeSidebar} />
       </Animated.View>
 
       {/* Drawer */}
       <Animated.View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          width: DRAWER_WIDTH,
-          backgroundColor: tokens.background,
-          borderRightWidth: 1,
-          borderRightColor: tokens.border,
-          transform: [{ translateX: drawerTranslateX }],
-          zIndex: 51,
-          elevation: 10,
-        }}
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: DRAWER_WIDTH,
+            backgroundColor: tokens.background,
+            borderRightWidth: 1,
+            borderRightColor: tokens.border,
+            zIndex: 51,
+            elevation: 10,
+          },
+          drawerStyle,
+        ]}
       >
         <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
           {/* Mode Tabs */}
@@ -872,7 +922,7 @@ export function Sidebar() {
                   {t('sidebar.selected', { count: totalSelected })}
                 </Text>
               </View>
-              <Pressable onPress={handleBulkDelete} className="p-1.5" disabled={totalSelected === 0}>
+              <Pressable onPress={() => void handleBulkDelete()} className="p-1.5" disabled={totalSelected === 0}>
                 <Trash2 size={18} color={tokens.destructive} />
               </Pressable>
             </View>

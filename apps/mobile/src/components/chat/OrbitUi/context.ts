@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, useCallback, useContext } from 'react'
 import { INPUT_TYPES, interpolate, type OrbitUiBlock, type Scope, type Value } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 
@@ -31,7 +31,10 @@ export const useUi = () => useContext(UiContext)
 /** Text of the block with the `{expr}` resolved against the current state. */
 export function useText() {
   const { scope, locale } = useUi()
-  return (text: string | undefined) => (text ? interpolate(text, scope, locale) : '')
+  return useCallback(
+    (text: string | undefined) => (text ? interpolate(text, scope, locale) : ''),
+    [scope, locale],
+  )
 }
 
 export const isInputBlock = (block: OrbitUiBlock) => (INPUT_TYPES as readonly string[]).includes(block.type)

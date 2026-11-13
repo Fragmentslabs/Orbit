@@ -1,11 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { View, Pressable, Alert, StyleSheet, Text, Animated } from 'react-native'
+import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
 import { ActionMenu } from '~/components/ui/action-menu'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -51,6 +52,7 @@ export const ChatHeader = memo(function ChatHeader({
   onOpenWorkspace,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const [menuOpen, setMenuOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
@@ -118,15 +120,15 @@ export const ChatHeader = memo(function ChatHeader({
     return () => clearTimeout(timer)
   }, [code, directory, introOpacity, modesOpacity])
 
-  const handleDeletePress = () => {
-    Alert.alert(
-      t('chatHeader.deleteTitle'),
-      t('chatHeader.deleteBody', { title: session?.title }),
-      [
-        { text: t('sidebar.cancel'), style: 'cancel' },
-        { text: t('sidebar.delete'), style: 'destructive', onPress: onDelete },
-      ],
-    )
+  const handleDeletePress = async () => {
+    const ok = await confirm({
+      title: t('chatHeader.deleteTitle'),
+      description: t('chatHeader.deleteBody', { title: session?.title }),
+      confirmLabel: t('sidebar.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (ok) onDelete()
   }
 
   return (

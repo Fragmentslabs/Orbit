@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -7,6 +7,8 @@ import {
   TextInput as RNTextInput,
   View,
 } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import * as Clipboard from 'expo-clipboard'
 import { Check, Copy, Send } from 'lucide-react-native'
 import { formatValue, type OrbitUiBlock, type Value } from '@orbit/shared'
@@ -54,65 +56,167 @@ const INPUT_STYLE = { height: 36, borderRadius: 8, paddingHorizontal: 10, fontSi
 
 /**
  * Slider without a new dependency: RN does not ship a slider in the core (and the
- * @rn-primitives one only responds to screen-reader gestures, not to dragging). The
- * track and the thumb are `View`s; the drag comes from the native responder system,
- * which delivers `locationX` relative to the track itself.
+ * @rn-primitives one only responds to screen-reader gestures, not to dragging).
+ *
+ * The drag is a native pan gesture: the thumb and the fill follow the finger on the
+ * UI thread (Reanimated), while the fence state is written at ~30 Hz. The formulas
+ * and the chart keep up during the drag without a React render per touch frame —
+ * that split is what keeps the thumb smooth even on a fence with a chart.
  */
 export function SliderInput(block: Of<'slider'>) {
   const tx = useText()
   const tokens = useTokens()
-  const { locale } = useUi()
-  const [value, set] = useInput<number>(block.id, block.value ?? block.min)
-  const [trackWidth, setTrackWidth] = useState(0)
+  const { locale, setValue } = useUi()
+  const [value] = useInput<number>(block.id, block.value ?? block.min)
   const span = block.max - block.min
-  const step = block.step ?? (Number.isInteger(block.min) && Number.isInteger(block.max) ? 1 : span / 100)
+  const step =
+    block.step && block.step > 0
+      ? block.step
+      : Number.isInteger(block.min) && Number.isInteger(block.max)
+        ? 1
+        : span / 100
+  const safeStep = step > 0 ? step : 1
 
-  /** The touch becomes a value: `locationX` is relative to the track, so ratio = x/width. */
-  const apply = (locationX: number) => {
-    if (trackWidth <= 0 || span <= 0) return
-    const ratio = Math.min(1, Math.max(0, locationX / trackWidth))
-    const snapped = Math.round((block.min + ratio * span) / step) * step
-    set(Number(Math.min(block.max, Math.max(block.min, snapped)).toFixed(6)))
-  }
+  const width = useSharedValue(0)
+  const thumbX = useSharedValue(0)
+  const dragging = useSharedValue(false)
+  const lastSent = useSharedValue(0)
 
-  const ratio = span > 0 ? Math.min(1, Math.max(0, (Number(value) - block.min) / span)) : 0
+  const commit = useCallback((next: number) => setValue(block.id, next), [block.id, setValue])
+
+  const gesture = useMemo(() => {
+    /** Finger position → snapped value, without crossing to JS. */
+    const apply = (x: number, force = false) => {
+      'worklet'
+      const w = width.get()
+      if (w <= 0) return
+      const clamped = Math.min(w, Math.max(0, x))
+      thumbX.set(clamped)
+      let next = block.min
+      if (span > 0) {
+        const ratio = clamped / w
+        const snapped = Math.round((block.min + ratio * span) / safeStep) * safeStep
+        next = Number(Math.min(block.max, Math.max(block.min, snapped)).toFixed(6))
+      }
+      // eslint-disable-next-line react-hooks/purity -- this runs in a worklet on the UI thread, not during render
+      const now = Date.now()
+      if (force || now - lastSent.get() >= 32) {
+        lastSent.set(now)
+        runOnJS(commit)(next)
+      }
+    }
+
+    const pan = Gesture.Pan()
+      .maxPointers(1)
+      .activeOffsetX([-3, 3])
+      .failOffsetY([-20, 20])
+      .onStart((e) => {
+        'worklet'
+        dragging.set(true)
+        apply(e.x, true)
+      })
+      .onUpdate((e) => {
+        'worklet'
+        apply(e.x)
+      })
+      .onEnd((e) => {
+        'worklet'
+        apply(e.x, true)
+        dragging.set(false)
+      })
+      .onFinalize(() => {
+        'worklet'
+        dragging.set(false)
+      })
+
+    // Tapping the track sets the value too; it only wins when the finger did not drag.
+    const tap = Gesture.Tap()
+      .maxDistance(8)
+      .onEnd((e, success) => {
+        'worklet'
+        if (!success) return
+        apply(e.x, true)
+      })
+
+    return Gesture.Race(pan, tap)
+  }, [block.min, block.max, span, safeStep, width, thumbX, dragging, lastSent, commit])
+
   const thumb = 18
+
+  const fillStyle = useAnimatedStyle(() => {
+    const w = width.get()
+    return {
+      transform: [{ scaleX: w > 0 ? Math.max(0, Math.min(1, thumbX.get() / w)) : 0 }],
+    }
+  }, [])
+
+  const thumbStyle = useAnimatedStyle(
+    () => ({ transform: [{ translateX: thumbX.get() - thumb / 2 }] }),
+    [],
+  )
+
+  // The value can also change from outside (a `set` button, a default): put the
+  // thumb there — except while the finger owns it.
+  useEffect(() => {
+    if (dragging.get() || span <= 0) return
+    const w = width.get()
+    if (w <= 0) return
+    const ratio = Math.min(1, Math.max(0, (Number(value) - block.min) / span))
+    thumbX.set(ratio * w)
+  }, [value, span, block.min, dragging, thumbX, width])
 
   return (
     <Field
       label={tx(block.label)}
       aside={`${formatValue(Number(value), undefined, locale)}${block.unit ? ` ${block.unit}` : ''}`}
     >
-      <View
-        accessibilityRole="adjustable"
-        accessibilityLabel={block.label}
-        accessibilityValue={{ min: block.min, max: block.max, now: Number(value) }}
-        style={{ height: 32, justifyContent: 'center', marginHorizontal: thumb / 2 }}
-        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderGrant={(e) => apply(e.nativeEvent.locationX)}
-        onResponderMove={(e) => apply(e.nativeEvent.locationX)}
-      >
+      <GestureDetector gesture={gesture}>
         <View
-          style={{ height: 6, borderRadius: 999, backgroundColor: tokens.secondary, overflow: 'hidden' }}
-        >
-          <View style={{ width: `${ratio * 100}%`, height: '100%', backgroundColor: tokens.primary }} />
-        </View>
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: Math.max(0, Math.min(trackWidth, ratio * trackWidth)) - thumb / 2,
-            width: thumb,
-            height: thumb,
-            borderRadius: thumb / 2,
-            backgroundColor: tokens.primary,
-            borderWidth: 3,
-            borderColor: tokens.background,
+          accessibilityRole="adjustable"
+          accessibilityLabel={block.label}
+          accessibilityValue={{ min: block.min, max: block.max, now: Number(value) }}
+          style={{ height: 32, justifyContent: 'center', marginHorizontal: thumb / 2 }}
+          onLayout={(e) => {
+            const next = e.nativeEvent.layout.width
+            width.set(next)
+            if (!dragging.get() && span > 0) {
+              const ratio = Math.min(1, Math.max(0, (Number(value) - block.min) / span))
+              thumbX.set(ratio * next)
+            }
           }}
-        />
-      </View>
+        >
+          <View style={{ height: 6, borderRadius: 999, backgroundColor: tokens.secondary, overflow: 'hidden' }}>
+            <Animated.View
+              style={[
+                {
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: tokens.primary,
+                  transformOrigin: 'left center',
+                },
+                fillStyle,
+              ]}
+            />
+          </View>
+          <Animated.View
+            style={[
+              {
+                position: 'absolute',
+                left: 0,
+                top: (32 - thumb) / 2,
+                width: thumb,
+                height: thumb,
+                borderRadius: thumb / 2,
+                backgroundColor: tokens.primary,
+                borderWidth: 3,
+                borderColor: tokens.background,
+                pointerEvents: 'none',
+              },
+              thumbStyle,
+            ]}
+          />
+        </View>
+      </GestureDetector>
     </Field>
   )
 }
@@ -272,7 +376,7 @@ export function ToggleInput(block: Of<'toggle'>) {
       {/* The switch is only the drawing: what receives the touch is the whole row. Without
           that, tapping the switch itself would fire both handlers and the value
           would go back to what it was. */}
-      <View pointerEvents="none">
+      <View style={{ pointerEvents: 'none' }}>
         <Switch
           value={Boolean(value)}
           trackColor={{ true: tokens.primary, false: withAlpha(tokens.mutedForeground, 0.4) }}

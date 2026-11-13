@@ -1,73 +1,141 @@
-import { useState } from 'react'
-import { PanResponder } from 'react-native'
+/* eslint-disable react-hooks/immutability -- assigning `.value` on a shared
+ * value IS the Reanimated API. The writes happen inside worklets ('worklet'),
+ * which run on the UI thread outside the React render cycle; the rule forbids
+ * modifying any hook return value and cannot see that boundary. */
+import { useMemo } from 'react'
+import { Gesture } from 'react-native-gesture-handler'
+import { runOnJS, runOnUI, useSharedValue } from 'react-native-reanimated'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { DRAWER_WIDTH, animateDrawer, setDrawerOffset } from './sidebar-anim'
 
-/** Band from the left edge that recognizes the opening swipe. */
-const EDGE_WIDTH = 28
+/** Horizontal displacement that hands the touch to the drawer. */
+const MOVE_THRESHOLD = 36
 
-/** Minimum displacement before taking the touch from a child. */
-const MOVE_THRESHOLD = 8
+/** The drag only arms when it is this many times more horizontal than vertical.
+ *  A scroll — even a fast one, with the sideways drift of a thumb — always has
+ *  a vertical component bigger than that, so it keeps the touch. */
+const HORIZONTAL_RATIO = 3
 
-/** The gesture is only horizontal if dx dominates dy — lets the vertical scroll through. */
-const HORIZONTAL_RATIO = 1.5
+/** Vertical displacement that gives the touch back to the content. */
+const VERTICAL_SLOP = 14
 
 /** Fraction of the drawer width that decides open/close on release. */
-const SETTLE_RATIO = 0.4
+const SETTLE_RATIO = 0.35
 
-/** Velocity (px/ms) that decides open/close regardless of the distance. */
-const FLING_VELOCITY = 0.35
+/** Velocity (px/s) that decides open/close regardless of the distance. A pan
+ *  of the gesture handler reports points per second (the old PanResponder
+ *  reported per millisecond). */
+const FLING_VELOCITY = 350
 
-/** Drawer position when the drag started. There is only one gesture at a
- *  time, so living in the module avoids reading a ref during render. */
-let startOffset = 0
+function clampOffset(offset: number): number {
+  'worklet'
+  return Math.min(0, Math.max(-DRAWER_WIDTH, offset))
+}
+
+/** Syncs the store with the swipe result. The drawer was already animated on
+ *  the UI thread at release; the Sidebar effect re-issues the same target, which
+ *  is idempotent — the store must never diverge from what is on screen. */
+function commit(open: boolean) {
+  const store = useWorkspaceStore.getState()
+  if (open === store.sidebarOpen) return
+  if (open) store.openSidebar()
+  else store.closeSidebar()
+}
+
+/** Puts the drawer back where the store says it is, after a cancelled gesture. */
+function restore() {
+  runOnUI(animateDrawer)(useWorkspaceStore.getState().sidebarOpen)
+}
 
 /**
- * Swipe to the right from the left edge opens the sidebar; with it
- * open, a swipe to the left closes it. The drawer follows the finger.
+ * Dragging the screen to the right opens the sidebar; with it open, dragging to
+ * the left closes it. The drag works anywhere on the screen and the drawer
+ * follows the finger.
  *
- * The handlers should be spread on the View that wraps content + sidebar:
- * the capture happens in the responder capture phase, so lists and buttons
- * keep receiving touches normally.
+ * The gesture is a NATIVE pan (react-native-gesture-handler) attached to the
+ * layout's root view, with MANUAL activation: the touch only becomes a drawer
+ * pull when the movement is clearly horizontal (36px, three times more
+ * horizontal than vertical). Letting the platform decide with
+ * activeOffsetX/failOffsetY was not enough — on a fast scroll with the sideways
+ * drift of a thumb, whichever threshold the platform evaluates first wins, and
+ * the drawer was arming in the middle of the chat scroll. Here the decision is
+ * made once, from the whole movement.
  */
 export function useSidebarSwipe(enabled = true) {
-  // Created once; the current state comes from the store via getState() inside the
-  // handlers, so there is no stale closure and no ref read during render.
-  const [responder] = useState(() =>
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_evt, g) => {
-        if (Math.abs(g.dx) < MOVE_THRESHOLD) return false
-        if (Math.abs(g.dx) < Math.abs(g.dy) * HORIZONTAL_RATIO) return false
-        if (useWorkspaceStore.getState().sidebarOpen) return g.dx < 0
-        return g.dx > 0 && g.moveX - g.dx <= EDGE_WIDTH
-      },
-      onPanResponderGrant: () => {
-        startOffset = useWorkspaceStore.getState().sidebarOpen ? 0 : -DRAWER_WIDTH
-      },
-      onPanResponderMove: (_evt, g) => {
-        setDrawerOffset(startOffset + g.dx)
-      },
-      onPanResponderRelease: (_evt, g) => {
-        const offset = Math.min(0, Math.max(-DRAWER_WIDTH, startOffset + g.dx))
-        const progress = (offset + DRAWER_WIDTH) / DRAWER_WIDTH
-        const shouldOpen = Math.abs(g.vx) > FLING_VELOCITY ? g.vx > 0 : progress > SETTLE_RATIO
+  const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen)
+  // Only to know, at the end, whether the drawer had already taken the touch.
+  const tookTouch = useSharedValue(false)
+  // Displacement at the moment the pan activated: the drawer follows the finger
+  // from there, so it does not jump the threshold distance on activation.
+  const activationX = useSharedValue(0)
+  // Where the finger touched down, in window coordinates.
+  const touchX = useSharedValue(0)
+  const touchY = useSharedValue(0)
 
-        const store = useWorkspaceStore.getState()
-        if (shouldOpen === store.sidebarOpen) {
-          // State does not change: the Sidebar effect does not run, animate here.
-          animateDrawer(shouldOpen)
-        } else if (shouldOpen) {
-          store.openSidebar()
-        } else {
-          store.closeSidebar()
+  // Rebuilt when the drawer state changes: the worklets capture it, and it only
+  // happens on open/close, never in the middle of a drag.
+  return useMemo(() => {
+    if (!enabled) return Gesture.Pan().enabled(false)
+
+    // Where the drawer was when the drag started: closed is fully off screen.
+    const startOffset = sidebarOpen ? 0 : -DRAWER_WIDTH
+
+    return Gesture.Pan()
+      .manualActivation(true)
+      .maxPointers(1)
+      .onTouchesDown((event) => {
+        'worklet'
+        const touch = event.allTouches[0]
+        if (!touch) return
+        touchX.value = touch.absoluteX
+        touchY.value = touch.absoluteY
+        tookTouch.value = false
+      })
+      .onTouchesMove((event, manager) => {
+        'worklet'
+        const touch = event.allTouches[0]
+        if (!touch) return
+        const dx = touch.absoluteX - touchX.value
+        const dy = touch.absoluteY - touchY.value
+        const horizontal =
+          Math.abs(dx) >= MOVE_THRESHOLD && Math.abs(dx) >= Math.abs(dy) * HORIZONTAL_RATIO
+        // A closed drawer only opens (drag right); an open one only closes.
+        const pullsDrawer = sidebarOpen ? dx < 0 : dx > 0
+
+        if (horizontal) {
+          if (pullsDrawer) {
+            tookTouch.value = true
+            manager.activate()
+          } else {
+            manager.fail()
+          }
+        } else if (Math.abs(dy) >= VERTICAL_SLOP) {
+          // Not horizontal and the finger is already going up/down: a scroll.
+          manager.fail()
         }
-      },
-      onPanResponderTerminate: () => {
-        animateDrawer(useWorkspaceStore.getState().sidebarOpen)
-      },
-      onPanResponderTerminationRequest: () => false,
-    })
-  )
-
-  return enabled ? responder.panHandlers : {}
+      })
+      .onStart((event) => {
+        'worklet'
+        activationX.value = event.translationX
+      })
+      .onUpdate((event) => {
+        'worklet'
+        setDrawerOffset(startOffset + event.translationX - activationX.value)
+      })
+      .onEnd((event) => {
+        'worklet'
+        const offset = clampOffset(startOffset + event.translationX - activationX.value)
+        const progress = (offset + DRAWER_WIDTH) / DRAWER_WIDTH
+        const shouldOpen =
+          Math.abs(event.velocityX) > FLING_VELOCITY ? event.velocityX > 0 : progress > SETTLE_RATIO
+        animateDrawer(shouldOpen)
+        runOnJS(commit)(shouldOpen)
+      })
+      .onFinalize((_event, success) => {
+        'worklet'
+        // Cancelled without a normal end: the drawer goes back to the store state.
+        if (tookTouch.value && !success) runOnJS(restore)()
+        tookTouch.value = false
+      })
+  }, [enabled, sidebarOpen, tookTouch, activationX, touchX, touchY])
 }

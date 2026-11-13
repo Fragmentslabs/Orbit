@@ -15,7 +15,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { OrchestrationPlan, OrchestrationTask } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
-import { getThemeTokens } from '~/lib/theme-tokens'
+import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 interface Props {
@@ -60,9 +60,9 @@ function TaskStatusIcon({ status }: { status: OrchestrationTask['status'] }) {
     case 'streaming':
       return <ActivityIndicator size="small" color={tokens.mutedForeground} />
     case 'error':
-      return <X size={14} color={tokens.destructive ?? '#ef4444'} />
+      return <X size={14} color={tokens.destructive} />
     default:
-      return <Check size={14} color="#10b981" />
+      return <Check size={14} color={tokens.success} />
   }
 }
 
@@ -98,7 +98,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
         borderRadius: 12,
         borderWidth: 2,
         borderColor: tokens.border,
-        backgroundColor: tokens.muted,
+        backgroundColor: withAlpha(tokens.muted, 0.35),
       }}
     >
       <View className="flex-row items-center gap-2 mb-2">
@@ -188,7 +188,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             className="px-3 py-1.5 rounded-md"
             style={{ backgroundColor: tokens.primary, opacity: continuing ? 0.6 : 1 }}
           >
-            <Text className="text-xs font-medium" style={{ color: '#fff' }}>{t('orchestrationPlan.continue')}</Text>
+            <Text className="text-xs font-medium" style={{ color: tokens.primaryForeground }}>{t('orchestrationPlan.continue')}</Text>
           </Pressable>
         </View>
       )}
@@ -214,7 +214,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             className="px-3 py-1.5 rounded-md"
             style={{ backgroundColor: selectedCount === 0 ? tokens.muted : tokens.primary }}
           >
-            <Text className="text-xs font-medium" style={{ color: selectedCount === 0 ? tokens.mutedForeground : '#fff' }}>
+            <Text className="text-xs font-medium" style={{ color: selectedCount === 0 ? tokens.mutedForeground : tokens.primaryForeground }}>
               {t('orchestrationPlan.approveAndRun', { count: selectedCount < plan.tasks.length ? `(${selectedCount})` : '' })}
             </Text>
           </Pressable>

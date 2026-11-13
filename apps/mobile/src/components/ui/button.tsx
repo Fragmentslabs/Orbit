@@ -1,6 +1,6 @@
 import { Text, Pressable, View, StyleSheet } from "react-native";
 import { Children, type ReactNode } from "react";
-import { getThemeTokens } from '~/lib/theme-tokens';
+import { getThemeTokens, withAlpha } from '~/lib/theme-tokens';
 import { useThemeStore } from '~/stores/theme-store';
 
 type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -34,7 +34,7 @@ function Button({ variant = 'default', size = 'default', style, disabled, childr
 
   const VARIANT_BG: Record<ButtonVariant, string> = {
     default: tokens.primary,
-    destructive: '#ff3344',
+    destructive: withAlpha(tokens.destructive, 0.16),
     outline: 'transparent',
     secondary: tokens.muted,
     ghost: 'transparent',
@@ -43,7 +43,7 @@ function Button({ variant = 'default', size = 'default', style, disabled, childr
 
   const VARIANT_TEXT: Record<ButtonVariant, string> = {
     default: tokens.primaryForeground,
-    destructive: tokens.foreground,
+    destructive: tokens.destructive,
     outline: tokens.foreground,
     secondary: tokens.foreground,
     ghost: tokens.foreground,

@@ -31,6 +31,7 @@ import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { useAppearanceStore, hydratePersonaVisibility, hydrateModesInRow } from "../stores/appearance-store";
 import { useLocaleStore, hydrateLocale } from "../stores/locale-store";
 import { useMessageQueueStore } from "../stores/message-queue-store";
+import { ConfirmProvider } from "../components/ui/confirm-dialog";
 import { useModelModePrefs } from "../stores/model-mode-prefs";
 import { useModeOverrides } from "../stores/mode-overrides";
 import { useSimplePrefs } from "../stores/simple-prefs";
@@ -275,10 +276,12 @@ export default function RootLayout() {
       <KeyboardProvider>
         <ThemeProvider value={navTheme}>
           <StatusBar style={resolved === "dark" ? "light" : "dark"} />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(connection)" />
-            <Stack.Screen name="(main)" />
-          </Stack>
+          <ConfirmProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(connection)" />
+              <Stack.Screen name="(main)" />
+            </Stack>
+          </ConfirmProvider>
           <PortalHost />
         </ThemeProvider>
       </KeyboardProvider>

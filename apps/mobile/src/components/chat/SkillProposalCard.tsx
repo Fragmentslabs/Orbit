@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
-import { Sparkles, Check, X } from 'lucide-react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { Sparkles } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useToolsStore } from '~/stores/tools-store'
+import type { SkillProposal, ToolPart } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import type { SkillProposal, ToolPart } from '@orbit/shared'
+import { useToolsStore } from '~/stores/tools-store'
+import { ProposalAction, ProposalCard } from './ProposalCard'
 
 interface SkillProposalCardProps {
   part: ToolPart
@@ -24,9 +25,9 @@ function slugOf(part: ToolPart): string | null {
 }
 
 /**
- * Card of the skill proposal (tool create_skill) shown inline in the message.
- * Mirrors the SkillProposalCard of the desktop: buttons whenever the skill is not
- * installed and the user has not refused — "dismissed" only with a real refusal.
+ * Inline card of the skill proposal (tool create_skill). Same anatomy as the
+ * desktop ProposalCard: kind, state badge, labelled facts and a footer of
+ * actions — the state is the badge, not a different card.
  */
 export function SkillProposalCard({ part }: SkillProposalCardProps) {
   const { t } = useTranslation()
@@ -46,12 +47,11 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
     void fetchPending()
   }, [fetchSkills, fetchPending])
 
-  const isRunning = part.state === 'running'
-  if (isRunning) {
+  if (part.state === 'running') {
     return (
-      <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+      <View style={[s.wrap, s.loading, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <ActivityIndicator size="small" color={tokens.primary} />
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('skillProposal.building')}</Text>
+        <Text style={[s.loadingText, { color: tokens.mutedForeground }]}>{t('skillProposal.building')}</Text>
       </View>
     )
   }
@@ -78,96 +78,57 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
   const wasDiscarded = discarded.includes(slug)
   const actionable = !installed && (proposal !== undefined || !wasDiscarded)
 
-  if (installed) {
-    return (
-      <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-        <View style={[s.iconWrap, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
-          <Check size={16} color="#22c55e" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.title, { color: tokens.foreground }]}>{t('skillProposal.added')}</Text>
-          <Text style={[s.slug, { color: tokens.mutedForeground }]}>{t('skillProposal.availableAs', { slug })}</Text>
-        </View>
-      </View>
-    )
-  }
+  const badge = installed
+    ? { label: t('skillProposal.added'), tone: 'success' as const }
+    : wasDiscarded && !actionable
+      ? { label: t('proposalCard.discarded') }
+      : { label: t('proposalCard.pending') }
 
-  if (!actionable) {
-    return (
-      <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-        <View style={[s.iconWrap, { backgroundColor: tokens.muted }]}>
-          <X size={16} color={tokens.mutedForeground} />
-        </View>
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('skillProposal.dismissed')}</Text>
-      </View>
-    )
-  }
+  const facts = [
+    { label: t('proposalCard.name'), value: `@${data.slug}`, mono: true },
+    ...(data.description ? [{ label: t('proposalCard.description'), value: data.description }] : []),
+    ...(data.files?.length ? [{ label: t('proposalCard.files'), value: String(data.files.length) }] : []),
+  ]
 
   return (
-    <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-      <View style={s.row}>
-        <View style={[s.iconWrap, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
-          <Sparkles size={16} color="#818cf8" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.title, { color: tokens.foreground }]}>{data.name}</Text>
-          {data.description && (
-            <Text style={[s.desc, { color: tokens.mutedForeground }]} numberOfLines={2}>{data.description}</Text>
-          )}
-          <Text style={[s.slug, { color: tokens.mutedForeground }]}>@{data.slug}</Text>
-        </View>
-      </View>
-      {data.files && data.files.length > 0 && (
-        <Text style={[s.files, { color: tokens.mutedForeground }]}>
-          {t('skillProposal.extraFiles', { count: data.files.length })}
-        </Text>
-      )}
-      <View style={[s.actions, { borderTopColor: tokens.border }]}>
-        <Pressable onPress={() => void discardSkill(data.slug)} style={[s.btn, { borderColor: tokens.border }]}>
-          <Text style={[s.btnText, { color: tokens.foreground }]}>{t('skillProposal.dismiss')}</Text>
-        </Pressable>
-        <Pressable onPress={() => void approveSkill(data.slug)} style={[s.btn, { backgroundColor: tokens.primary }]}>
-          <Text style={[s.btnText, { color: '#fff' }]}>{t('skillProposal.addSkill')}</Text>
-        </Pressable>
-      </View>
+    <View style={s.wrap}>
+      <ProposalCard
+        icon={<Sparkles size={16} color={tokens.mutedForeground} />}
+        kind={t('proposalCard.skill')}
+        title={data.name}
+        badge={badge}
+        facts={facts}
+        note={installed ? t('skillProposal.availableAs', { slug }) : undefined}
+        actions={
+          actionable ? (
+            <>
+              <ProposalAction
+                label={t('skillProposal.dismiss')}
+                variant="ghost"
+                onPress={() => void discardSkill(data.slug)}
+              />
+              <ProposalAction
+                label={t('skillProposal.addSkill')}
+                variant="primary"
+                onPress={() => void approveSkill(data.slug)}
+              />
+            </>
+          ) : undefined
+        }
+      />
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  card: {
+  wrap: { marginVertical: 4 },
+  loading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
-    gap: 8,
-    marginVertical: 4,
   },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: { fontSize: 14, fontWeight: '600' },
-  desc: { fontSize: 12, lineHeight: 16, marginTop: 2 },
-  slug: { fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
-  files: { fontSize: 11, paddingLeft: 42 },
-  statusText: { fontSize: 13, color: '#6b7280' },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  btn: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  btnText: { fontSize: 12, fontWeight: '600' },
+  loadingText: { fontSize: 13 },
 })
