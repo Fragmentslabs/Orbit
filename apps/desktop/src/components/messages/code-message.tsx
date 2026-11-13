@@ -80,7 +80,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
   parts: ToolPart[]
   /** Detailed mode: title and all actions open, no accordion. */
   flat?: boolean
-  snapshot?: { patch?: string; files?: string[] }
+  snapshot?: { patch?: string; files?: string[]; authored?: string[] }
   sessionId?: string
   messageId?: string
   /** "+N -N" badge in the group header. The main chat turns it off: there it
@@ -142,7 +142,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
   // Only the browser-tab chat still uses the badge in the header (there is no footer there);
   // in the main chat it comes out in the message footer — see diffInFooter.
   const diffBadge = showDiff && !working && (
-    <DiffBadge patch={snapshot?.patch} parts={parts} sessionId={sessionId} messageId={messageId} />
+    <DiffBadge patch={snapshot?.patch} authored={snapshot?.authored} parts={parts} sessionId={sessionId} messageId={messageId} />
   )
 
   if (flat) {

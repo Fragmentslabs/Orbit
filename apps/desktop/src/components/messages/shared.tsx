@@ -609,7 +609,13 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
           <AgentAvatars names={agents} size={18} max={4} ring="border-background" />
         </button>
       ) : (
-        <DiffBadge patch={message.snapshot?.patch} parts={message.parts} sessionId={sessionId} messageId={message.id} />
+        <DiffBadge
+          patch={message.snapshot?.patch}
+          authored={message.snapshot?.authored}
+          parts={message.parts}
+          sessionId={sessionId}
+          messageId={message.id}
+        />
       )}
     </Actions>
   )
