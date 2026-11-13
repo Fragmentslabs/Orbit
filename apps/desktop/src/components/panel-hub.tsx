@@ -29,7 +29,7 @@ export function CreateCards() {
   return (
     <section className="flex flex-col gap-2.5">
       <SectionTitle>{t("panel.hub.create")}</SectionTitle>
-      <div className="grid grid-cols-2 gap-2 @md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 @md:grid-cols-3 @lg:grid-cols-6">
         {CREATIONS.map(({ kind, Icon, tone }) => (
           <button
             key={kind}

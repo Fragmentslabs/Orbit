@@ -23,6 +23,7 @@ import {
   DOCUMENT_QUOTE_MIME,
   formatMotionQuoteText,
   formatDesignQuoteText,
+  formatWidgetQuoteText,
   modelFileParts,
   StorageKeys,
   toolLimitFor,
@@ -1002,6 +1003,10 @@ async function preprocessAttachment(
           // The element pointed at in the canvas: artboard, path and its HTML, with
           // the user's text glued — see formatDesignQuoteText.
           text = formatDesignQuoteText(quote, deps.userText)
+        } else if (quote.kind === 'widget') {
+          // The widget of a fragment pointed at in the Widgets tab: the address is the
+          // fragment, the size travels along — see formatWidgetQuoteText.
+          text = formatWidgetQuoteText(quote, deps.userText)
         } else {
           const where = quote.page
             ? `, page ${quote.page}${

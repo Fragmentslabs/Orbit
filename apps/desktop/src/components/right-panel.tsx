@@ -297,7 +297,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
     case "fragment":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <FragmentTab fragmentId={tab.fragmentId} title={tab.title} sessionId={tab.sessionId ?? sessionId} />
+          <FragmentTab
+            fragmentId={tab.fragmentId}
+            title={tab.title}
+            route={tab.fragmentRoute}
+            sessionId={tab.sessionId ?? sessionId}
+          />
         </div>
       )
     case "motion":
@@ -786,19 +791,21 @@ export function RightPanel() {
   const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession)
   const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle)
   useEffect(() => {
-    if (pendingChatTab > 0 && pendingChatTabSession && activeSessionId) {
+    // No active chat (the fragments page, a fresh start): the tab goes into the same bucket the
+    // panel shows when nothing is active, instead of the request being dropped on the floor.
+    if (pendingChatTab > 0 && pendingChatTabSession) {
       const id = `chat-${pendingChatTabSession}`
       const exists = tabs.some((t) => t.id === id)
       if (!exists) {
-        addTabToStore(activeSessionId, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession })
+        addTabToStore(sessionKey, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession })
       }
-      setActiveTabInStore(activeSessionId, id)
+      setActiveTabInStore(sessionKey, id)
       usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
     }
     // Reacts to the REQUEST (pendingChatTab), reading the tabs of the moment. `tabs` as a
     // dep would make the effect run again because of the tab it just created itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, activeSessionId])
+  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, sessionKey])
 
   // Diff requested by the chat: it opens a Diff tab
   const pendingDiff = usePanelStore((s) => s.pendingDiff)

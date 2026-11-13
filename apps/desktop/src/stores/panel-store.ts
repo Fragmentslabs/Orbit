@@ -21,6 +21,8 @@ export interface PanelTab {
   artifactId?: string
   /** Fragment tab: id (frag-…) of the fragment it renders. Absent = the picker of existing fragments. */
   fragmentId?: string
+  /** Fragment tab: the screen of the fragment to open first (a widget's destination). */
+  fragmentRoute?: string
   /** Document tab: registry id (doc_xxx.md) opened in the Markdown canvas. */
   documentId?: string
   /** Motion tab: registry id (mv_xxx) of the composition the tab renders. */
@@ -138,8 +140,25 @@ export interface DesignQuote {
   html?: string
 }
 
+/**
+ * Widget pointed at in the Widgets tab, waiting to be sent. Same gesture as the design element
+ * — pointing at something in a panel and attaching it to the next message —, but what it
+ * addresses is the widget inside the fragment. The SAME widget asked twice stays once
+ * (see addQuote).
+ */
+export interface WidgetQuote {
+  id: string
+  kind: "widget"
+  fragmentId: string
+  fragmentName?: string
+  widgetId: string
+  name: string
+  size: string
+  sizes?: string[]
+}
+
 /** What a citation attachment can be — see QuotePayload. */
-export type PanelQuote = DocumentQuote | MotionQuote | DesignQuote
+export type PanelQuote = DocumentQuote | MotionQuote | DesignQuote | WidgetQuote
 
 export interface Viewport {
   width: number
@@ -240,7 +259,7 @@ interface PanelState {
   /** Closes the tabs of the fragments that were deleted (in any conversation). */
   closeFragmentTabs: (fragmentIds: string[]) => void
   /** Opens (or focuses) a fragment. An empty picker tab of the conversation is reused. */
-  openFragmentTab: (ref: { id: string; title: string; sessionId?: string }) => void
+  openFragmentTab: (ref: { id: string; title: string; sessionId?: string; route?: string }) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
   /** Opens (or reuses) the tab that renders an artifact in full screen.
@@ -308,7 +327,9 @@ interface PanelState {
   /** Attaches a cited stretch or a motion instant. The instant REPLACES the
    *  previous one instead of accumulating: two frames of the same composition do not form a
    *  single request — the user wants "this point", not "these points". */
-  addQuote: (quote: Omit<DocumentQuote, "id"> | Omit<MotionQuote, "id"> | Omit<DesignQuote, "id">) => void
+  addQuote: (
+    quote: Omit<DocumentQuote, "id"> | Omit<MotionQuote, "id"> | Omit<DesignQuote, "id"> | Omit<WidgetQuote, "id">,
+  ) => void
   removeQuote: (id: string) => void
   clearQuotes: () => void
   viewport: Viewport | null
@@ -536,15 +557,16 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const existing = tabs.find((t) => t.type === "fragment" && t.fragmentId === ref.id)
         const picker = tabs.find((t) => t.type === "fragment" && !t.fragmentId)
         const tab: PanelTab = existing
-          ? { ...existing, title: ref.title }
+          ? { ...existing, title: ref.title, fragmentRoute: ref.route }
           : picker
-            ? { ...picker, fragmentId: ref.id, title: ref.title }
+            ? { ...picker, fragmentId: ref.id, title: ref.title, fragmentRoute: ref.route }
             : {
                 id: `fragment-${nextTabId()}`,
                 type: "fragment",
                 title: ref.title,
                 sessionId: tabSession(bucket),
                 fragmentId: ref.id,
+                fragmentRoute: ref.route,
               }
         const base = existing ?? picker
         return {
@@ -997,10 +1019,16 @@ export const usePanelStore = create<PanelState>((set, get) => {
           q.name === quote.name &&
           q.file === quote.file &&
           (q.elementPath ?? []).join(">") === (quote.elementPath ?? []).join(">")
-        const currentTabs =
-          quote.kind === "motion"
-            ? state.quotes.filter((q) => q.kind !== "motion")
-            : state.quotes.filter((q) => !sameDesign(q))
+        // The same widget pointed at again replaces its previous chip instead of stacking
+        // two identical requests.
+        const sameWidget = (q: PanelQuote) =>
+          quote.kind === "widget" &&
+          q.kind === "widget" &&
+          q.fragmentId === quote.fragmentId &&
+          q.widgetId === quote.widgetId
+        const currentTabs = state.quotes
+          .filter((q) => (quote.kind === "motion" ? q.kind !== "motion" : !sameDesign(q)))
+          .filter((q) => !sameWidget(q))
         return {
           quotes: [...currentTabs, { ...quote, id: `quote-${Date.now()}-${currentTabs.length}` } as PanelQuote],
         }
