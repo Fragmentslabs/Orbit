@@ -111,7 +111,7 @@ import { ConnectAppDialog } from "@/components/connect-app-dialog"
 import { EnvironmentSelector } from "@/src/components/peers/environment-selector"
 import { RunningElsewhere } from "@/src/components/peers/running-elsewhere"
 import { RemoteSessionList } from "@/src/components/peers/remote-session-list"
-import { startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
+import { EMPTY_LIST, startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1815,7 +1815,6 @@ export function AppSidebar() {
       <Sidebar variant="floating" collapsible="offcanvas">
         <SidebarHeader>
           <ModeTabs />
-          <EnvironmentSelector />
         </SidebarHeader>
         <SidebarContent>
           {env !== "local" ? (
@@ -1857,19 +1856,41 @@ function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
   // In the peers store: the environment selector opens the same modal.
   const connectOpen = usePeersStore((s) => s.connectOpen)
   const setConnectOpen = usePeersStore((s) => s.setConnectOpen)
+  const openConnect = usePeersStore((s) => s.openConnect)
+  const peers = usePeersStore((s) => s.snapshot?.peers ?? EMPTY_LIST)
 
   return (
     <>
       <ConnectAppDialog open={connectOpen} onOpenChange={setConnectOpen} />
       <div className="flex flex-col gap-1 px-2 py-2">
-        <Button
-          variant="ghost"
-          onClick={() => setConnectOpen(true)}
-          className="w-full justify-start gap-2 text-xs font-normal text-muted-foreground hover:text-foreground rounded-sm p-2"
-        >
-          <Smartphone className="size-4" />
-          {t("sidebar.account.connectApp")}
-        </Button>
+        {peers.length > 0 ? (
+          // With a desktop paired, the environment selector takes the place of
+          // the full button and "connect an app" collapses into the phone icon:
+          // one place to say WHERE you are, one to connect something else.
+          <div className="flex items-center gap-1">
+            <div className="min-w-0 flex-1">
+              <EnvironmentSelector />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => openConnect("phone")}
+              aria-label={t("sidebar.account.connectApp")}
+              className="size-8 shrink-0 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            >
+              <Smartphone className="size-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            onClick={() => setConnectOpen(true)}
+            className="w-full justify-start gap-2 text-xs font-normal text-muted-foreground hover:text-foreground rounded-sm p-2"
+          >
+            <Smartphone className="size-4" />
+            {t("sidebar.account.connectApp")}
+          </Button>
+        )}
         <SidebarSeparator className="my-1" />
         <AccountDropdown onOpenSettings={onOpenSettings} />
       </div>

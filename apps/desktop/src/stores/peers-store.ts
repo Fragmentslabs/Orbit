@@ -1,7 +1,9 @@
 import { create } from "zustand"
-import type { ChatEvent, ChatMessage, ChatStatus, SessionInfo } from "@shared/chat"
+import type { ChatEvent, ChatMessage, ChatStatus, FolderInfo, SessionInfo } from "@shared/chat"
 import { parseRemoteSessionId, type PeersEvent, type PeersSnapshot } from "@shared/peers"
 import { peersApi } from "@/src/lib/ipc"
+
+const ENV_KEY = "orbit:environment"
 
 /**
  * Other desktops, as the renderer sees them (electron/lib/peers).
@@ -27,6 +29,7 @@ interface PeersState {
   snapshot: PeersSnapshot | null
   env: EnvId
   sessionsByPeer: Record<string, SessionInfo[]>
+  foldersByPeer: Record<string, FolderInfo[]>
   runningByPeer: Record<string, string[]>
   activeByPeer: Record<string, string | null>
   messages: Record<string, ChatMessage[]>
@@ -55,6 +58,7 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   snapshot: null,
   env: "local",
   sessionsByPeer: {},
+  foldersByPeer: {},
   runningByPeer: {},
   activeByPeer: {},
   messages: {},
@@ -69,6 +73,11 @@ export const usePeersStore = create<PeersState>((set, get) => ({
 
   setEnv: (env) => {
     set({ env })
+    try {
+      localStorage.setItem(ENV_KEY, env)
+    } catch {
+      /* storage unavailable — the choice just does not survive a reload */
+    }
     if (env !== "local") void peersApi.resend(env)
   },
 
@@ -198,6 +207,9 @@ function applyEvent(event: PeersEvent) {
     case "sessions":
       usePeersStore.setState((s) => ({ sessionsByPeer: { ...s.sessionsByPeer, [event.peerId]: event.sessions } }))
       break
+    case "folders":
+      usePeersStore.setState((s) => ({ foldersByPeer: { ...s.foldersByPeer, [event.peerId]: event.folders } }))
+      break
     case "statuses":
       usePeersStore.setState((s) => {
         const statuses = { ...s.statuses }
@@ -218,6 +230,14 @@ let started = false
 export function startPeersMirror(): void {
   if (started || !window.ipcRenderer) return
   started = true
+  // The environment survives a reload — coming back to "this computer" every
+  // time made the remote machine feel like a tab that forgets itself.
+  try {
+    const saved = localStorage.getItem(ENV_KEY)
+    if (saved && saved !== "local") usePeersStore.setState({ env: saved })
+  } catch {
+    /* no storage */
+  }
   peersApi.onEvent(applyEvent)
   void peersApi.snapshot().then((snapshot) => usePeersStore.setState({ snapshot }))
   void peersApi.resend()

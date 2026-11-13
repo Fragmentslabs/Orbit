@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
 import { AudioLines, CheckIcon, Folder, FolderGit2, Inbox, LayoutGrid, Pause, Terminal, ChevronDown, ChevronLeft, ChevronRight, CodeXml, FileText, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
-import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind } from "@shared/media"
+import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, VIDEO_SCHEME, type MediaEntry, type MediaKind } from "@shared/media"
+import { remoteSessionId } from "@shared/peers"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -15,8 +16,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Hint } from "@/components/ui/hint"
 import { Input } from "@/components/ui/input"
-import { artifactApi, mediaApi } from "@/src/lib/ipc"
+import { artifactApi, mediaApi, peersApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
+import { EMPTY_LIST, usePeersStore } from "@/src/stores/peers-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
 import { KIND_ICON } from "@/src/lib/media-kind-icon"
@@ -260,11 +262,26 @@ export function MediaGallery() {
   const { mode, setMode, folders } = useWorkspace()
   // The page's own Chat | Code | All toggle; until it is chosen it follows the workspace mode.
   const [viewScope, setViewScope] = useViewScope("media", mode)
-  const sessions = useSessionStore((s) => s.sessions)
+  /**
+   * The gallery follows the ENVIRONMENT: "this computer" reads the local
+   * registry; a paired desktop reads that machine's registry through the peer
+   * REST client. The ids come back registered, so thumbnails and previews are
+   * fetched from the machine that owns the file.
+   */
+  const env = usePeersStore((s) => s.env)
+  const peerId = env === "local" ? null : env
+  const peerSessions = usePeersStore((s) => (peerId ? s.sessionsByPeer[peerId] : undefined))
+  const peerFolders = usePeersStore((s) => (peerId ? s.foldersByPeer[peerId] : undefined))
+  const peerActive = usePeersStore((s) => (peerId ? s.activeByPeer[peerId] : null))
+  // Both sources are subscribed; the environment picks which one feeds the grid.
+  const localSessions = useSessionStore((s) => s.sessions)
+  const localFolders = useSessionStore((s) => s.folders)
+  const localActive = useSessionStore((s) => s.activeIds[mode])
+  const sessions = (peerId ? peerSessions : localSessions) ?? EMPTY_LIST
   /** Sidebar folders (grouping of conversations) — different from the workspace working
    *  folders, which are repositories. */
-  const sidebarFolders = useSessionStore((s) => s.folders)
-  const activeSessionId = useSessionStore((s) => s.activeIds[mode])
+  const sidebarFolders = (peerId ? peerFolders : localFolders) ?? EMPTY_LIST
+  const activeSessionId = peerId ? (peerActive ?? undefined) : localActive
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
@@ -285,20 +302,55 @@ export function MediaGallery() {
    */
   const [confirmDelete, setConfirmDelete] = useState<"selection" | "viewer" | null>(null)
   const mounted = useRef(true)
+  /** Last refresh started — a slow answer from the previous environment cannot
+   *  overwrite the grid after the switch. */
+  const refreshSeq = useRef(0)
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current
+    const stale = () => !mounted.current || seq !== refreshSeq.current
+    if (peerId) {
+      try {
+        const [list, disk] = await Promise.all([peersApi.media(peerId), peersApi.mediaUsage(peerId)])
+        if (stale()) return
+        setEntries(
+          list.map((entry) => ({
+            ...entry,
+            // The wire carries the peer's own session ids; the sidebar shows them
+            // namespaced, so the scope rules and "open in chat" match the list.
+            sessionId: entry.sessionId ? remoteSessionId(peerId, entry.sessionId) : entry.sessionId,
+            linkedSessionIds: entry.linkedSessionIds?.map((id) => remoteSessionId(peerId, id)),
+            // The absolute URL the peer returns points at its TLS port and cannot be
+            // loaded by the renderer; the scheme handler fetches it with the pinned
+            // certificate instead.
+            videoUrl: mediaKind(entry) === "video" ? `${VIDEO_SCHEME}://${entry.id}` : entry.videoUrl,
+          })),
+        )
+        setUsage(disk)
+      } catch {
+        if (!stale()) {
+          setEntries([])
+          setUsage({ count: 0, bytes: 0 })
+        }
+      } finally {
+        if (!stale()) setLoading(false)
+      }
+      return
+    }
     const [list, disk] = await Promise.all([mediaApi.list(), mediaApi.usage()])
-    if (!mounted.current) return
+    if (stale()) return
     setEntries(list)
     setUsage(disk)
     setLoading(false)
-  }, [])
+  }, [peerId])
 
   useEffect(() => {
     mounted.current = true
+    setLoading(true)
     void (async () => {
       // First opening: it indexes the images that existed before the registry.
-      if (!backfillDone) {
+      // Backfill is local-only — the other machine keeps its own registry.
+      if (!backfillDone && !peerId) {
         backfillDone = true
         try {
           await mediaApi.backfill()
@@ -309,7 +361,7 @@ export function MediaGallery() {
       await refresh()
     })()
     return () => { mounted.current = false }
-  }, [refresh])
+  }, [refresh, peerId])
 
   // Artifact rewritten with the gallery open: the record changes (revision, size,
   // title) and the thumbnail is recaptured with the SAME file name. Only the
@@ -320,6 +372,9 @@ export function MediaGallery() {
   // the middle of the conversation). The breathing room groups the burst of a whole turn into a
   // single reload, instead of one per file.
   useEffect(() => {
+    // Local registry only — a remote gallery refreshes on open and after its
+    // own actions.
+    if (peerId) return
     let timer: ReturnType<typeof setTimeout> | null = null
     const off = mediaApi.onChanged(() => {
       if (timer) clearTimeout(timer)
@@ -329,7 +384,7 @@ export function MediaGallery() {
       if (timer) clearTimeout(timer)
       off()
     }
-  }, [refresh])
+  }, [refresh, peerId])
 
   /** Sessions of the current mode — gallery scope (chat shows only chat, etc). */
   const modeSessionIds = useMemo(
@@ -456,14 +511,17 @@ export function MediaGallery() {
       const value = `${FOLDER_PREFIX}${activeSession.folderId}`
       if (has(value)) return value
     }
-    const directory = activeSession?.directory ?? folders[0]
+    // A remote session has its own directory; the local workspace repos are not
+    // candidates there (they would filter the peer's media by a path that does
+    // not exist on that machine).
+    const directory = activeSession?.directory ?? (peerId ? undefined : folders[0])
     if (directory) {
       const value = `${PROJECT_PREFIX}${folderKey(normalizeFolderName(directory))}`
       if (has(value)) return value
     }
     if (activeSessionId && has(SCOPE_SESSION)) return SCOPE_SESSION
     return SCOPE_ALL
-  }, [activeSession, activeSessionId, folders, scopedEntries, matchesScope])
+  }, [activeSession, activeSessionId, folders, peerId, scopedEntries, matchesScope])
 
   /** Values that exist now — the override dies when it leaves the scene (e.g. the
    *  user switches mode and that folder has no media here). */
@@ -529,6 +587,14 @@ export function MediaGallery() {
   /** Opens the origin chat and scrolls to the message where the image appeared. */
   const openInChat = useCallback(async (entry: MediaEntry) => {
     if (!entry.sessionId) return
+    if (peerId) {
+      const session = usePeersStore.getState().sessionsByPeer[peerId]?.find((s) => s.id === entry.sessionId)
+      if (!session) return
+      setMode(session.mode === "code" ? "code" : "chat")
+      usePeersStore.getState().openSession(session.id)
+      setPreview(null)
+      return
+    }
     const session = useSessionStore.getState().sessions.find((s) => s.id === entry.sessionId)
     if (!session) return
     const mode = session.mode === "code" ? "code" : "chat"
@@ -539,7 +605,7 @@ export function MediaGallery() {
       // waits for the chat to render the list before looking for the message
       setTimeout(() => void scrollToMessage(entry.messageId!), 400)
     }
-  }, [setMode])
+  }, [setMode, peerId])
 
   /**
    * Click on the tile: an image opens the lightbox; an artifact opens its own tab (the
@@ -557,14 +623,15 @@ export function MediaGallery() {
       // Pieces with a tab of their own (motion, design, slides, document, artifact) open in the
       // panel that is ON SCREEN, and not in the origin conversation's: opened there, the tab went
       // to a hidden panel and the click seemed to do nothing.
-      const bucketKey = useSessionStore.getState().activeIds[mode] ?? ORPHAN_KEY
+      // The remote chat has its own panel bucket, keyed by the namespaced session.
+      const bucketKey = (peerId ? peerActive : useSessionStore.getState().activeIds[mode]) ?? ORPHAN_KEY
       if (openMediaEntryInPanel(entry, bucketKey)) return
       setPreview(entry)
       // The chain is fixed on opening: switching version inside the viewer cannot
       // rewrite the list one is navigating through.
       setPreviewChain(versionsByHead.get(entry.id) ?? null)
     },
-    [mode, versionsByHead],
+    [mode, peerActive, peerId, versionsByHead],
   )
 
   /** Position of the open version inside the stack, for the viewer arrows. */
@@ -590,7 +657,13 @@ export function MediaGallery() {
       const motionIds = entries.flatMap((e) => (ids.includes(e.id) && e.motionId ? [e.motionId] : []))
       const designIds = entries.flatMap((e) => (ids.includes(e.id) && e.designId ? [e.designId] : []))
       const slidesIds = entries.flatMap((e) => (ids.includes(e.id) && e.slidesId ? [e.slidesId] : []))
-      await mediaApi.remove(ids)
+      if (peerId) {
+        // Deletion runs on the machine that owns the files; a peer without the
+        // control grant is refused there (the IPC also checks it here).
+        await Promise.all(ids.map((id) => peersApi.deleteMedia(peerId, id).catch(() => false)))
+      } else {
+        await mediaApi.remove(ids)
+      }
       usePanelStore.getState().closeMotionTabs(motionIds)
       usePanelStore.getState().closeDesignTabs(designIds)
       usePanelStore.getState().closeSlidesTabs(slidesIds)
@@ -600,7 +673,7 @@ export function MediaGallery() {
       setPreviewChain(null)
       await refresh()
     },
-    [entries, refresh],
+    [entries, peerId, refresh],
   )
 
   const selectedDesignCount = useMemo(
@@ -768,16 +841,17 @@ export function MediaGallery() {
       <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-1.5 text-[11px] text-muted-foreground">
         <HardDriveIcon className="size-3" />
         <span>{t("media.usage", { count: usage.count, size: formatBytes(usage.bytes) })}</span>
-        <Hint label={t("media.cleanupScriptsHint")}>
-          <button
-            type="button"
-            onClick={() => void cleanupScripts()}
-            className="ml-auto rounded-md px-2 py-0.5 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          >
-       
-           {t("media.cleanupScripts")}
-        </button>
-        </Hint>
+        {!peerId && (
+          <Hint label={t("media.cleanupScriptsHint")}>
+            <button
+              type="button"
+              onClick={() => void cleanupScripts()}
+              className="ml-auto rounded-md px-2 py-0.5 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              {t("media.cleanupScripts")}
+            </button>
+          </Hint>
+        )}
       </div>
 
       <Dialog

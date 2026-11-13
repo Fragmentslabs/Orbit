@@ -46,7 +46,7 @@ export function RemoteChatView() {
 
   const name = peer?.name ?? ""
   const busy = isRemoteRunning(status)
-  const canSend = !!peer?.grants.send && !!peer?.online
+  const canSend = (!!peer?.grants.control || !!peer?.grants.send) && !!peer?.online
   const canFiles = !!peer?.grants.files && !!peer?.online
   const mode = session?.mode === "code" ? "code" : "chat"
 
@@ -87,7 +87,7 @@ export function RemoteChatView() {
       <Network className="size-3.5 text-primary" />
       <span className="font-medium text-foreground">{t("peers.env.remoteBanner", { name })}</span>
       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
-        {peer?.grants.send ? t("peers.env.canSend") : t("peers.env.viewOnly")}
+        {canSend ? t("peers.env.canSend") : t("peers.env.viewOnly")}
       </span>
       {!peer?.online ? <span className="text-destructive">{t("peers.env.offline", { name })}</span> : null}
       <span className="flex-1" />
@@ -160,7 +160,7 @@ export function RemoteChatView() {
 
       <div className="mx-auto w-full max-w-3xl pt-2">
         {waiting ? <p className="mb-1.5 text-xs text-amber-600 dark:text-amber-400">{t("peers.remote.approvalNote", { name })}</p> : null}
-        {!peer?.grants.send ? (
+        {!canSend ? (
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
             <Lock className="size-3.5" />
             {t("peers.remote.viewOnlyNote", { name })}
