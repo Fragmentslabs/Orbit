@@ -1,8 +1,8 @@
 import { sessionIcon } from "@/src/components/agent-meta"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { AppWindow, Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
+import { AppWindow, Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Pin, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -649,10 +649,54 @@ export function RightPanel() {
   // `?? []` creates a new array on every render: memoized, the callbacks and
   // effects below stop recreating along with it.
   const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
+  /**
+   * Bucket of every tab. A pinned tab is shown while the screen is in ANY conversation,
+   * and it keeps belonging to the chat that opened it — closing it, updating it (the URL of a
+   * browser tab) or passing its session to the content has to use this bucket, not the
+   * chat on the screen.
+   */
+  const bucketOfTab = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const [bucket, list] of Object.entries(tabsBySession)) {
+      for (const tab of list) map.set(tab.id, bucket)
+    }
+    return map
+  }, [tabsBySession])
+  /** The pinned tabs of ALL conversations, in the order they were pinned. */
+  const pinnedTabs = useMemo(() => {
+    const pinned: PanelTab[] = []
+    for (const list of Object.values(tabsBySession)) {
+      for (const tab of list) if (tab.pinned) pinned.push(tab)
+    }
+    return pinned.sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0))
+  }, [tabsBySession])
+  /**
+   * What the row shows: the pins first (in every conversation), then this chat's own tabs.
+   * The Set avoids repeating a pinned tab that also lives in the current bucket.
+   */
+  const visibleTabs = useMemo(() => {
+    const seen = new Set<string>()
+    const out: PanelTab[] = []
+    for (const tab of [...pinnedTabs, ...tabs]) {
+      if (seen.has(tab.id)) continue
+      seen.add(tab.id)
+      out.push(tab)
+    }
+    return out
+  }, [pinnedTabs, tabs])
+  /** Chat that owns a tab — undefined when it lives in the bucket with no chat (the orphan). */
+  const sessionOfTab = useCallback(
+    (tabId: string) => {
+      const bucket = bucketOfTab.get(tabId)
+      return bucket && bucket !== ORPHAN_KEY ? bucket : undefined
+    },
+    [bucketOfTab],
+  )
   const activeTabId = activeTabBySession[sessionKey] ?? null
   const addTabToStore = usePanelStore((s) => s.addTab)
   const removeTabFromStore = usePanelStore((s) => s.removeTab)
   const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
+  const setTabPinned = usePanelStore((s) => s.setTabPinned)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   /** Last palette request already served — the nonce avoids repeating the opening. */
@@ -707,7 +751,9 @@ export function RightPanel() {
 
     if (sessionId) {
       const id = `chat-${sessionId}`
-      const exists = tabs.some((t) => t.id === id)
+      // A pinned tab of this same chat may be living in another bucket: it is already
+      // on the row, so the request only points the panel at it.
+      const exists = visibleTabs.some((t) => t.id === id)
       if (!exists) {
         addTabToStore(sessionKey, { id, type: "chat", title: title ?? "Chat", sessionId })
       }
@@ -736,7 +782,7 @@ export function RightPanel() {
     const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
+  }, [sessionKey, visibleTabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
 
   /**
    * The palette (⌘P) asked for a file. Here one only prepares the PLACE: opening the panel,
@@ -749,37 +795,45 @@ export function RightPanel() {
     handledFileRequest.current = pendingFile.nonce
     if (folders.length === 0) return
     setRightPanelOpen(true)
-    const existing = tabs.find((tab) => tab.type === "folders")
+    // A pinned Folders tab of another chat is the same browser: it is reused instead of
+    // opening a second one.
+    const existing = visibleTabs.find((tab) => tab.type === "folders")
     if (existing) setActiveTabInStore(sessionKey, existing.id)
     else void addTab("folders")
-  }, [pendingFile, folders.length, tabs, sessionKey, setActiveTabInStore, setRightPanelOpen, addTab])
+  }, [pendingFile, folders.length, visibleTabs, sessionKey, setActiveTabInStore, setRightPanelOpen, addTab])
 
   const removeTab = useCallback((id: string) => {
-    const sk = activeSessionId ?? ORPHAN_KEY
-    const tab = tabs.find((t) => t.id === id)
+    // The bucket comes from the tab, not from the chat on the screen: a pinned tab can be
+    // closed while another conversation is the one on the screen.
+    const bucket = bucketOfTab.get(id) ?? activeSessionId ?? ORPHAN_KEY
+    const tab = (usePanelStore.getState().tabsBySession[bucket] ?? []).find((t) => t.id === id)
     if (tab?.type === "terminal") {
       useTerminalStore.getState().killTerminal(id)
     }
     if (tab?.type === "browser") {
       // The tab was closed: it destroys the webview of the pool and unregisters it in the main process (otherwise the
       // page would stay alive in the hidden host and the agent would navigate an orphan browser).
-      destroyWebview(`${activeSessionId ?? "__orphan__"}:${id}`)
+      destroyWebview(`${bucket}:${id}`)
     }
-    removeTabFromStore(sk, id)
-  }, [activeSessionId, tabs, removeTabFromStore])
+    removeTabFromStore(bucket, id)
+  }, [activeSessionId, bucketOfTab, removeTabFromStore])
 
   const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
-    const sk = activeSessionId ?? "__orphan__"
     // It reads from the store instead of the closure: did-navigate may arrive after other
     // tab changes — with the closure, the map over an old list would discard
     // tabs added in the meantime.
-    const current = usePanelStore.getState().tabsBySession[sk] ?? []
-    usePanelStore.getState().setTabsForSession(
-      sk,
-      current.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-      usePanelStore.getState().getActiveTabId(sk),
-    )
-  }, [activeSessionId])
+    const state = usePanelStore.getState()
+    for (const [bucket, bucketTabs] of Object.entries(state.tabsBySession)) {
+      // A pinned tab belongs to the chat that opened it, whichever one is on the screen.
+      if (!bucketTabs.some((t) => t.id === id)) continue
+      state.setTabsForSession(
+        bucket,
+        bucketTabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        state.getActiveTabId(bucket),
+      )
+      break
+    }
+  }, [])
 
   // The agent browser does NOT open the panel by itself: the 'ensure' event creates the
   // webview in the hidden host (App.tsx) and the tab in the store (ensureAgentBrowserTab).
@@ -795,7 +849,7 @@ export function RightPanel() {
     // panel shows when nothing is active, instead of the request being dropped on the floor.
     if (pendingChatTab > 0 && pendingChatTabSession) {
       const id = `chat-${pendingChatTabSession}`
-      const exists = tabs.some((t) => t.id === id)
+      const exists = visibleTabs.some((t) => t.id === id)
       if (!exists) {
         addTabToStore(sessionKey, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession })
       }
@@ -861,7 +915,9 @@ export function RightPanel() {
         (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback")
       ) {
         const id = `chat-${session.id}`
-        const exists = tabs.some((t) => t.id === id)
+        // `visibleTabs` and not this chat's list: a pinned tab of the same worker is
+        // already on the row.
+        const exists = visibleTabs.some((t) => t.id === id)
         if (!exists) {
           addTabToStore(activeSessionId, { id, type: "chat", title: session.title, sessionId: session.id })
         }
@@ -874,7 +930,11 @@ export function RightPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, statusMap, activeSessionId])
 
-  const activeTab = tabs.find(t => t.id === activeTabId)
+  // The active tab is looked up in what the row shows, not in this chat's list: a pinned
+  // tab of another conversation can be the one on the screen.
+  const activeTab = visibleTabs.find(t => t.id === activeTabId)
+  /** How many pins the row shows — the divider goes right after them. */
+  const pinnedCount = useMemo(() => visibleTabs.filter((t) => t.pinned).length, [visibleTabs])
 
   return (
     <div
@@ -896,9 +956,9 @@ export function RightPanel() {
           </div>
         </div>
       )}
-      {tabs.length > 0 && (
+      {visibleTabs.length > 0 && (
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab, index) => {
             const { icon: Icon } = tabMeta[tab.type]
             // The tab in presentation mode is the SAME Design tab (designPlay),
             // but what it does there is run the prototype — hence the Play, in place of
@@ -934,32 +994,69 @@ export function RightPanel() {
                 </button>
               </Hint>
             )
+            // The pin is the tab's passport to the other conversations: it shows on hover
+            // (and always when pinned, so the row says what is fixed there).
+            const pinButton = (
+              <Hint label={tab.pinned ? t("panel.unpinTab") : t("panel.pinTab")}>
+                <button
+                  type="button"
+                  aria-label={tab.pinned ? t("panel.unpinTab") : t("panel.pinTab")}
+                  aria-pressed={!!tab.pinned}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // The bucket is the tab's own: the chat on the screen may be another one.
+                    const bucket = bucketOfTab.get(tab.id) ?? sessionKey
+                    setTabPinned(bucket, tab.id, !tab.pinned)
+                    // Unpinning a tab of ANOTHER chat takes it out of this row — and if it was
+                    // the tab on the screen, the panel goes back to one of this chat's tabs
+                    // instead of landing on the selection screen.
+                    if (tab.pinned && bucket !== sessionKey && activeTabId === tab.id) {
+                      const fallback = tabs.find((t) => !t.pinned)
+                      setActiveTabInStore(sessionKey, fallback?.id ?? null)
+                    }
+                  }}
+                  className={cn(
+                    "flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm transition-opacity hover:bg-sidebar-foreground/10",
+                    tab.pinned
+                      ? "text-primary hover:text-primary/80"
+                      : "ml-0.5 opacity-0 text-sidebar-foreground/60 group-hover:opacity-100 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <Pin className={cn("size-2.5", tab.pinned && "fill-current")} />
+                </button>
+              </Hint>
+            )
+            // The line says where the pins end and this chat's own tabs begin.
+            const divider = index === pinnedCount && pinnedCount > 0 && visibleTabs.length > pinnedCount
             return (
-              <div
-                key={tab.id}
-                className={cn(
-                  "group flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                  tab.id === activeTabId
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                )}
-                onClick={() => {
-                  setActiveTabInStore(sessionKey, tab.id)
-                  setSelectorOpen(false)
-                }}
-              >
-                {closeOnLeft && closeButton}
-                {chatSessionId ? <ChatTabIcon sessionId={chatSessionId} /> : <TabIcon className="size-3.5 shrink-0" />}
-                <TruncatedText text={tab.title} className="max-w-24" />
-                {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
-                {isError && (
-                  <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-                )}
-                {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
-                  <span className="size-2 shrink-0 rounded-full bg-primary" title={t("panel.unreadMessages")} />
-                )}
-                {!closeOnLeft && closeButton}
-              </div>
+              <Fragment key={tab.id}>
+                {divider && <span className="mx-1 h-4 w-px shrink-0 bg-sidebar-border" aria-hidden />}
+                <div
+                  className={cn(
+                    "group flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
+                    tab.id === activeTabId
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                  )}
+                  onClick={() => {
+                    setActiveTabInStore(sessionKey, tab.id)
+                    setSelectorOpen(false)
+                  }}
+                >
+                  {closeOnLeft && closeButton}
+                  {chatSessionId ? <ChatTabIcon sessionId={chatSessionId} /> : <TabIcon className="size-3.5 shrink-0" />}
+                  <TruncatedText text={tab.title} className="max-w-24" />
+                  {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
+                  {isError && (
+                    <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+                  )}
+                  {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
+                    <span className="size-2 shrink-0 rounded-full bg-primary" title={t("panel.unreadMessages")} />
+                  )}
+                  {pinButton}
+                  {!closeOnLeft && closeButton}
+                </div>
+              </Fragment>
             )
           })}
           {/* The "+" opens the start screen of the panel (grid of tabs + background
@@ -989,7 +1086,9 @@ export function RightPanel() {
           // sharing state/history — it was the "shared context" and the
           // switching that did not work. With persistKey, the remount only
           // re-attaches the webview of that tab coming from the pool.
-          <TabContent key={activeTab.id} tab={activeTab} sessionId={activeSessionId ?? undefined} onUpdateTab={updateTab} />
+          // The tab's OWN chat goes to the content: a pinned tab of another conversation
+          // keeps reading and writing in the chat that opened it.
+          <TabContent key={activeTab.id} tab={activeTab} sessionId={sessionOfTab(activeTab.id)} onUpdateTab={updateTab} />
         ) : (
           <SelectorScreen
             onSelect={addTab}

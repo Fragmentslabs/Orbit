@@ -733,7 +733,9 @@
       }
     },
     "unreadMessages": "Unread messages",
-    "closeTab": "Close tab"
+    "closeTab": "Close tab",
+    "pinTab": "Pin tab",
+    "unpinTab": "Unpin tab"
   },
   "chat": {
     "retry": "Retry",

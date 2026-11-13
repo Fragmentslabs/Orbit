@@ -13,6 +13,12 @@ export interface PanelTab {
   pipelineId?: string
   taskId?: string
   pending?: boolean
+  /** Pinned tab: it sits at the front of the tab row in EVERY conversation, instead of
+   *  living only in the chat that opened it. The tab stays in its bucket — the flag only
+   *  says the row has to show it wherever the screen is. */
+  pinned?: boolean
+  /** When it was pinned (ms) — it is the order of the pinned ones in the row. */
+  pinnedAt?: number
   /** Initial URL of the Browser tab (absent = opens the default screen with search). */
   url?: string
   /** Process tab: PID of the background process whose output the tab follows. */
@@ -248,6 +254,9 @@ interface PanelState {
   activeTabBySession: Record<string, string | null>
   addTab: (sessionId: string, tab: PanelTab) => void
   removeTab: (sessionId: string, tabId: string) => void
+  /** Pins a tab (or unpins it). A pinned tab is shown in the tab row of EVERY
+   *  conversation — that is what the flag means for the screen (see PanelTab.pinned). */
+  setTabPinned: (sessionId: string, tabId: string, pinned: boolean) => void
   /** Closes the tabs of the motion compositions that were deleted (in any conversation). */
   closeMotionTabs: (motionIds: string[]) => void
   /** Closes the tabs of the design canvases that were deleted (in any conversation). */
@@ -411,6 +420,42 @@ export function nextTabId(): number {
   return ++_nextTabId
 }
 
+/**
+ * Moving from one chat to another with pinned tabs around. A pin is the tab that follows the
+ * person, so what it needs from the switch is:
+ *  - the panel that was OPEN stays open (a pin would otherwise vanish with the chat's closed panel);
+ *  - if the new chat has tabs of its own, the panel shows THEM (the pins stay on the row, in front);
+ *  - if it has none, the panel shows a pinned tab instead of the start screen.
+ * Nothing is touched when there are no pins: each chat keeps its own panel as before.
+ */
+export function carryPinnedTabs(
+  state: Pick<PanelState, "tabsBySession" | "openBySession" | "activeTabBySession">,
+  from: string,
+  to: string,
+): Partial<Pick<PanelState, "openBySession" | "activeTabBySession">> {
+  const pins = Object.values(state.tabsBySession)
+    .flat()
+    .filter((t) => t.pinned)
+    .sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0))
+  if (pins.length === 0 || !state.openBySession[from]) return {}
+  const own = (state.tabsBySession[to] ?? []).filter((t) => !t.pinned)
+  const shown = new Set([...pins, ...own].map((t) => t.id))
+  const remembered = state.activeTabBySession[to] ?? null
+  let active: string | null
+  if (own.length > 0) {
+    // Back in a chat with its own tabs: the one it had open, else its first.
+    active = remembered && shown.has(remembered) ? remembered : own[0].id
+  } else {
+    // No tabs here: the pin that was on the screen, else the first pin.
+    const before = state.activeTabBySession[from] ?? null
+    active = pins.some((t) => t.id === before) ? before : pins[0].id
+  }
+  return {
+    openBySession: { ...state.openBySession, [to]: true },
+    activeTabBySession: { ...state.activeTabBySession, [to]: active },
+  }
+}
+
 export const usePanelStore = create<PanelState>((set, get) => {
   const markActive = () => {
     if (activeTimer) clearTimeout(activeTimer)
@@ -421,7 +466,11 @@ export const usePanelStore = create<PanelState>((set, get) => {
   return {
     openBySession: {},
     uiBucket: ORPHAN_KEY,
-    setUiBucket: (bucket) => set({ uiBucket: bucket }),
+    setUiBucket: (bucket) =>
+      set((state) => {
+        if (state.uiBucket === bucket) return state
+        return { uiBucket: bucket, ...carryPinnedTabs(state, state.uiBucket, bucket) }
+      }),
     setRightPanelOpen: (open) =>
       set((state) => ({ openBySession: { ...state.openBySession, [state.uiBucket]: open } })),
 
@@ -593,6 +642,20 @@ export const usePanelStore = create<PanelState>((set, get) => {
         return {
           tabsBySession: { ...state.tabsBySession, [sessionId]: next },
           activeTabBySession: nextActive,
+        }
+      }),
+
+    setTabPinned: (sessionId, tabId, pinned) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId]
+        if (!tabs) return state
+        return {
+          tabsBySession: {
+            ...state.tabsBySession,
+            [sessionId]: tabs.map((t) =>
+              t.id === tabId ? { ...t, pinned, pinnedAt: pinned ? Date.now() : undefined } : t,
+            ),
+          },
         }
       }),
 

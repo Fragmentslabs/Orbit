@@ -276,3 +276,100 @@ describe("citation attachments in the composer", () => {
     expect(usePanelStore.getState().quotes).toHaveLength(0)
   })
 })
+
+/**
+ * Pinning is a property of the TAB, not of the chat: the tab stays in the bucket that
+ * opened it and the flag only says the row has to show it in every conversation. That is
+ * why unpinning does not move the tab anywhere — it goes back to being only this chat's.
+ */
+describe("pinning a tab", () => {
+  beforeEach(reset)
+
+  it("marks the tab and stamps when it was pinned", () => {
+    usePanelStore.getState().addTab("s1", { id: "t1", type: "terminal", title: "Terminal" })
+
+    usePanelStore.getState().setTabPinned("s1", "t1", true)
+
+    const tab = tabsOf("s1")[0]
+    expect(tab.pinned).toBe(true)
+    expect(typeof tab.pinnedAt).toBe("number")
+  })
+
+  it("unpinning keeps the tab in the chat that opened it", () => {
+    usePanelStore.getState().addTab("s1", { id: "t1", type: "terminal", title: "Terminal" })
+    usePanelStore.getState().setTabPinned("s1", "t1", true)
+
+    usePanelStore.getState().setTabPinned("s1", "t1", false)
+
+    const tabs = tabsOf("s1")
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0].pinned).toBe(false)
+    expect(tabs[0].pinnedAt).toBeUndefined()
+  })
+
+  it("a tab of another chat is not touched", () => {
+    usePanelStore.getState().addTab("s1", { id: "t1", type: "terminal", title: "Terminal" })
+    usePanelStore.getState().addTab("s2", { id: "t2", type: "browser", title: "Navegador" })
+
+    usePanelStore.getState().setTabPinned("s1", "t1", true)
+
+    expect(tabsOf("s2")[0].pinned).toBeUndefined()
+  })
+})
+
+/** Switching chats with a pinned tab: the panel that was open stays open and the pin keeps showing. */
+describe("switching chats with pinned tabs", () => {
+  beforeEach(reset)
+
+  const pinTerminal = () => {
+    usePanelStore.getState().addTab("s1", { id: "pin", type: "terminal", title: "Terminal" })
+    usePanelStore.getState().setTabPinned("s1", "pin", true)
+  }
+  const active = (bucket: string) => usePanelStore.getState().activeTabBySession[bucket] ?? null
+  const open = (bucket: string) => usePanelStore.getState().openBySession[bucket] ?? false
+
+  it("keeps the panel open in the next chat, showing the pin when that chat has no tabs", () => {
+    pinTerminal()
+    usePanelStore.setState({ openBySession: { s1: true }, activeTabBySession: { s1: "pin" } })
+
+    usePanelStore.getState().setUiBucket("s2")
+
+    expect(open("s2")).toBe(true)
+    expect(active("s2")).toBe("pin")
+  })
+
+  it("shows the tabs of the chat it switched to, with the pin still on the row", () => {
+    pinTerminal()
+    usePanelStore.getState().addTab("s2", { id: "own", type: "browser", title: "Navegador" })
+    usePanelStore.setState({ openBySession: { s1: true }, activeTabBySession: { s1: "pin", s2: null } })
+
+    usePanelStore.getState().setUiBucket("s2")
+
+    expect(open("s2")).toBe(true)
+    expect(active("s2")).toBe("own")
+    expect(tabsOf("s1")[0].pinned).toBe(true)
+  })
+
+  it("goes back to the tab a chat had open, even when it is a pin", () => {
+    pinTerminal()
+    usePanelStore.getState().addTab("s2", { id: "a", type: "browser", title: "A" })
+    usePanelStore.getState().addTab("s2", { id: "b", type: "folders", title: "B" })
+    usePanelStore.setState({ openBySession: { s1: true }, activeTabBySession: { s1: "pin", s2: "b" } })
+
+    usePanelStore.getState().setUiBucket("s2")
+
+    expect(active("s2")).toBe("b")
+  })
+
+  it("does nothing when the panel was closed, or when there is no pin", () => {
+    pinTerminal()
+    usePanelStore.getState().setUiBucket("s2")
+    expect(open("s2")).toBe(false)
+
+    reset()
+    usePanelStore.getState().addTab("s1", { id: "t", type: "terminal", title: "Terminal" })
+    usePanelStore.setState({ openBySession: { s1: true } })
+    usePanelStore.getState().setUiBucket("s2")
+    expect(open("s2")).toBe(false)
+  })
+})

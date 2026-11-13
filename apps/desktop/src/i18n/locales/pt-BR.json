@@ -733,7 +733,9 @@
       }
     },
     "unreadMessages": "Mensagens não lidas",
-    "closeTab": "Fechar aba"
+    "closeTab": "Fechar aba",
+    "pinTab": "Fixar aba",
+    "unpinTab": "Desafixar aba"
   },
   "chat": {
     "retry": "Tentar novamente",
