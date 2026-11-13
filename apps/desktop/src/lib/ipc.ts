@@ -1680,6 +1680,8 @@ export interface CompanionStatus {
 
 export const companionApi = {
   status: () => window.ipcRenderer.invoke("companion:status") as Promise<CompanionStatus>,
+  /** Stops and starts the companion WS + HTTP servers (the dialog's retry). */
+  restart: () => window.ipcRenderer.invoke("companion:restart") as Promise<CompanionStatus>,
   setPairingMode: (active: boolean) =>
     window.ipcRenderer.invoke("companion:setPairingMode", active) as Promise<void>,
   /** "Organize" fired by the mobile: the reorganization lives here (the automatic

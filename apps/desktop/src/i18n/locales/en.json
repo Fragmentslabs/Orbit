@@ -1256,6 +1256,8 @@
     "description": "Scan the QR code with the Orbit app to connect.",
     "statusError": "Could not fetch the server status.",
     "serverInactive": "Server inactive",
+    "restartServer": "Start again",
+    "restarting": "Starting…",
     "portInUse": "Port already in use by another Orbit instance. Close the other instance to use the connection here.",
     "qrAlt": "Connection QR code",
     "pinHint": "Type the PIN in the app",

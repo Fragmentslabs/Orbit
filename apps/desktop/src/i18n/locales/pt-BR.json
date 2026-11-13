@@ -1256,6 +1256,8 @@
     "description": "Escaneie o QR code com o app Orbit para conectar.",
     "statusError": "Não foi possível obter o status do servidor.",
     "serverInactive": "Servidor inativo",
+    "restartServer": "Subir de novo",
+    "restarting": "Subindo…",
     "portInUse": "Porta já em uso por outra instância do Orbit. Feche a outra instância para usar a conexão por aqui.",
     "qrAlt": "QR Code de conexão",
     "pinHint": "Digite o PIN no app",

@@ -89,6 +89,7 @@ function PhonePane() {
   const [status, setStatus] = useState<CompanionStatus | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [restarting, setRestarting] = useState(false)
   // The QR is the main way in; the manual data (PIN, host, port) is one badge away.
   const [view, setView] = useState<"qr" | "manual">("qr")
   const [devicesOpen, setDevicesOpen] = useState(false)
@@ -133,6 +134,19 @@ function PhonePane() {
   const running = status?.running ?? false
   const deviceCount = status?.connectedClients?.length ?? 0
 
+  /** Brings the WS + HTTP servers back up when they are down. */
+  const restart = async () => {
+    setRestarting(true)
+    setError(null)
+    try {
+      setStatus(await companionApi.restart())
+    } catch {
+      setError(t("connectApp.statusError"))
+    } finally {
+      setRestarting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {!running ? (
@@ -140,6 +154,19 @@ function PhonePane() {
           <ShieldAlert className="size-8 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">{t("connectApp.serverInactive")}</span>
           {status?.bindError ? <span className="text-[11px] text-destructive">{t("connectApp.portInUse")}</span> : null}
+          {/* Only shown when the server is down: nothing in this pane works until it is back. */}
+          {status ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void restart()}
+              disabled={restarting}
+              className="mt-1 h-7 gap-1.5 px-2 text-[11px] text-muted-foreground"
+            >
+              {restarting ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+              {restarting ? t("connectApp.restarting") : t("connectApp.restartServer")}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3">

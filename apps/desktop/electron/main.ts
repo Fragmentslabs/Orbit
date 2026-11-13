@@ -180,7 +180,7 @@ import {
 } from './lib/fonts/store'
 import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionTools, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
+import { startCompanionServer, stopCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionTools, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setSessionToolsCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setSessionModes } from './lib/permission/global-mode'
 import { setRotationConfigCache } from './lib/model-rotation'
@@ -2915,6 +2915,19 @@ app.whenReady().then(async () => {
   registerPeersIpc()
   void startPeers().catch((err) => console.error('[Peers] could not start:', err))
   ipcMain.handle('companion:status', () => getCompanionStatus())
+  // "Connect devices" shows the WS state and can bring it back up when it
+  // failed to bind or was stopped — the retry is a stop/start of both servers.
+  ipcMain.handle('companion:restart', async () => {
+    stopCompanionServer()
+    // The listening socket is released synchronously, but a short breath keeps
+    // an immediate rebind from racing the close on slower machines.
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    startCompanionServer()
+    // A bind failure arrives asynchronously; give it a moment so the returned
+    // status tells the truth instead of a phantom "running".
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    return getCompanionStatus()
+  })
   ipcMain.handle('companion:pin', () => companion.pin)
   ipcMain.handle('companion:setPairingMode', (_event, active: boolean) => setPairingMode(!!active))
 
