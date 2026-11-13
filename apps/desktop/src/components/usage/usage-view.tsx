@@ -84,7 +84,7 @@ export function UsageView() {
         </div>
 
         {!stacked && (
-          <nav aria-label={t("usage.nav.label")} className="flex w-52 shrink-0 flex-col gap-0.5 border-l pl-3">
+          <nav aria-label={t("usage.nav.label")} className="flex w-60 shrink-0 flex-col gap-0.5 border-l pl-3">
             {buttons}
           </nav>
         )}

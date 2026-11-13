@@ -207,7 +207,7 @@ const ProviderRow = memo(function ProviderRow({
           </Hint>
         ) : (
           !editing && (
-            <Button size="sm" variant="outline" className="gap-1" onClick={() => onEdit(providerId, true)}>
+            <Button variant="outline" className="gap-1" onClick={() => onEdit(providerId, true)}>
               <KeyRound className="size-3.5" />
               {t("providers.addKey")}
             </Button>
@@ -604,7 +604,7 @@ function CustomProviderDialog({
                 {LOCAL_PRESETS.map((preset) => (
                   <Button
                     key={preset.id}
-                    size="sm"
+                   
                     variant={baseURL.trim() === preset.baseURL ? "secondary" : "outline"}
                     onClick={() => applyPreset(preset)}
                   >
@@ -666,7 +666,7 @@ function CustomProviderDialog({
               </span>
               <div className="flex-1" />
               <Button
-                size="sm"
+               
                 variant="outline"
                 className="h-7 gap-1 text-xs"
                 disabled={!baseURL.trim() || discovering}
@@ -734,7 +734,7 @@ function CustomProviderDialog({
                 }}
               />
               <Button
-                size="sm"
+               
                 variant="outline"
                 className="h-7 gap-1 text-xs"
                 disabled={!manualId.trim()}
@@ -805,10 +805,10 @@ function CustomProviderDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" disabled={!canSave} onClick={() => void handleSave()}>
+          <Button disabled={!canSave} onClick={() => void handleSave()}>
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : isEdit ? t("common.save") : t("providers.dialog.add")}
           </Button>
         </div>
@@ -945,7 +945,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
             <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
           </Button>
         </Hint>
-        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => openNewProvider()}>
+        <Button variant="outline" className="gap-1 h-7 text-xs" onClick={() => openNewProvider()}>
           <Plus className="size-3" />
           {t("providers.local.add")}
         </Button>
@@ -1036,7 +1036,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
               provider is not in the catalog — hence the offer to register it.
             */}
             <Button
-              size="sm"
+             
               variant="outline"
               className="h-7 gap-1 text-xs"
               onClick={() => openNewProvider(query.trim())}

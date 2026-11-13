@@ -9,6 +9,7 @@ import { useDraggable } from "@dnd-kit/core"
 import {
   Archive,
   ArchiveRestore,
+  ArrowRight,
   BarChart3,
   Bot,
   BrainCircuit,
@@ -95,6 +96,7 @@ import { sessionActivityMap, type FolderInfo, type SessionInfo } from "@shared/c
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
+import { useRoutinesStore } from "@/src/stores/routines-store"
 import { FragmentIcon } from "@/src/components/fragments/fragment-icon"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { useSettingsUi } from "@/src/stores/settings-ui"
@@ -279,18 +281,179 @@ function PipelineButton() {
   )
 }
 
-/** Routines: scheduled chats, from both chat and code modes. The page inherits
- *  the active mode (the chat one only lists/creates chat routines), so the
- *  button exists in both modes — same navigation logic as the pipeline. */
+/**
+ * The chevron that opens/closes the list hanging under a nav row. A button of its own:
+ * the row keeps doing what it always did (navigate to the page), the chevron only folds
+ * the list — a row with two jobs would break the click people already know.
+ */
+/** The look of every small control that lives inside a sidebar row — the section
+ *  chevron, the sub-chat chevron, the row's action buttons: one box, one hover.
+ *  `cursor-pointer` is not decoration: Tailwind v4 leaves `button` with the default
+ *  cursor, and a bare icon then does not look clickable. */
+const ROW_CONTROL =
+  "flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[calc(var(--radius-sm)-2px)] text-sidebar-foreground/60 ring-sidebar-ring transition-colors outline-hidden hover:bg-sidebar-accent-foreground/15 hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-3.5 [&>svg]:shrink-0"
+
+function SectionToggle({ open, label, onToggle, busy = false }: {
+  open: boolean
+  label: string
+  onToggle: () => void
+  /** A dot on the chevron while the closed list holds something alive (a routine running). */
+  busy?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      className={cn(ROW_CONTROL, "absolute top-1/2 right-1 -translate-y-1/2 group-hover/nav:text-sidebar-accent-foreground")}
+    >
+      <ChevronDown className={cn("transition-transform", !open && "-rotate-90")} />
+      {busy && <span className="absolute top-0.5 right-0.5 size-1.5 animate-pulse rounded-full bg-primary" />}
+    </button>
+  )
+}
+
+/** One row of the list under a nav button (fragments, routines). */
+function NavSubItem({ icon, label, isActive, muted, onClick, trailing }: {
+  icon?: React.ReactNode
+  label: string
+  isActive?: boolean
+  /** A row that is there for completeness (a paused routine, "view all"). */
+  muted?: boolean
+  onClick: () => void
+  trailing?: React.ReactNode
+}) {
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton
+        isActive={isActive}
+        // A <button> neither stretches on its own nor inherits the left alignment of the
+        // <a> rows (a button centres its own text): fill the width and pin the label to
+        // the left edge, so the list lines up with the rest of the sidebar.
+        className={cn("w-full justify-start text-left", muted && "text-sidebar-foreground/60")}
+        render={<button type="button" />}
+        onClick={onClick}
+      >
+        {icon}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {trailing}
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
+  )
+}
+
+/**
+ * Routines: scheduled chats, one list wherever the person is. The sidebar shows the same
+ * set as the page.
+ *
+ * What earns a row: an active routine, one firing right now, or a paused one whose last
+ * execution nobody has read yet. A routine that runs once turns itself off after firing,
+ * and its result would otherwise only exist inside the routines screen.
+ */
 function RoutinesButton() {
   const { t } = useTranslation()
   const { view, setView } = useWorkspace()
+  const routines = useRoutinesStore((s) => s.routines)
+  const runs = useRoutinesStore((s) => s.runs)
+  const unread = useSessionStore((s) => s.unreadCounts)
+  const loaded = useRoutinesStore((s) => s.loaded)
+  const load = useRoutinesStore((s) => s.load)
+  const openId = useRoutinesStore((s) => s.openId)
+  const open = useRoutinesStore((s) => s.open)
+  const [expanded, setExpanded] = useState(() => loadSectionOpen(NAV_SECTION_KEYS.routines, false))
   const active = view === "routines"
+
+  // The list exists before the page is ever opened.
+  useEffect(() => {
+    if (!loaded) void load()
+  }, [loaded, load])
+
+  const running = new Set(runs.filter((run) => run.status === "running").map((run) => run.routineId))
+
+  // Last execution of each routine: what decides whether a routine that switched itself off
+  // still has something to say. The run's chat is where it becomes seen — opening it zeroes
+  // the unread count, and the row goes with it.
+  const lastRun = new Map<string, (typeof runs)[number]>()
+  for (const run of runs) {
+    const current = lastRun.get(run.routineId)
+    if (!current || run.startedAt > current.startedAt) lastRun.set(run.routineId, run)
+  }
+
+  const listed = routines
+    .filter((routine) => {
+      if (routine.active || running.has(routine.id)) return true
+      const run = lastRun.get(routine.id)
+      return !!run && run.status !== "running" && (unread[run.sessionId] ?? 0) > 0
+    })
+    .sort((a, b) => b.createdAt - a.createdAt)
+
   return (
-    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "routines")}>
-      <CalendarClock className="size-4" />
-      {t("routines.title")}
-    </SidebarMenuButton>
+    <>
+      <div className="group/nav relative">
+        <SidebarMenuButton
+          isActive={active}
+          // The chevron is a sibling, not a child of the row: the row follows the
+          // wrapper's hover, otherwise it would go dark as soon as the pointer reached it.
+          className={cn(
+            "group-hover/nav:bg-sidebar-accent group-hover/nav:text-sidebar-accent-foreground",
+            listed.length > 0 && "pr-8"
+          )}
+          onClick={() => {
+            // Inside a routine's screen, the button goes back to the list (as the
+            // fragments one does) instead of jumping to the conversation.
+            if (active && openId) {
+              open(null)
+              return
+            }
+            if (active) {
+              setView("chat")
+              return
+            }
+            open(null)
+            setView("routines")
+          }}
+        >
+          <CalendarClock className="size-4" />
+          {t("routines.title")}
+        </SidebarMenuButton>
+        {listed.length > 0 && (
+          <SectionToggle
+            open={expanded}
+            label={expanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+            // Closed, the list would hide a routine firing: the chevron keeps the sign.
+            busy={!expanded && listed.some((routine) => running.has(routine.id))}
+            onToggle={() =>
+              setExpanded((prev) => {
+                persistSectionOpen(NAV_SECTION_KEYS.routines, !prev)
+                return !prev
+              })
+            }
+          />
+        )}
+      </div>
+      {expanded && listed.length > 0 && (
+        <SidebarMenuSub>
+          {listed.map((routine) => (
+            <NavSubItem
+              key={routine.id}
+              label={routine.title}
+              muted={!routine.active}
+              isActive={active && openId === routine.id}
+              onClick={() => {
+                open(routine.id)
+                setView("routines")
+              }}
+              trailing={running.has(routine.id) ? <Loader2 className="size-3 shrink-0 animate-spin text-primary" /> : null}
+            />
+          ))}
+        </SidebarMenuSub>
+      )}
+    </>
   )
 }
 
@@ -307,9 +470,10 @@ function MemoriesButton() {
 }
 
 /**
- * Fragments: a page of the app (gallery + each fragment), from both modes. The ones the
- * person pinned to the sidebar get their own row under the button, so a screen they
- * use every day is one click away without going through the gallery.
+ * Fragments: a page of the app (gallery + each fragment), from both modes. Only the ones
+ * the person kept pinned to the sidebar are listed: `pinned.sidebar` means exactly "lives
+ * in the sidebar", and a fragment taken out of it was taken out on purpose. The full list
+ * is one click away in the gallery — "view all" ends the fold.
  */
 function FragmentsButton() {
   const { t } = useTranslation()
@@ -319,6 +483,7 @@ function FragmentsButton() {
   const load = useFragmentsStore((s) => s.load)
   const open = useFragmentsStore((s) => s.open)
   const leave = useFragmentsStore((s) => s.leave)
+  const [expanded, setExpanded] = useState(() => loadSectionOpen(NAV_SECTION_KEYS.fragments, false))
   const active = view === "fragments"
   const pinned = items.filter((f) => f.pinned.sidebar)
 
@@ -329,41 +494,64 @@ function FragmentsButton() {
 
   return (
     <>
-      <SidebarMenuButton
-        isActive={active && !activeId}
-        onClick={() => {
-          if (active && !activeId) {
-            setView("chat")
-            return
-          }
-          leave()
-          setView("fragments")
-        }}
-      >
-        <AppWindow className="size-4" />
-        {t("fragments.title")}
-      </SidebarMenuButton>
-      {pinned.length > 0 && (
+      <div className="group/nav relative">
+        <SidebarMenuButton
+          isActive={active && !activeId}
+          // The chevron is a sibling, not a child of the row: the row follows the
+          // wrapper's hover, otherwise it would go dark as soon as the pointer reached it.
+          className={cn(
+            "group-hover/nav:bg-sidebar-accent group-hover/nav:text-sidebar-accent-foreground",
+            pinned.length > 0 && "pr-8"
+          )}
+          onClick={() => {
+            if (active && !activeId) {
+              setView("chat")
+              return
+            }
+            leave()
+            setView("fragments")
+          }}
+        >
+          <AppWindow className="size-4" />
+          {t("fragments.title")}
+        </SidebarMenuButton>
+        {pinned.length > 0 && (
+          <SectionToggle
+            open={expanded}
+            label={expanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+            onToggle={() =>
+              setExpanded((prev) => {
+                persistSectionOpen(NAV_SECTION_KEYS.fragments, !prev)
+                return !prev
+              })
+            }
+          />
+        )}
+      </div>
+      {expanded && pinned.length > 0 && (
         <SidebarMenuSub>
           {pinned.map((fragment) => (
-            <SidebarMenuSubItem key={fragment.id}>
-              <SidebarMenuSubButton
-                isActive={active && activeId === fragment.id}
-                // A <button> does not stretch on its own (unlike the links of other rows): the
-                // row has to fill the width so the activity indicator sits at the right edge.
-                className="w-full"
-                render={<button type="button" />}
-                onClick={() => {
-                  open(fragment.id)
-                  setView("fragments")
-                }}
-              >
-                <FragmentIcon name={fragment.icon} className="size-4" />
-                <span className="min-w-0 flex-1 truncate">{fragment.name}</span>
-                <ArtifactActivity artifact={{ kind: "fragment", id: fragment.id }} />
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
+            <NavSubItem
+              key={fragment.id}
+              icon={<FragmentIcon name={fragment.icon} className="size-4" />}
+              label={fragment.name}
+              isActive={active && activeId === fragment.id}
+              onClick={() => {
+                open(fragment.id)
+                setView("fragments")
+              }}
+              trailing={<ArtifactActivity artifact={{ kind: "fragment", id: fragment.id }} />}
+            />
           ))}
+          <NavSubItem
+            icon={<ArrowRight className="size-4" />}
+            label={t("sidebar.fragments.viewAll")}
+            muted
+            onClick={() => {
+              leave()
+              setView("fragments")
+            }}
+          />
         </SidebarMenuSub>
       )}
     </>
@@ -444,6 +632,7 @@ function AccordionGroup({ label, defaultExpanded = true, action, dropTarget, chi
   dropTarget?: SidebarDropTarget
   children: React.ReactNode
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   const group = (
@@ -456,7 +645,18 @@ function AccordionGroup({ label, defaultExpanded = true, action, dropTarget, chi
           <span className="flex-1 truncate">{label}</span>
         </Truncate>
         {action}
-        <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+          onClick={(e) => {
+            e.stopPropagation()
+            setExpanded((prev) => !prev)
+          }}
+          className={ROW_CONTROL}
+        >
+          <ChevronDown className={cn("transition-transform", !expanded && "-rotate-90")} />
+        </button>
       </SidebarGroupLabel>
       {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
     </SidebarGroup>
@@ -523,14 +723,15 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
           setMenuOpen((prev) => !prev)
         }}
           className={cn(
-            "absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
+            ROW_CONTROL,
+            "absolute top-1 right-1",
             "opacity-0 transition-all duration-200",
             groupClass,
             menuOpen && "opacity-100",
             buttonClassName,
           )}
       >
-        <Ellipsis className="size-4" />
+        <Ellipsis />
         <span className="sr-only">{t("sidebar.options")}</span>
       </button>
       {menuOpen && createPortal(
@@ -685,6 +886,29 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
       </DialogContent>
     </Dialog>
   )
+}
+
+/** localStorage keys of the lists that hang under a nav row (open/closed). */
+const NAV_SECTION_KEYS = {
+  fragments: "orbit.sidebar.fragments-open",
+  routines: "orbit.sidebar.routines-open",
+} as const
+
+function loadSectionOpen(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw === null ? fallback : raw === "true"
+  } catch {
+    return fallback
+  }
+}
+
+function persistSectionOpen(key: string, open: boolean) {
+  try {
+    localStorage.setItem(key, String(open))
+  } catch {
+    // localStorage unavailable — the choice just does not stick
+  }
 }
 
 /** localStorage key that stores which folders stay open (id → open). */
@@ -899,7 +1123,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
       </ButtonComponent>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
-        buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-5", actionButtonClassName)}
+        buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-6", actionButtonClassName)}
         items={menuItems}
       />
       <DeleteChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
@@ -921,6 +1145,7 @@ function SessionItem({ session, childSessions = [] }: {
   session: SessionInfo
   childSessions?: SessionInfo[]
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
   const statusMap = useSessionStore((s) => s.status)
   const hasChildren = childSessions.length > 0
@@ -937,13 +1162,21 @@ function SessionItem({ session, childSessions = [] }: {
             <span
               role="button"
               tabIndex={0}
-              className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-sidebar-foreground/10"
+              aria-expanded={expanded}
+              aria-label={expanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+              className={ROW_CONTROL}
               onClick={(e) => {
                 e.stopPropagation()
                 setExpanded((prev) => !prev)
               }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                e.stopPropagation()
+                setExpanded((prev) => !prev)
+              }}
             >
-              <ChevronDown className={cn("size-3 transition-transform", !expanded && "-rotate-90")} />
+              <ChevronDown className={cn("transition-transform", !expanded && "-rotate-90")} />
             </span>
           ) : undefined
         }
@@ -972,6 +1205,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
   childSessions: SessionInfo[]
   hasChildren: boolean
 }) {
+  const { t } = useTranslation()
   const [childExpanded, setChildExpanded] = useState(true)
   const statusMap = useSessionStore((s) => s.status)
   useAgents()
@@ -988,13 +1222,21 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
             <span
               role="button"
               tabIndex={0}
-              className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-sidebar-foreground/10"
+              aria-expanded={childExpanded}
+              aria-label={childExpanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+              className={ROW_CONTROL}
               onClick={(e) => {
                 e.stopPropagation()
                 setChildExpanded((prev) => !prev)
               }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                e.stopPropagation()
+                setChildExpanded((prev) => !prev)
+              }}
             >
-              <ChevronDown className={cn("size-3 transition-transform", !childExpanded && "-rotate-90")} />
+              <ChevronDown className={cn("transition-transform", !childExpanded && "-rotate-90")} />
             </span>
           ) : undefined
         }
@@ -1149,16 +1391,16 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
               void store.selectSession(mode, null)
               store.setPendingFolder(folder.id)
             }}
-            className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+            className={cn(ROW_CONTROL, "absolute top-1 right-8 w-0 overflow-hidden transition-all duration-200 group-hover/menu-row:w-6")}
           >
-            <Plus className="size-4 shrink-0" />
+            <Plus />
             <span className="sr-only">{t("sidebar.folder.add")}</span>
           </button>
         )}
 
         <EllipsisMenu
           groupClass="group-hover/menu-row:opacity-100"
-          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
+          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-6"
           items={[
             { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
             {
@@ -1218,16 +1460,9 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
   )
 }
 
-/**
- * Action icon in the header of a sidebar group (organize, new folder).
- *
- * `size-5` around a 14px icon: a 16px target is hard to hit with
- * the mouse. The hover did not exist — the button changed nothing on mouse
- * over, so it did not look clickable — and the `cursor-pointer` has to be said
- * (Tailwind v4 leaves `button` with the default cursor).
- */
-const GROUP_ACTION_CLASS =
-  "flex size-5 cursor-pointer items-center justify-center rounded text-sidebar-foreground/60 outline-hidden transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+/** Action icon in the header of a sidebar group (organize, new folder). Same
+ *  control as every other row button — see ROW_CONTROL. */
+const GROUP_ACTION_CLASS = ROW_CONTROL
 
 function ChatHistory() {
   const { t } = useTranslation()
@@ -1265,9 +1500,8 @@ function ChatHistory() {
   const activity = useMemo(() => sessionActivityMap(sessions), [sessions])
   const activityOf = (session: SessionInfo) => activity.get(session.id) ?? session.updatedAt
 
-  // Routine chats leave the normal listing: they live in the "Routines" group
-  // right below, and would show up duplicated (drowning the recent ones) if
-  // they also entered "Chats" or the folders.
+  // Routine chats do not enter the sidebar at all: a run lives on the routine
+  // screen, and every firing would pile another chat into the recent list.
   const modeSessions = useMemo(
     () =>
       sessions
@@ -1276,18 +1510,6 @@ function ChatHistory() {
         .filter((s) => s.mode === mode && !s.routineId && !isEmbeddedArtifactChat(s))
         .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
     [sessions, mode, activity],
-  )
-  // "Routines" group of the active mode: each run's session inherits the mode
-  // of the routine (scheduler.ts), so the chat sidebar only lists chat routines
-  // and the code one only the code routines. No archived filter: routine chats
-  // do not enter the "Archived" group (which comes from modeSessions), so
-  // archiving one would make it vanish from the whole sidebar.
-  const routineSessions = useMemo(
-    () =>
-      sessions
-        .filter((s) => s.mode === mode && !!s.routineId)
-        .sort((a, b) => b.updatedAt - a.updatedAt),
-    [sessions, mode],
   )
   // Workers are grouped under the orchestrator (regardless of the worker's mode)
   const childrenByParent = useMemo(() => {
@@ -1443,21 +1665,6 @@ function ChatHistory() {
           )}
         </SidebarMenu>
       </AccordionGroup>
-
-      {/* Expanded by default: this is where the running spinner and the
-          "finished and unread" / error dots appear — collapsed, a routine would
-          run with no sign on screen. */}
-      {routineSessions.length > 0 && (
-        <AccordionGroup label={t("sidebar.groups.routines")}>
-          <SidebarMenu>
-            {routineSessions.map((session) => (
-              // The steps of a run (its workers) are not listed here: they show on the routine
-              // screen, under the run, so a team does not fill the sidebar on every firing.
-              <SessionItem key={session.id} session={session} />
-            ))}
-          </SidebarMenu>
-        </AccordionGroup>
-      )}
 
       {(archived.length > 0 ||
         sortedArchivedFolders.length > 0 ||
@@ -1618,16 +1825,16 @@ export function AppSidebar() {
             </div>
           ) : (
           <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
-            <div className="px-2 py-2">
+            <div className="flex flex-col gap-1 px-2 py-2">
               <NewChatButton />
             </div>
             <div className="space-y-1 px-2 pb-2">
-              <PipelineButton />
-              <RoutinesButton />
-              <MemoriesButton />
               <FragmentsButton />
-              <UsageButton />
+              <RoutinesButton />
+              <PipelineButton />
+              <MemoriesButton />
               <McpSkillsButton />
+              <UsageButton />
             </div>
             <SidebarSeparator className="mx-3" />
             <div className="pt-2">

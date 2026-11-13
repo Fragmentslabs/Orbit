@@ -218,6 +218,32 @@ const writeInspectorSize = (key: string, value: number) => {
   }
 }
 
+/**
+ * The two floating sidebars of fullscreen keep the state the person left them in — open
+ * stays open, closed stays closed —, across the fullscreen leaving and the tab remounting
+ * on every switch. The inspector of the SIDE tab is the opposite: it is born closed and is
+ * never restored, because in the narrow panel the canvas is what matters.
+ */
+const LEFT_SIDE_KEY = "orbit.design.fullscreenLeftSide"
+const RIGHT_SIDE_KEY = "orbit.design.fullscreenRightSide"
+const readSideOpen = (key: string) => {
+  try {
+    const value = localStorage.getItem(key)
+    if (value === "1") return true
+    if (value === "0") return false
+  } catch {
+    // no storage (or blocked): the default is enough
+  }
+  return true
+}
+const writeSideOpen = (key: string, value: boolean) => {
+  try {
+    localStorage.setItem(key, value ? "1" : "0")
+  } catch {
+    // no storage: the state lives only as long as the tab
+  }
+}
+
 function DesignEditor({
   designId,
   title,
@@ -286,8 +312,9 @@ function DesignEditor({
   const [codeVersion, setCodeVersion] = useState(0)
   const [overrides, setOverrides] = useState<Record<string, Partial<DesignBoardView>>>({})
   const [fullscreen, setFullscreen] = useState(false)
-  // Fullscreen: floating sidebars (open by default) and the composer on hover
-  const [leftSideOpen, setLeftSideOpen] = useState(true)
+  // Fullscreen: floating sidebars (open by default, and kept as the person left them) and the
+  // composer on hover
+  const [leftSideOpen, setLeftSideOpen] = useState(() => readSideOpen(LEFT_SIDE_KEY))
   /** The left sidebar has two tabs: the layers and the conversation with the agent. */
   const [leftTab, setLeftTab] = useState<"layers" | "conversation">("layers")
   // The conversation of the fullscreen: the chat the person picked for this canvas, else the
@@ -296,7 +323,15 @@ function DesignEditor({
   const chatSessionId = chat.sessionId ?? sessionId
   const agentStatus = useSessionStatus(chatSessionId)
   const agentBusy = agentStatus === "submitted" || agentStatus === "streaming"
-  const [rightSideOpen, setRightSideOpen] = useState(true)
+  const [rightSideOpen, setRightSideOpen] = useState(() => readSideOpen(RIGHT_SIDE_KEY))
+  // Closing one of the fullscreen sidebars is a decision that outlives the tab: it is written
+  // where the next opening reads it (the size of the inspector does the same).
+  useEffect(() => {
+    writeSideOpen(LEFT_SIDE_KEY, leftSideOpen)
+  }, [leftSideOpen])
+  useEffect(() => {
+    writeSideOpen(RIGHT_SIDE_KEY, rightSideOpen)
+  }, [rightSideOpen])
   const [composerPinned, setComposerPinned] = useState(false)
   useEffect(() => {
     if (!fullscreen) setComposerPinned(false)
@@ -1831,12 +1866,8 @@ function DesignEditor({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <IconAction
-            icon={fullscreen ? Minimize2 : Maximize2}
-            label={t(fullscreen ? "design.exitFullscreen" : "design.fullscreen")}
-            onClick={() => setFullscreen((v) => !v)}
-          />
-          {/* In fullscreen the floating buttons of the sidebars are what open/close them */}
+          {/* The panels button comes first and the fullscreen one sits right next to it.
+              In fullscreen the floating buttons of the sidebars are what open/close them */}
           {!fullscreen && (
             <IconAction
               icon={InspectorIcon}
@@ -1845,6 +1876,11 @@ function DesignEditor({
               onClick={() => setInspectorOpen((v) => !v)}
             />
           )}
+          <IconAction
+            icon={fullscreen ? Minimize2 : Maximize2}
+            label={t(fullscreen ? "design.exitFullscreen" : "design.fullscreen")}
+            onClick={() => setFullscreen((v) => !v)}
+          />
         </TabHeader>
 
       {state.status === "error" && (

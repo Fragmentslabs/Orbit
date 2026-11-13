@@ -19,7 +19,7 @@ export function TemplateBadge() {
   const hasFields = hasTemplateField(controller.textInput.value)
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-start gap-2 self-start px-3 pt-2.5">
+    <div className="mb-1 flex w-full flex-wrap items-center justify-start gap-2 self-start px-1">
       <span className={cn("inline-flex items-center gap-1.5 rounded-md py-0.5 pr-1 pl-2 text-[11px]", tone)}>
         <Icon className="size-3" />
         {t("input.template.badge", { name: t(`panel.hub.${kind}.label`) })}

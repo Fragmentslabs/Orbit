@@ -34,7 +34,7 @@ interface HintProps {
  * invisible. Compose the other way around: `<Hint…><DropdownMenuTrigger
  * render={<button>{content}</button>} /></Hint>` — then both triggers end up on the same node.
  */
-function Hint({ label, side = "top", align, disabled, injectName = true, children }: HintProps) {
+function Hint({ label, side = "bottom", align, disabled, injectName = true, children }: HintProps) {
   if (!label) return children
 
   const hasName = Boolean((children.props as { "aria-label"?: string })?.["aria-label"])

@@ -197,7 +197,7 @@ function ProjectDetail({ data, project, range, onBack }: {
 
   const kpis = [
     { label: t("usage.cards.orbitHours"), value: formatHours(project.orbitHours, locale), meta: t("usage.projects.agentRunning") },
-    { label: t("usage.cards.yourHours"), value: formatHours(project.userHours, locale), meta: t("usage.estimated") },
+    { label: t("usage.cards.yourHours"), value: formatHours(project.userHours, locale), meta: t("usage.cards.estimated") },
     { label: t("usage.projects.sessions"), value: String(project.sessions), meta: t("usage.projects.inPeriod") },
     { label: t("analytics.tokens"), value: formatTokens(project.tokens), meta: t("usage.projects.inputOutput") },
     { label: t("usage.projects.spent"), value: formatCost(project.cost), meta: project.hours > 0 ? t("usage.projects.perHour", { value: formatCost(project.cost / project.hours) }) : "—" },

@@ -26,7 +26,7 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
 function TooltipContent({
   className,
   positionerClassName,
-  side = "top",
+  side = "bottom",
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
