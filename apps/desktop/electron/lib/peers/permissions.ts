@@ -4,19 +4,22 @@ import type { PeerGrants } from '@shared/peers'
  * What a paired DESKTOP may ask of this machine.
  *
  * The phone keeps the full companion API (it is the owner's own device, paired by
- * scanning a QR on this screen). A desktop is someone else's machine on the same
- * network, so it gets an allowlist: anything not listed here is refused, and a new
- * request type added to the companion protocol is refused for desktops until
- * someone decides, here, that it is safe.
+ * scanning a QR on this screen). A desktop connected to another Orbit is the same
+ * kind of client: the data lives on the machine that owns it, and the other one
+ * controls it — that is what "access another Orbit" means (docs/remote-desktop-control.md).
  *
- * Deliberately out, whatever the grants: approving permission prompts, plans or
- * orchestrations (`ask:reply`, `plan:review-*`, `orchestration:*`) — the person at
- * this machine decides what the agent may do on it —, git, memory, settings,
- * models, folders, routines, pipelines, deleting/moving/reverting chats and
- * listing arbitrary directories.
+ * So the default is full control: every companion request, exactly like the phone,
+ * including creating/renaming/archiving/deleting chats, folders, memory, routines,
+ * the pipeline, plan review and the agent's questions.
+ *
+ * Two things stay outside the full-control grant:
+ * - the project files (`fs:*`), which keep their own opt-in grant;
+ * - nothing else — a peer paired without `control` keeps the old read-only
+ *   behavior (chats, messages, pieces) so an older pairing does not silently gain
+ *   powers it never asked for.
  */
 
-/** Always allowed once paired: read the chats and the pieces in them. */
+/** Reading the chats and the pieces in them: always allowed once paired. */
 const VIEW = new Set<string>([
   'ping',
   'status:get',
@@ -33,19 +36,19 @@ const VIEW = new Set<string>([
   'document:info',
 ])
 
-/** With the "send messages" grant. */
+/** Sending a message / stopping a turn: part of control, or its own grant. */
 const SEND = new Set<string>(['messages:send', 'chat:abort'])
 
 /** With the "see files" grant: only inside the chat's own project folders. */
 const FILES = new Set<string>(['fs:tree', 'fs:read'])
 
-export type DesktopRequestClass = 'view' | 'send' | 'files' | 'denied'
+export type DesktopRequestClass = 'view' | 'send' | 'files' | 'control'
 
 export function classifyDesktopRequest(type: string): DesktopRequestClass {
   if (VIEW.has(type)) return 'view'
   if (SEND.has(type)) return 'send'
   if (FILES.has(type)) return 'files'
-  return 'denied'
+  return 'control'
 }
 
 export function desktopMayRequest(type: string, grants: PeerGrants): boolean {
@@ -53,11 +56,11 @@ export function desktopMayRequest(type: string, grants: PeerGrants): boolean {
     case 'view':
       return true
     case 'send':
-      return grants.send
+      return grants.control || grants.send
     case 'files':
       return grants.files
-    default:
-      return false
+    case 'control':
+      return grants.control
   }
 }
 

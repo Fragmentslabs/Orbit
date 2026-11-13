@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { PeerGrants } from '@shared/peers'
 
 /**
  * Two "machines" in one process, over real sockets: pairing by the accept card,
@@ -77,7 +78,7 @@ describe('peers end to end', () => {
     fs.rmSync(tmp, { recursive: true, force: true })
   })
 
-  async function pair(grants: { send: boolean; files: boolean }) {
+  async function pair(grants: PeerGrants) {
     client.startPairing('127.0.0.1', port)
     await wait(() => server.listIncomingRequests().length === 1 && client.outgoingState()?.status === 'waiting')
     const incoming = server.listIncomingRequests()[0]
@@ -101,8 +102,8 @@ describe('peers end to end', () => {
   })
 
   it('pairs view-only and enforces the allowlist', async () => {
-    await pair({ send: false, files: false })
-    expect(client.knownPeers()[0].grants).toEqual({ send: false, files: false })
+    await pair({ control: false, send: false, files: false })
+    expect(client.knownPeers()[0].grants).toEqual({ control: false, send: false, files: false })
     expect(Array.isArray(await client.peerRequest(peerId, { type: 'sessions:list' }))).toBe(true)
     for (const type of ['messages:send', 'fs:tree', 'prefs:set', 'fs:list-dirs', 'memory:list', 'git:checkout', 'ask:reply', 'auth']) {
       await expect(client.peerRequest(peerId, { type, sessionId: 'x', text: 'hi' }), type).rejects.toThrow('forbidden')
@@ -140,7 +141,7 @@ describe('peers end to end', () => {
     await storage.writeJson('session/s_e2e', { id: 's_e2e', title: 'E2E', mode: 'code', directory: project, createdAt: 1, updatedAt: 1 })
     // One request per IP every 5 s: the pairing above came from the same address.
     await new Promise((r) => setTimeout(r, 5200))
-    await pair({ send: false, files: true })
+    await pair({ control: false, send: false, files: true })
     const tree = await client.peerRequest<{ entries: { name: string }[] }>(peerId, { type: 'fs:tree', sessionId: 's_e2e', root: 0, path: '' })
     expect(tree.entries.map((e) => e.name)).toEqual(['readme.md'])
     const file = await client.peerRequest<{ content: string }>(peerId, { type: 'fs:read', sessionId: 's_e2e', root: 0, path: 'readme.md' })

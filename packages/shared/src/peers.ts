@@ -11,7 +11,7 @@
  * certificates, and after pairing each side pins the other's certificate.
  */
 
-import type { ChatEvent, SessionInfo } from './chat'
+import type { ChatEvent, FolderInfo, SessionInfo } from './chat'
 
 export const PEER_PROTOCOL_VERSION = 1
 /** Mutual-TLS server (HTTPS + WSS on the same port) for desktop peers. */
@@ -24,17 +24,25 @@ export const PEER_PAIR_TTL_MS = 60_000
 /** What the receiving machine lets a paired desktop do. Viewing chats and
  *  pieces is always granted once paired; the rest is opt-in. */
 export interface PeerGrants {
+  /**
+   * Full remote control: the paired desktop is a client of this machine's
+   * companion API, exactly like the phone — chats (create/rename/archive/
+   * delete), folders, memory, routines, pipeline, plan review, media and the
+   * agent's questions. It is the model the mobile app already uses; without
+   * it the other side is a read-only viewer.
+   */
+  control: boolean
   /** Send messages to its chats and stop a running turn. */
   send: boolean
   /** Browse and read the files of the chats' project folders. */
   files: boolean
 }
 
-export const NO_GRANTS: PeerGrants = { send: false, files: false }
+export const NO_GRANTS: PeerGrants = { control: false, send: false, files: false }
 
 export function normalizeGrants(value: unknown): PeerGrants {
   const v = (value ?? {}) as Partial<PeerGrants>
-  return { send: v.send === true, files: v.files === true }
+  return { control: v.control === true, send: v.send === true, files: v.files === true }
 }
 
 // ─── Ids ─────────────────────────────────────────────────────────────────────
@@ -166,6 +174,7 @@ export interface PeersSnapshot {
 export type PeersEvent =
   | { type: 'snapshot'; snapshot: PeersSnapshot }
   | { type: 'sessions'; peerId: string; sessions: SessionInfo[] }
+  | { type: 'folders'; peerId: string; folders: FolderInfo[] }
   | { type: 'chat'; peerId: string; event: ChatEvent }
   | { type: 'statuses'; peerId: string; running: string[] }
 

@@ -53,39 +53,51 @@ describe('pending pairs', () => {
 })
 
 describe('desktop permissions', () => {
-  const all = { send: true, files: true }
-  it('never lets a desktop touch settings, git, memory or approvals', () => {
-    for (const type of [
-      'fs:list-dirs',
-      'memory:list',
-      'memory:delete',
-      'prefs:set',
-      'worker-config:set',
-      'git:checkout',
-      'git:branches',
-      'sessions:delete',
-      'sessions:revert',
-      'sessions:move-folder',
-      'folders:delete',
-      'routines:create',
-      'pipeline:start-task',
-      'ask:reply',
-      'plan:review-accept',
-      'orchestration:approve',
-      'models:select',
-      'queue:op',
-      'something:new',
-    ]) {
-      expect(desktopMayRequest(type, all), type).toBe(false)
+  const readOnly = { control: false, send: true, files: true }
+  const full = { control: true, send: false, files: false }
+  const deniedUnderControl = [
+    'memory:list',
+    'memory:delete',
+    'prefs:set',
+    'worker-config:set',
+    'git:checkout',
+    'git:branches',
+    'sessions:delete',
+    'sessions:revert',
+    'sessions:move-folder',
+    'folders:delete',
+    'routines:create',
+    'pipeline:start-task',
+    'ask:reply',
+    'plan:review-accept',
+    'orchestration:approve',
+    'models:select',
+    'queue:op',
+    'something:new',
+  ]
+
+  it('a read-only pairing cannot touch settings, git, memory or approvals', () => {
+    for (const type of ['fs:list-dirs', ...deniedUnderControl]) {
+      expect(desktopMayRequest(type, readOnly), type).toBe(false)
     }
   })
-  it('viewing needs no grant, sending and files do', () => {
+
+  it('full control is the phone surface — everything except the project files', () => {
+    for (const type of deniedUnderControl) {
+      expect(desktopMayRequest(type, full), type).toBe(true)
+    }
+    expect(desktopMayRequest('fs:read', full)).toBe(false)
+    expect(desktopMayRequest('fs:read', { ...full, files: true })).toBe(true)
+  })
+
+  it('viewing needs no grant; sending comes with control or its own grant', () => {
     expect(desktopMayRequest('messages:get', NO_GRANTS)).toBe(true)
     expect(desktopMayRequest('piece:resolve', NO_GRANTS)).toBe(true)
     expect(desktopMayRequest('messages:send', NO_GRANTS)).toBe(false)
-    expect(desktopMayRequest('messages:send', { send: true, files: false })).toBe(true)
-    expect(desktopMayRequest('fs:read', { send: true, files: false })).toBe(false)
-    expect(desktopMayRequest('fs:read', { send: false, files: true })).toBe(true)
+    expect(desktopMayRequest('messages:send', { control: false, send: true, files: false })).toBe(true)
+    expect(desktopMayRequest('messages:send', full)).toBe(true)
+    expect(desktopMayRequest('fs:read', { control: false, send: true, files: false })).toBe(false)
+    expect(desktopMayRequest('fs:read', { control: false, send: false, files: true })).toBe(true)
     expect(classifyDesktopRequest('chat:abort')).toBe('send')
   })
 })

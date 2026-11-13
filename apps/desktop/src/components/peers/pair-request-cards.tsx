@@ -26,6 +26,10 @@ export function PairRequestCards() {
 
 function RequestCard({ request }: { request: IncomingPairRequest }) {
   const { t } = useTranslation()
+  // Full remote control is the default: a paired desktop is a client of this
+  // machine, exactly like the phone. Turning it off gives the older read-only
+  // pairing (send/files still opt-in).
+  const [control, setControl] = useState(true)
   const [send, setSend] = useState(false)
   const [files, setFiles] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -61,9 +65,17 @@ function RequestCard({ request }: { request: IncomingPairRequest }) {
 
       <p className="mt-3 text-[11px] text-muted-foreground">{t("peers.request.viewNote")}</p>
       <label className="mt-2 flex items-center justify-between gap-2 text-xs">
-        {t("peers.request.allowSend")}
-        <Switch checked={send} onCheckedChange={(v) => setSend(!!v)} />
+        {t("peers.request.allowControl")}
+        <Switch checked={control} onCheckedChange={(v) => setControl(!!v)} />
       </label>
+      {control ? (
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{t("peers.request.allowControlHint")}</p>
+      ) : (
+        <label className="mt-1.5 flex items-center justify-between gap-2 text-xs">
+          {t("peers.request.allowSend")}
+          <Switch checked={send} onCheckedChange={(v) => setSend(!!v)} />
+        </label>
+      )}
       <label className="mt-1.5 flex items-center justify-between gap-2 text-xs">
         {t("peers.request.allowFiles")}
         <Switch checked={files} onCheckedChange={(v) => setFiles(!!v)} />
@@ -86,7 +98,7 @@ function RequestCard({ request }: { request: IncomingPairRequest }) {
           disabled={busy}
           onClick={() => {
             setBusy(true)
-            void peersApi.accept(request.requestId, { send, files })
+            void peersApi.accept(request.requestId, { control, send: send || control, files })
           }}
         >
           {t("peers.request.accept")}
