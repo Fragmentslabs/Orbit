@@ -433,6 +433,18 @@
     "tooltipWeight": "weight {{weight}}",
     "tooltipStale": "(not used for over 30 days)",
     "tooltipCollapsed": "(collapsed)",
+    "summary": {
+      "total": "memories",
+      "project": "of the project",
+      "proposals": "proposals",
+      "general": "general",
+      "hints": {
+        "total": "in the current scope and filter",
+        "project": "memories of the project kind",
+        "proposals": "routine suggestions waiting for review",
+        "general": "memories of the general kind"
+      }
+    },
     "filters": {
       "label": "Memory filters",
       "project": "Project",
@@ -448,6 +460,11 @@
     "resize": "Drag to resize (double-click resets)",
     "tools": "Tools",
     "usage": "Usage",
+    "expandList": "Open list",
+    "collapseList": "Collapse list",
+    "fragments": {
+      "viewAll": "View all"
+    },
     "code": "Code",
     "options": "Options",
     "create": "Create",
@@ -503,7 +520,6 @@
       "chats": "Chats",
       "archived": "Archived",
       "noChats": "No chats yet",
-      "routines": "Routines",
       "pinned": "Pinned",
       "dropToPin": "Drop here to pin"
     },
@@ -611,6 +627,14 @@
       "motion": {
         "label": "Motion",
         "prompt": "Create an animation of [what to animate], [5] seconds long."
+      },
+      "fragment": {
+        "label": "Fragment",
+        "prompt": "Create a fragment — a [screen, side panel or widget] — for [what it does], showing [what should appear]."
+      },
+      "routine": {
+        "label": "Routine",
+        "prompt": "Create a routine that [what to do], at [time], on [days]."
       }
     },
     "processes": {
@@ -962,6 +986,28 @@
     "citationLineRange": "p. {{page}}, lines {{from}}-{{to}}"
   },
   "usage": {
+    "inputIn": "{{count}} in",
+    "outputOut": "{{count}} out",
+    "inputLine": "Input: {{count}} tokens",
+    "outputLine": "Output: {{count}} tokens",
+    "costLine": "Cost: {{cost}}",
+    "currentContext": "Current context: {{count}} tokens",
+    "note": "(input/output above sum all tool calls in this reply — not the context size)",
+    "context": "Context",
+    "contextUsed": "Context used",
+    "input": "Input",
+    "output": "Output",
+    "reasoning": "Reasoning",
+    "noCache": "No cache",
+    "cacheRead": "Read from cache",
+    "cacheWrite": "Written to cache",
+    "tokensWord": "tokens",
+    "compacted": "Compacted — previous history summarized",
+    "nearLimit": "Near the limit — history will be compacted soon",
+    "atLimit": "Limit reached — automatic compaction failed",
+    "estimated": "Estimate",
+    "live": "Live",
+    "compactNow": "Compact history now",
     "nav": {
       "label": "Usage sections",
       "overview": "Overview",
@@ -974,14 +1020,14 @@
     "noData": "No data in this period.",
     "noComparison": "no previous period",
     "vsPrevious": "vs previous period",
-    "estimated": "estimated",
     "ofTotal": "{{pct}}% of total",
     "others": "Others ({{count}})",
     "cards": {
       "tokens": "Tokens",
       "orbitHours": "Orbit hours",
       "yourHours": "Your active hours",
-      "cost": "Spent"
+      "cost": "Spent",
+      "estimated": "estimated"
     },
     "legend": {
       "orbit": "Orbit",
@@ -1476,7 +1522,19 @@
     "discard": "Discard",
     "create": "Create routine",
     "discarded": "Proposal discarded.",
-    "fallbackTitle": "Routine"
+    "fallbackTitle": "Routine",
+    "review": "Review",
+    "activate": "Activate",
+    "where": "Where",
+    "carries": "Carries",
+    "notSet": "Not set",
+    "createdLine": "Routine active",
+    "open": "Open",
+    "discardedLine": "Proposal discarded",
+    "specialists_one": "{{count}} agent",
+    "specialists_other": "{{count}} agents",
+    "scripts_one": "{{count}} script",
+    "scripts_other": "{{count}} scripts"
   },
   "mcpProposal": {
     "building": "Preparing the connection.",
@@ -2524,6 +2582,42 @@
     "emptyTitle": "No boards yet",
     "emptySubtitle": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
     "newPipeline": "New pipeline",
+    "settings": {
+      "title": "Settings",
+      "tasks": "Tasks",
+      "identity": "Name and folders",
+      "folders": "Folders",
+      "phases": "Phases",
+      "phasesSummary_one": "1 phase",
+      "phasesSummary_other": "{{count}} phases",
+      "parallel_one": "{{count}} in parallel",
+      "parallel_other": "{{count}} in parallel",
+      "model": "Model",
+      "run": "Run",
+      "worktreeOn": "worktree per task",
+      "worktreeOff": "in the folder",
+      "commitOn": "commit on",
+      "commitOff": "no commit",
+      "noTasks": "No tasks yet",
+      "autosave": "Changes are saved on their own."
+    },
+    "list": {
+      "count_one": "1 pipeline",
+      "count_other": "{{count}} pipelines",
+      "running_one": "1 running",
+      "running_other": "{{count}} running",
+      "failed_one": "1 failure",
+      "failed_other": "{{count}} failures",
+      "tasks": "Tasks",
+      "done": "done",
+      "idle": "idle",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteTitle": "Delete pipeline?",
+      "deleteDescription": "\"{{name}}\" and its tasks will be permanently deleted.",
+      "options": "Options",
+      "tail": "Tasks run in order, one phase at a time."
+    },
     "create": "Create",
     "pipelineName": "Pipeline name",
     "nameExample": "e.g. Features",
@@ -2659,6 +2753,8 @@
     "back": "Back to the list",
     "addTask": "Add task",
     "tasksSummary": "{{completed}}/{{total}} tasks",
+    "tabPipelines": "Pipelines",
+    "tabPhases": "Phases",
     "addPhase": "Add phase",
     "createPhase": "Create my own phase",
     "editPhase": "Edit phase",
@@ -2666,11 +2762,16 @@
     "phaseName": "Name",
     "phaseDescription": "Description",
     "phaseDescriptionHint": "One line — shown in the pipeline list",
-    "phaseKind": "Role",
-    "phaseKindHint": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
+    "phaseAgent": "Specialist",
+    "phaseAgentHint": "Who runs this phase. General is not the chat agent: it runs with the pipeline's fixed rules and no identity of its own; one of your agents brings its identity into the phase.",
+    "phaseAgentMissing": "This specialist no longer exists — the phase runs as General.",
     "phasePrompt": "Prompt",
-    "phasePromptHint": "Instructions for the agent in this phase, including what it must record in the note.",
+    "phasePromptHint": "Instructions for this phase. Orbit already injects the fixed rules — how the phase runs, the note's language and the closing block — so there is no need to repeat them here.",
+    "phaseNote": "What the note records",
+    "phaseNoteHint": "The facts the next phase needs. Orbit wraps it in the note block and enforces the format — there is no need to write the block here.",
+    "phaseNotePlaceholder": "Record: what was done, files changed, decisions…",
     "phaseCapabilities": "Capabilities",
+    "phaseReadFixed": "Always included: a phase that cannot read cannot work.",
     "saveInThisPipeline": "Save in this pipeline",
     "moreSaveOptions": "More save options",
     "saveToOriginal": "Save to the original phase",
@@ -2688,15 +2789,8 @@
       "edit": "Edit",
       "shell": "Shell",
       "browser": "Browser",
+      "research": "Research",
       "memory": "Memory"
-    },
-    "kind": {
-      "development": "Development",
-      "validation": "Validation",
-      "security": "Security",
-      "review": "Code review",
-      "infra": "Infra",
-      "generic": "Generic"
     },
     "changedFiles_one": "{{count}} file changed",
     "changedFiles_other": "{{count}} files changed",
@@ -2738,7 +2832,34 @@
       "infra": {
         "name": "Infra",
         "description": "Deploy and environment checklist"
+      },
+      "research": {
+        "name": "Research",
+        "description": "Investigates the question in the code and on the web, and records what it found"
       }
+    },
+    "library": {
+      "search": "Search phase",
+      "new": "New phase",
+      "all": "All",
+      "native": "Native",
+      "mine": "Yours",
+      "nativeBadge": "Native",
+      "mineBadge": "Yours",
+      "count_one": "{{count}} phase",
+      "count_other": "{{count}} phases",
+      "empty": "No phase found.",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "reset": "Restore",
+      "deleteTitle": "Delete phase?",
+      "deleteBody": "The phase \"{{name}}\" no longer exists. Pipelines already using it are unchanged.",
+      "resetTitle": "Restore the native phase?",
+      "resetBody": "Your changes to \"{{name}}\" are discarded and the original version returns.",
+      "usedIn_one": "used in {{count}} pipeline",
+      "usedIn_other": "used in {{count}} pipelines",
+      "unused": "unused"
     },
     "editPipeline": "Edit pipeline",
     "save": "Save",
@@ -2774,9 +2895,11 @@
     },
     "stats": {
       "pipelines": "Pipelines",
+      "tasks": "Tasks",
       "failed": "Failed",
       "spent": "Spent in 30 days",
-      "spentHint": "Cost of the tasks started in the last 30 days"
+      "spentHint": "Cost of the tasks started in the last 30 days",
+      "spentFooter": "{{cost}} in 30 days"
     },
     "card": {
       "running_one": "{{count}} running",
@@ -2838,6 +2961,7 @@
       "hours": "hours",
       "em": "on",
       "onceHint": "The routine turns itself off after running.",
+      "pastDate": "That date has passed — the routine won't run.",
       "summaryHours": "Every {{hours}} hours",
       "summarySingle": "Once on {{date}} at {{time}}",
       "summaryDaily": "Every day at {{time}}",
@@ -2900,6 +3024,7 @@
       "createFirst": "Create the first routine",
       "active": "Active",
       "paused": "Paused",
+      "finished": "Finished",
       "next": "Next: {{when}}",
       "runNow": "Run now",
       "edit": "Edit",
@@ -2908,11 +3033,22 @@
       "deleteTitle": "Delete routine",
       "deleteDescription": "\"{{title}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
       "new": "New routine",
-      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
       "search": "Search routines",
       "noResults": "Nothing found for \"{{query}}\".",
       "failed": "Failed last time",
-      "runningNow": "Running now"
+      "runningNow": "Running now",
+      "running": "Running",
+      "failedShort": "Failed",
+      "options": "More options",
+      "nextLabel": "next",
+      "folder": "folder {{name}}",
+      "tail": "Runs keep going while Orbit is closed.",
+      "count_one": "{{count}} routine",
+      "count_other": "{{count}} routines",
+      "countActive_one": "{{count}} active",
+      "countActive_other": "{{count}} active",
+      "countRunning_one": "{{count}} running now",
+      "countRunning_other": "{{count}} running now"
     },
     "runs": {
       "title": "Sessions",
@@ -2924,14 +3060,73 @@
       "tokens": "{{value}} tokens",
       "openFolder": "Open the folder of this run"
     },
-    "mode": {
-      "chat": "Chat mode",
-      "code": "Code mode"
-    },
     "timePlaceholder": "HH:MM",
     "view": {
       "list": "List",
       "agenda": "Agenda"
+    },
+    "chat": {
+      "back": "Back to routines",
+      "tabRuns": "Runs",
+      "tabConfig": "Settings",
+      "next": "Next run",
+      "noNext": "No next run",
+      "runningNow": "Running now",
+      "agentCount": "{{count}} agents",
+      "agentCount_one": "1 agent",
+      "noTeam": "No team — one agent",
+      "recent": "Recent runs",
+      "noRuns": "No runs yet.",
+      "instruction": "Instruction",
+      "info": "Routine details",
+      "notRunYet": "It has not run yet.",
+      "notRunYetNext": "It has not run yet. The next run is {{when}}."
+    },
+    "card": {
+      "reason": { "schedule": "scheduled", "manual": "manual", "event": "event" },
+      "workingFor": "running for {{time}}",
+      "resultLater": "The summary lands here when the run finishes.",
+      "agentWorking": "working…",
+      "agentQueued": "queued",
+      "agents": "{{count}} agents",
+      "agents_one": "1 agent",
+      "status": { "running": "running", "ok": "done", "error": "failed" },
+      "details": "view details",
+      "noAnswer": "This run left no written answer.",
+      "execution": "Run"
+    },
+    "team": {
+      "label": "Team",
+      "soloLabel": "Agent",
+      "title": "Routine team",
+      "soloTitle": "Routine agent",
+      "subtitle": "Who takes part, what each one does and in what order.",
+      "hint": "Swapping who runs it applies when you save the routine. To change what it does or the order, ask in the chat.",
+      "loses": "No {{abilities}} — the routine uses it.",
+      "request": "Ask for a change in the chat",
+      "editTask": "Edit instruction",
+      "editTaskTitle": "{{name}}'s instruction",
+      "editTaskHint": "What this agent gets at this step. The change applies on the next run.",
+      "changeRequest": "I want to change this routine's team: ",
+      "taskLabel": "What this agent gets",
+      "factsParallel": "{{count}} in parallel",
+      "factsBudget": "{{value}}k budget",
+      "factsReview": "review at the end"
+    },
+    "edit": {
+      "what": "What it does",
+      "when": "When it runs",
+      "where": "Where it works",
+      "who": "Who runs it",
+      "openFolder": "Open",
+      "folderLoading": "creating the folder…",
+      "abilities": "Abilities"
+    },
+    "reschedule": {
+      "title": "Schedule again",
+      "date": "Date",
+      "time": "Time",
+      "confirm": "Schedule"
     },
     "detail": {
       "close": "Close",
@@ -2941,6 +3136,7 @@
       "what": "What it does",
       "pause": "Pause",
       "activate": "Activate",
+      "reschedule": "Schedule again",
       "runsCount_one": "{{count}} execution",
       "runsCount_other": "{{count}} executions",
       "showMore": "Show all",
@@ -2954,7 +3150,13 @@
       "model": "Model",
       "folders": "Folders",
       "recent": "Latest executions",
-      "seeAll": "See all"
+      "seeAll": "See all",
+      "groupWhat": "What it does",
+      "groupWhen": "When it runs",
+      "groupTouches": "What it can touch",
+      "groupWho": "Who runs it",
+      "limit": "Limit",
+      "tokensPerRun": "{{tokens}} tokens per execution"
     },
     "agenda": {
       "prev": "Previous week",
@@ -2962,18 +3164,24 @@
       "today": "Today"
     },
     "summary": {
-      "active": "Active",
+      "active": "active",
       "paused_one": "{{count}} paused",
       "paused_other": "{{count}} paused",
       "failures": "Failures in 7 days",
       "spent": "Spent in 30 days",
       "executions_one": "{{count}} execution",
       "executions_other": "{{count}} executions",
-      "next": "Next executions",
-      "nextHint": "In the next 24 hours · click to open",
-      "nothingNext": "Nothing scheduled for the next 24 hours.",
+      "total": "routines",
+      "failedToday": "failed today",
+      "failedShort": "failed",
+      "manual": "manual",
+      "scheduled": "scheduled",
+      "showAll": "See all",
+      "next": "Next runs",
+      "nextHint": "In the next week · click to open",
+      "nothingNext": "Nothing in the next week.",
       "now": "now",
-      "recent": "Latest executions",
+      "recent": "Recent runs",
       "noRuns": "No executions yet.",
       "activeOf": "{{active}} of {{total}}",
       "noFailures": "no failures"
@@ -3054,8 +3262,8 @@
       "agent": "Agent",
       "agentGives": "Turned on by this agent:",
       "noneGiven": "none",
-      "folders": "Folders (optional)",
-      "foldersHint": "Without a folder the routine runs as a chat. With one or more it can read and edit files there.",
+      "folders": "Working folders",
+      "foldersHint": "Extras the prompt can open, analyse and edit. Without them it only touches the routine folder.",
       "whatItDoes": "What the routine does",
       "whatItDoesHint": "Write it like you would tell a colleague. If something is missing, the chat asks.",
       "whatPlaceholder": "Every weekday morning, list the open pull requests, highlight the ones stalled for more than 2 days and send me the summary.",
@@ -3094,7 +3302,26 @@
       "estimateRange": "{{low}} to {{high}} thousand tokens",
       "estimateHistory_one": "Based on the last run of this routine.",
       "estimateHistory_other": "Based on the last {{count}} runs of this routine.",
-      "estimateGuess": "A rough guess from the number of agents: this routine has not run yet."
+      "estimateGuess": "A rough guess from the number of agents: this routine has not run yet.",
+      "inherits": "Inherits",
+      "proposalTeam": "The team came from the chat's proposal — to change it, ask in the chat.",
+      "teamTitle": "Team",
+      "teamCount_one": "{{count}} agent",
+      "teamCount_other": "{{count}} agents",
+      "reviewTitle": "Team review",
+      "reviewOn": "on",
+      "reviewOff": "off",
+      "reviewRole": "Only accepts, asks for an adjustment or marks a failure — it does not create agents.",
+      "reviewModel": "The reviewer runs on the routine's model",
+      "modelOfMember": "The model this agent runs on",
+      "limits": "limits of this routine",
+      "simultaneous": "Agents at the same time",
+      "ofMax": "of {{max}}",
+      "corrections": "Reviewer corrections",
+      "perAgent": "per agent",
+      "onFailure": "If an agent fails",
+      "onFailureBranch": "Stop only that branch",
+      "onFailureHint": "A failed agent drops only the ones waiting for it; the rest carry on."
     }
   },
   "queue": {
@@ -3139,6 +3366,114 @@
     "zoomReset": "Reset zoom (100%)",
     "unavailable": "Artifact unavailable"
   },
+  "widgets": {
+    "title": "Widgets",
+    "tabs": {
+      "fragments": "Fragments",
+      "widgets": "Widgets"
+    },
+    "filters": {
+      "title": "Show",
+      "all": "All",
+      "native": "Native",
+      "fragments": "Fragments",
+      "count": "widgets",
+      "hintAll": "The widgets that ship with Orbit and the ones your fragments offer.",
+      "hintNative": "Widgets drawn by the app itself — they ship with Orbit.",
+      "hintFragments": "Widgets offered by the fragments in this Orbit."
+    },
+    "native": {
+      "badge": "native",
+      "hint": "A native widget: it ships with Orbit, reads the app's own data and cannot be edited."
+    },
+    "nativeWidgets": {
+      "usageDay": {
+        "name": "Today",
+        "description": "Time, tokens and chats of today"
+      },
+      "usageProject": {
+        "name": "Project",
+        "description": "What the open project spent"
+      },
+      "usageChat": {
+        "name": "Chat",
+        "description": "What this conversation spent"
+      },
+      "activity": {
+        "name": "Activity",
+        "description": "A year of work as a grid of days",
+        "streak_one": "{{count}} day streak",
+        "streak_other": "{{count}} days streak",
+        "weeks_one": "{{count}} week",
+        "weeks_other": "{{count}} weeks",
+        "nothing": "nothing",
+        "today": "today"
+      },
+      "routines": {
+        "name": "Routines",
+        "description": "The next run, what is running and what just ran",
+        "active_one": "{{count}} on",
+        "active_other": "{{count}} on",
+        "upcoming": "Next runs",
+        "none": "No routine yet",
+        "noneUpcoming": "Nothing scheduled.",
+        "nothingRunning": "Nothing running",
+        "unknown": "Routine",
+        "loading": "Loading…"
+      },
+      "pipeline": {
+        "name": "Pipeline",
+        "description": "How many tasks are running and what finished",
+        "running_one": "{{count}} running",
+        "running_other": "{{count}} running",
+        "paused_one": "{{count}} paused",
+        "paused_other": "{{count}} paused",
+        "idle": "Idle",
+        "finished": "Finished",
+        "nothingRecent": "Nothing finished recently",
+        "none": "No pipeline yet",
+        "loading": "Loading…"
+      },
+      "usage": {
+        "time": "Time",
+        "tokens": "Tokens",
+        "chats": "chats",
+        "replies": "replies",
+        "cost": "Cost",
+        "week": "Last 7 days",
+        "total": "Total",
+        "noProject": "No project",
+        "noChat": "No chat open",
+        "oneDay": "1 day",
+        "days": "{{count}} days"
+      }
+    },
+    "panel": {
+      "label": "Widgets on the edge",
+      "title": "Widgets",
+      "settings": "Configure widgets",
+      "collapse": "Collapse",
+    "pin": "Keep open",
+    "unpin": "Stop keeping open",
+      "rail": "Widgets"
+    },
+    "tab": {
+      "hint": "Click a widget to put it on the board — the same one can repeat on any page. Drag it into the grid to choose where it lands, and click a card to change its size, ask for a change in chat or take it off.",
+      "empty": "No fragment offers widgets yet. Ask the agent to build one.",
+      "preview": "How it will look",
+      "drop": "Drag a widget here",
+      "select": "Click a card on the board to see the widget at its real size, change its size or ask for a change in chat.",
+      "dragOut": "Release outside the preview to take the widget off.",
+      "close": "Close",
+      "remove": "Remove from the board",
+      "requestChange": "Ask for a change in chat",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "page": "Page {{page}}",
+      "addPage": "New page",
+      "removePage": "Remove the empty page"
+    }
+  },
   "fragments": {
     "reload": "Reload",
     "model": "Model",
@@ -3161,6 +3496,22 @@
     "search": "Search fragments",
     "new": "New fragment",
     "filterAll": "All",
+    "origins": {
+      "title": "Library",
+      "count_one": "{{count}} fragment",
+      "count_other": "{{count}} fragments",
+      "all": "All",
+      "native": "Native",
+      "integration": "Integrations",
+      "imported": "Imported",
+      "local": "Local",
+      "allHint": "Everything in this Orbit.",
+      "nativeHint": "The fragments that ship with Orbit.",
+      "integrationHint": "Pulled in by an MCP integration.",
+      "importedHint": "Arrived from a link, a repository or a file.",
+      "localHint": "Created by you in this Orbit.",
+      "nativeEmpty": "No fragment ships with Orbit yet."
+    },
     "emptyTitle": "No fragments yet",
     "emptyHint": "A fragment is a small screen Orbit builds with you — a tracker, a dashboard, a tool. Create one and keep refining it live.",
     "noMatch": "No fragment matches.",
@@ -3173,10 +3524,6 @@
     "pinPanel": "Show in the panel's Open list",
     "openInPanel": "Open in the side panel",
     "modelFollowChat": "Model of the chat",
-    "composeTitle": "Create {{what}} with Orbit",
-    "composeHint": "Describe what you need, or start from an example. Orbit builds it right here, live.",
-    "creatingTitle": "Orbit is building your fragment…",
-    "creatingHint": "It appears here as soon as the first version exists, and keeps updating while Orbit works.",
     "kind": {
       "screen": {
         "name": "Screen",
@@ -3187,15 +3534,8 @@
         "name": "Side panel",
         "description": "A compact tab for the side panel, next to the chat.",
         "indef": "a side panel"
-      },
-      "widget": {
-        "name": "Widget",
-        "description": "A small card for the home screen.",
-        "indef": "a widget"
       }
     },
-    "kindLabel": "Where it lives",
-    "startFrom": "Or start from one of these",
     "sectionPinned": "Pinned",
     "sectionOthers": "Others",
     "activity": "What Orbit is doing",
@@ -3204,28 +3544,6 @@
     "iconHint": "Any icon from the Lucide library. Search by name, in English.",
     "iconSearch": "Search icons (e.g. chart, wallet, timer)",
     "iconNone": "No icon with that name.",
-    "phase1": "Creating…",
-    "phase2": "Laying out the screen…",
-    "phase3": "Writing the first version…",
-    "phase4": "Polishing the details…",
-    "phase5": "Almost there…",
-    "starters": {
-      "spending": {
-        "title": "Spending tracker",
-        "hint": "Income, expenses and a chart",
-        "prompt": "A panel to track my monthly spending: add income and expenses by category and see a chart of where the money goes."
-      },
-      "tasks": {
-        "title": "Task list",
-        "hint": "With priorities",
-        "prompt": "A task list with priorities and due dates, where I can check things off and filter by what is pending."
-      },
-      "ai": {
-        "title": "AI generator",
-        "hint": "Uses your model",
-        "prompt": "A small tool that takes a topic and uses AI to generate a draft, with a button to copy the result."
-      }
-    },
     "action": {
       "create": "Creating the fragment",
       "createNamed": "Creating · {{name}}",
@@ -3236,7 +3554,8 @@
       "remove": "Removing {{path}}",
       "logs": "Checking the page for errors",
       "ai": "Declaring AI use",
-      "models": "Declaring a model picker"
+      "models": "Declaring a model picker",
+      "notify": "Declaring notifications"
     },
     "chat": {
       "show": "Show conversation",
@@ -3246,9 +3565,6 @@
       "empty": "Nothing asked yet.",
       "history": "Chats of this fragment"
     },
-    "creationEnded": "Did not finish",
-    "discardCreation": "Discard",
-    "backToList": "Back to the list",
     "card": "Fragment",
     "gone": "This fragment no longer exists.",
     "fullscreen": "Open full screen",
@@ -3256,6 +3572,8 @@
     "provenance": {
       "title": "Origin",
       "local": "Created on this computer",
+      "localText": "Created here by you on {{date}}.",
+      "thirdPartyText": "Imported from {{owner}} on {{date}}.",
       "thirdParty": "From a third party",
       "owner": "Owner",
       "source": "Source",
@@ -3279,12 +3597,17 @@
     },
     "details": {
       "title": "Details",
+      "tabDetails": "Details",
+      "tabData": "Data",
+      "tabHistory": "History",
+      "revisionShort": "rev {{revision}}",
       "weight": "Weight",
       "code": "Code",
       "data": "Saved data",
       "settings": "Settings",
       "model": "Model",
-      "thinking": "Thinking",
+      "widgets": "Widgets",
+      "widgetsOpen": "See on the board",
       "on": "On",
       "off": "Off",
       "pins": "Pinned in",
@@ -3293,15 +3616,25 @@
       "none": "nowhere",
       "revision": "Revision",
       "capabilities": "Capabilities",
+      "permissions": "Permissions",
+      "permissionsEmpty": "It asked for no permissions",
+      "more": "More",
+      "moreHint": "usage, files, origin",
+      "usage": "Usage",
+      "notificationsError": "Could not read the scheduled ones",
       "cap": {
         "ai": "Use your AI model",
         "models": "Choose the model inside its screen",
         "http": "Reach these internet hosts",
-        "mcp": "Use these connected MCP tools"
+        "mcp": "Use these connected MCP tools",
+        "notify": "Send notifications",
+        "microphone": "Record audio from the microphone"
       },
       "allowed": "Allowed",
       "allow": "Allow",
       "notRequested": "Not requested",
+      "capabilitiesEmpty": "Nothing requested",
+      "capabilitiesEmptyHint": "No AI, model, internet, MCP, notifications or microphone.",
       "tokens": "Spent by its chats",
       "chats": "Chats",
       "input": "Input",
@@ -3311,8 +3644,12 @@
       "databaseEmpty": "Nothing saved yet.",
       "packages": "Third-party packages",
       "packagesEmpty": "None.",
-      "pinHome": "home screen",
-      "history": "History"
+      "appears": "Where it appears",
+      "dataSaved": "Saved data",
+      "history": "History",
+      "notifications": "Notifications",
+      "notificationsEmpty": "Nothing scheduled",
+      "notificationsHint": "They only arrive while Orbit is open."
     },
     "inspect": "Pick an element to change",
     "data": {
@@ -3322,13 +3659,29 @@
       "refresh": "Refresh",
       "truncated": "Shown only in part."
     },
-    "pinHome": "Show on the home screen",
     "openFull": "Open the fragment",
     "ask": {
       "ai": "This fragment wants to use your AI model.",
       "models": "This fragment wants to let you pick the AI model inside its screen.",
       "http": "This fragment wants to reach the internet: {{what}}.",
-      "mcp": "This fragment wants to use your connected MCP tools: {{what}}."
+      "mcp": "This fragment wants to use your connected MCP tools: {{what}}.",
+      "notify": "This fragment wants to send you notifications.",
+      "microphone": "This fragment wants to use the microphone.",
+      "other": "Another option",
+      "create": "Create",
+      "complement": "Complement",
+      "complementPlaceholder": "Add whatever is missing…",
+      "back": "Back",
+      "placeholder": "Describe it your way…",
+      "send": "Send",
+      "skip": "Skip this question",
+      "hint": "The piece keeps being built with the default."
+    },
+    "notify": {
+      "daily": "Every day at {{time}}",
+      "every": "Every {{minutes}} min",
+      "at": "Once, {{date}}",
+      "cancel": "Cancel"
     },
     "askAllow": "Allow",
     "history": {
@@ -4304,6 +4657,7 @@
     "remote": {
       "empty": "No chats on {{name}} yet.",
       "pick": "Pick a chat from {{name}} in the sidebar.",
+      "sessions": "Sessions",
       "loading": "Loading…",
       "loadError": "Couldn't load this chat: {{error}}",
       "inputPlaceholder": "Message this chat on {{name}}",
@@ -4431,9 +4785,9 @@
     "done": "Finished — open to see"
   },
   "specialists": {
-    "title": "Specialists",
+    "title": "Agents",
     "builtin": {
-      "title": "Built-in specialists",
+      "title": "Built-in agents",
       "description": "Lean agents for one craft. Each replaces the general setup for the whole conversation. Read-only.",
       "badge": "Built-in",
       "edited": "Edited"
@@ -4628,7 +4982,7 @@
     "skills": "Pinned skills: {{skills}}",
     "add": "Add agent",
     "discard": "Discard",
-    "added": "Agent added — find it in Tools → Specialists",
+    "added": "Agent added — find it in Tools → Agents",
     "discarded": "Proposal discarded."
   },
   "proposal": {
@@ -4650,7 +5004,7 @@
     "when": "When",
     "whatItDoes": "What it does",
     "folders": "Folders",
-    "noFolder": "None · runs as a chat",
+    "noFolder": "None · uses only the routine folder",
     "routineCodeNote": "With a folder, the routine runs on its own and can read and edit files there, without asking.",
     "whenToUse": "When to use",
     "pinnedSkills": "Pinned skills",

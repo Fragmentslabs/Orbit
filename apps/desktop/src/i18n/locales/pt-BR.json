@@ -433,6 +433,18 @@
     "tooltipWeight": "peso {{weight}}",
     "tooltipStale": "(sem uso há mais de 30 dias)",
     "tooltipCollapsed": "(colapsado)",
+    "summary": {
+      "total": "memórias",
+      "project": "do projeto",
+      "proposals": "propostas",
+      "general": "gerais",
+      "hints": {
+        "total": "no escopo e no filtro atuais",
+        "project": "memórias do tipo projeto",
+        "proposals": "sugestões da rotina esperando revisão",
+        "general": "memórias do tipo geral"
+      }
+    },
     "filters": {
       "label": "Filtros de memórias",
       "project": "Projeto",
@@ -448,6 +460,11 @@
     "resize": "Arrastar para ajustar a largura (duplo clique volta ao padrão)",
     "tools": "Ferramentas",
     "usage": "Uso",
+    "expandList": "Abrir lista",
+    "collapseList": "Recolher lista",
+    "fragments": {
+      "viewAll": "Ver todos"
+    },
     "code": "Código",
     "options": "Opções",
     "create": "Criar",
@@ -503,7 +520,6 @@
       "chats": "Conversas",
       "archived": "Arquivados",
       "noChats": "Nenhuma conversa ainda",
-      "routines": "Rotinas",
       "pinned": "Fixados",
       "dropToPin": "Solte aqui para fixar"
     },
@@ -611,6 +627,14 @@
       "motion": {
         "label": "Motion",
         "prompt": "Crie uma animação de [o que animar], com [5] segundos de duração."
+      },
+      "fragment": {
+        "label": "Fragmento",
+        "prompt": "Crie um fragmento de [tela, painel lateral ou widget] para [o que ele faz], mostrando [o que deve aparecer]."
+      },
+      "routine": {
+        "label": "Rotina",
+        "prompt": "Crie uma rotina que [o que fazer], às [horário], nos dias [dias]."
       }
     },
     "processes": {
@@ -962,6 +986,28 @@
     "citationLineRange": "p. {{page}}, linhas {{from}}-{{to}}"
   },
   "usage": {
+    "inputIn": "{{count}} de entrada",
+    "outputOut": "{{count}} de saída",
+    "inputLine": "Entrada: {{count}} tokens",
+    "outputLine": "Saída: {{count}} tokens",
+    "costLine": "Custo: {{cost}}",
+    "currentContext": "Contexto atual: {{count}} tokens",
+    "note": "(entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)",
+    "context": "Contexto",
+    "contextUsed": "Contexto usado",
+    "input": "Entrada",
+    "output": "Saída",
+    "reasoning": "Raciocínio",
+    "noCache": "Sem cache",
+    "cacheRead": "Lido do cache",
+    "cacheWrite": "Gravado no cache",
+    "tokensWord": "tokens",
+    "compacted": "Compactado — histórico anterior resumido",
+    "nearLimit": "Próximo do limite — o histórico será compactado em breve",
+    "atLimit": "Limite atingido — a compactação automática falhou",
+    "estimated": "Estimativa",
+    "live": "Ao vivo",
+    "compactNow": "Compactar histórico agora",
     "nav": {
       "label": "Seções de uso",
       "overview": "Visão geral",
@@ -974,14 +1020,14 @@
     "noData": "Sem dados neste período.",
     "noComparison": "sem período anterior",
     "vsPrevious": "vs período anterior",
-    "estimated": "estimado",
     "ofTotal": "{{pct}}% do total",
     "others": "Outros ({{count}})",
     "cards": {
       "tokens": "Tokens",
       "orbitHours": "Horas do Orbit",
       "yourHours": "Suas horas ativas",
-      "cost": "Gasto"
+      "cost": "Gasto",
+      "estimated": "estimado"
     },
     "legend": {
       "orbit": "Orbit",
@@ -1476,7 +1522,19 @@
     "discard": "Descartar",
     "create": "Criar rotina",
     "discarded": "Proposta descartada.",
-    "fallbackTitle": "Rotina"
+    "fallbackTitle": "Rotina",
+    "review": "Revisar",
+    "activate": "Ativar",
+    "where": "Onde",
+    "carries": "Leva",
+    "notSet": "Não definido",
+    "createdLine": "Rotina ativa",
+    "open": "Abrir",
+    "discardedLine": "Proposta descartada",
+    "specialists_one": "{{count}} agente",
+    "specialists_other": "{{count}} agentes",
+    "scripts_one": "{{count}} script",
+    "scripts_other": "{{count}} scripts"
   },
   "mcpProposal": {
     "building": "Preparando a conexão.",
@@ -2524,6 +2582,42 @@
     "emptyTitle": "Nenhum board ainda",
     "emptySubtitle": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
     "newPipeline": "Nova esteira",
+    "settings": {
+      "title": "Configurações",
+      "tasks": "Tarefas",
+      "identity": "Nome e pastas",
+      "folders": "Pastas",
+      "phases": "Fases",
+      "phasesSummary_one": "1 fase",
+      "phasesSummary_other": "{{count}} fases",
+      "parallel_one": "{{count}} em paralelo",
+      "parallel_other": "{{count}} em paralelo",
+      "model": "Modelo",
+      "run": "Execução",
+      "worktreeOn": "worktree por tarefa",
+      "worktreeOff": "na pasta",
+      "commitOn": "commit ligado",
+      "commitOff": "sem commit",
+      "noTasks": "Nenhuma tarefa ainda",
+      "autosave": "As mudanças são salvas sozinhas."
+    },
+    "list": {
+      "count_one": "1 esteira",
+      "count_other": "{{count}} esteiras",
+      "running_one": "1 rodando",
+      "running_other": "{{count}} rodando",
+      "failed_one": "1 falha",
+      "failed_other": "{{count}} falhas",
+      "tasks": "Tarefas",
+      "done": "concluída",
+      "idle": "ociosa",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "deleteTitle": "Excluir esteira?",
+      "deleteDescription": "\"{{name}}\" e as tarefas dela serão excluídas permanentemente.",
+      "options": "Opções",
+      "tail": "As tarefas rodam em sequência, uma etapa por vez."
+    },
     "create": "Criar",
     "pipelineName": "Nome da esteira",
     "nameExample": "ex.: Features",
@@ -2659,6 +2753,8 @@
     "back": "Voltar para a lista",
     "addTask": "Adicionar tarefa",
     "tasksSummary": "{{completed}}/{{total}} tasks",
+    "tabPipelines": "Esteiras",
+    "tabPhases": "Fases",
     "addPhase": "Adicionar fase",
     "createPhase": "Criar minha própria fase",
     "editPhase": "Editar fase",
@@ -2666,11 +2762,16 @@
     "phaseName": "Nome",
     "phaseDescription": "Descrição",
     "phaseDescriptionHint": "Uma linha — aparece na lista da esteira",
-    "phaseKind": "Papel",
-    "phaseKindHint": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
+    "phaseAgent": "Especialista",
+    "phaseAgentHint": "Quem faz esta fase. Geral não é o agente do chat: roda com as regras fixas da esteira, sem identidade própria; um agente seu traz a identidade dele para dentro da fase.",
+    "phaseAgentMissing": "Este especialista não existe mais — a fase roda como Geral.",
     "phasePrompt": "Prompt",
-    "phasePromptHint": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
+    "phasePromptHint": "Instruções desta fase. O Orbit já injeta as regras fixas — como a fase roda, o idioma da nota e o bloco de fechamento —, então não precisa repetir isso aqui.",
+    "phaseNote": "O que a nota registra",
+    "phaseNoteHint": "Os fatos que a próxima fase precisa. O Orbit embrulha isso no bloco da nota e cuida do formato — não precisa escrever o bloco aqui.",
+    "phaseNotePlaceholder": "Registre: o que foi feito, arquivos alterados, decisões…",
     "phaseCapabilities": "Capacidades",
+    "phaseReadFixed": "Sempre incluída: uma fase que não lê não tem como trabalhar.",
     "saveInThisPipeline": "Salvar nesta esteira",
     "moreSaveOptions": "Mais opções de salvar",
     "saveToOriginal": "Salvar na fase original",
@@ -2688,15 +2789,8 @@
       "edit": "Edição",
       "shell": "Shell",
       "browser": "Browser",
+      "research": "Pesquisa",
       "memory": "Memória"
-    },
-    "kind": {
-      "development": "Desenvolvimento",
-      "validation": "Validação",
-      "security": "Segurança",
-      "review": "Revisão de código",
-      "infra": "Infra",
-      "generic": "Genérica"
     },
     "changedFiles_one": "{{count}} arquivo alterado",
     "changedFiles_other": "{{count}} arquivos alterados",
@@ -2738,7 +2832,34 @@
       "infra": {
         "name": "Infra",
         "description": "Checklist de deploy e ambiente"
+      },
+      "research": {
+        "name": "Pesquisa",
+        "description": "Investiga a questão no código e na web, e registra o que encontrou"
       }
+    },
+    "library": {
+      "search": "Buscar fase",
+      "new": "Nova fase",
+      "all": "Todas",
+      "native": "Nativas",
+      "mine": "Suas",
+      "nativeBadge": "Nativa",
+      "mineBadge": "Sua",
+      "count_one": "{{count}} fase",
+      "count_other": "{{count}} fases",
+      "empty": "Nenhuma fase encontrada.",
+      "edit": "Editar",
+      "duplicate": "Duplicar",
+      "delete": "Excluir",
+      "reset": "Restaurar",
+      "deleteTitle": "Excluir fase?",
+      "deleteBody": "A fase \"{{name}}\" deixa de existir. Esteiras que já a usam não mudam.",
+      "resetTitle": "Restaurar a fase nativa?",
+      "resetBody": "Suas mudanças em \"{{name}}\" são descartadas e a versão original volta.",
+      "usedIn_one": "usada em {{count}} esteira",
+      "usedIn_other": "usada em {{count}} esteiras",
+      "unused": "sem uso"
     },
     "editPipeline": "Editar esteira",
     "save": "Salvar",
@@ -2774,9 +2895,11 @@
     },
     "stats": {
       "pipelines": "Esteiras",
+      "tasks": "Tarefas",
       "failed": "Com erro",
       "spent": "Gasto em 30 dias",
-      "spentHint": "Custo das tasks iniciadas nos últimos 30 dias"
+      "spentHint": "Custo das tasks iniciadas nos últimos 30 dias",
+      "spentFooter": "{{cost}} em 30 dias"
     },
     "card": {
       "running_one": "{{count}} em andamento",
@@ -2838,6 +2961,7 @@
       "hours": "horas",
       "em": "em",
       "onceHint": "Depois de rodar, a rotina se desativa sozinha.",
+      "pastDate": "Essa data já passou — a rotina não vai rodar.",
       "summaryHours": "A cada {{hours}} horas",
       "summarySingle": "Uma vez em {{date}} às {{time}}",
       "summaryDaily": "Todo dia às {{time}}",
@@ -2900,6 +3024,7 @@
       "createFirst": "Criar a primeira rotina",
       "active": "Ativa",
       "paused": "Pausada",
+      "finished": "Concluída",
       "next": "Próxima: {{when}}",
       "runNow": "Executar agora",
       "edit": "Editar",
@@ -2908,11 +3033,22 @@
       "deleteTitle": "Excluir rotina",
       "deleteDescription": "\"{{title}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
       "new": "Nova rotina",
-      "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
       "search": "Buscar rotina",
       "noResults": "Nada encontrado para \"{{query}}\".",
       "failed": "Falhou na última",
-      "runningNow": "Rodando agora"
+      "runningNow": "Rodando agora",
+      "running": "Rodando",
+      "failedShort": "Falhou",
+      "options": "Mais opções",
+      "nextLabel": "próxima",
+      "folder": "pasta {{name}}",
+      "tail": "As execuções continuam com o Orbit fechado.",
+      "count_one": "{{count}} rotina",
+      "count_other": "{{count}} rotinas",
+      "countActive_one": "{{count}} ativa",
+      "countActive_other": "{{count}} ativas",
+      "countRunning_one": "{{count}} rodando agora",
+      "countRunning_other": "{{count}} rodando agora"
     },
     "runs": {
       "title": "Sessões",
@@ -2924,14 +3060,73 @@
       "tokens": "{{value}} tokens",
       "openFolder": "Abrir a pasta desta execução"
     },
-    "mode": {
-      "chat": "Modo chat",
-      "code": "Modo código"
-    },
     "timePlaceholder": "HH:MM",
     "view": {
       "list": "Lista",
       "agenda": "Agenda"
+    },
+    "chat": {
+      "back": "Voltar para as rotinas",
+      "tabRuns": "Execuções",
+      "tabConfig": "Configurações",
+      "next": "Próxima chamada",
+      "noNext": "Sem próxima",
+      "runningNow": "Executando agora",
+      "agentCount": "{{count}} agentes",
+      "agentCount_one": "1 agente",
+      "noTeam": "Sem equipe — um agente",
+      "recent": "Execuções recentes",
+      "noRuns": "Nenhuma execução ainda.",
+      "instruction": "Instrução",
+      "info": "Informações da rotina",
+      "notRunYet": "Ainda não rodou.",
+      "notRunYetNext": "Ainda não rodou. A próxima execução é {{when}}."
+    },
+    "card": {
+      "reason": { "schedule": "agendada", "manual": "manual", "event": "evento" },
+      "workingFor": "rodando há {{time}}",
+      "resultLater": "O resumo entra aqui quando a execução terminar.",
+      "agentWorking": "trabalhando…",
+      "agentQueued": "na fila",
+      "agents": "{{count}} agentes",
+      "agents_one": "1 agente",
+      "status": { "running": "rodando", "ok": "concluída", "error": "falhou" },
+      "details": "ver detalhes",
+      "noAnswer": "Esta execução não deixou resposta escrita.",
+      "execution": "Execução"
+    },
+    "team": {
+      "label": "Equipe",
+      "soloLabel": "Agente",
+      "title": "Equipe da rotina",
+      "soloTitle": "Agente da rotina",
+      "subtitle": "Quem participa, o que cada um faz e em que ordem.",
+      "hint": "Trocar quem executa vale ao salvar a rotina. Para mudar o que ele faz ou a ordem, peça no chat.",
+      "loses": "Sem {{abilities}} — a rotina usa isso.",
+      "request": "Pedir mudança no chat",
+      "editTask": "Editar instrução",
+      "editTaskTitle": "Instrução de {{name}}",
+      "editTaskHint": "É o que este agente recebe nesta etapa. A mudança vale na próxima execução.",
+      "changeRequest": "Quero mudar a equipe desta rotina: ",
+      "taskLabel": "O que este agente recebe",
+      "factsParallel": "{{count}} em paralelo",
+      "factsBudget": "orçamento de {{value}}k",
+      "factsReview": "revisão no fim"
+    },
+    "edit": {
+      "what": "O que ela faz",
+      "when": "Quando roda",
+      "where": "Onde trabalha",
+      "who": "Quem executa",
+      "openFolder": "Abrir",
+      "folderLoading": "criando a pasta…",
+      "abilities": "Habilidades"
+    },
+    "reschedule": {
+      "title": "Agendar de novo",
+      "date": "Data",
+      "time": "Horário",
+      "confirm": "Agendar"
     },
     "detail": {
       "close": "Fechar",
@@ -2941,6 +3136,7 @@
       "what": "O que ela faz",
       "pause": "Pausar",
       "activate": "Ativar",
+      "reschedule": "Agendar de novo",
       "runsCount_one": "{{count}} execução",
       "runsCount_other": "{{count}} execuções",
       "showMore": "Mostrar tudo",
@@ -2954,7 +3150,13 @@
       "model": "Modelo",
       "folders": "Pastas",
       "recent": "Últimas execuções",
-      "seeAll": "Ver todas"
+      "seeAll": "Ver todas",
+      "groupWhat": "O que ela faz",
+      "groupWhen": "Quando roda",
+      "groupTouches": "O que pode tocar",
+      "groupWho": "Quem executa",
+      "limit": "Limite",
+      "tokensPerRun": "{{tokens}} tokens por execução"
     },
     "agenda": {
       "prev": "Semana anterior",
@@ -2962,18 +3164,24 @@
       "today": "Hoje"
     },
     "summary": {
-      "active": "Ativas",
+      "active": "ativas",
       "paused_one": "{{count}} pausada",
       "paused_other": "{{count}} pausadas",
       "failures": "Falhas em 7 dias",
       "spent": "Gasto em 30 dias",
       "executions_one": "{{count}} execução",
       "executions_other": "{{count}} execuções",
-      "next": "Próximas execuções",
-      "nextHint": "Nas próximas 24 horas · clique para abrir",
-      "nothingNext": "Nada agendado para as próximas 24 horas.",
+      "total": "rotinas",
+      "failedToday": "falhou hoje",
+      "failedShort": "falhou",
+      "manual": "manual",
+      "scheduled": "agendada",
+      "showAll": "Ver todas",
+      "next": "Próximas chamadas",
+      "nextHint": "Na próxima semana · clique para abrir",
+      "nothingNext": "Nada na próxima semana.",
       "now": "agora",
-      "recent": "Últimas execuções",
+      "recent": "Execuções recentes",
       "noRuns": "Nenhuma execução ainda.",
       "activeOf": "{{active}} de {{total}}",
       "noFailures": "nenhuma falha"
@@ -3054,8 +3262,8 @@
       "agent": "Agente",
       "agentGives": "Ligadas por este agente:",
       "noneGiven": "nenhuma",
-      "folders": "Pastas (opcional)",
-      "foldersHint": "Sem pasta, a rotina roda como chat. Com uma ou mais, ela pode ler e editar arquivos ali.",
+      "folders": "Pastas de trabalho",
+      "foldersHint": "Extras que o prompt pode abrir, analisar e editar. Sem elas, ela mexe só na pasta da rotina.",
       "whatItDoes": "O que a rotina faz",
       "whatItDoesHint": "Escreva como contaria a um colega. Se faltar algo, o chat pergunta.",
       "whatPlaceholder": "Todo dia útil de manhã, listar os pull requests abertos, destacar os parados há mais de 2 dias e me mandar o resumo.",
@@ -3094,7 +3302,26 @@
       "estimateRange": "{{low}} a {{high}} mil tokens",
       "estimateHistory_one": "Com base na última execução desta rotina.",
       "estimateHistory_other": "Com base nas últimas {{count}} execuções desta rotina.",
-      "estimateGuess": "Um palpite aproximado pelo número de agentes: esta rotina ainda não rodou."
+      "estimateGuess": "Um palpite aproximado pelo número de agentes: esta rotina ainda não rodou.",
+      "inherits": "Herda",
+      "proposalTeam": "O time veio da proposta do chat — para mudar, peça no chat.",
+      "teamTitle": "Time",
+      "teamCount_one": "{{count}} agente",
+      "teamCount_other": "{{count}} agentes",
+      "reviewTitle": "Revisão do time",
+      "reviewOn": "ligada",
+      "reviewOff": "desligada",
+      "reviewRole": "Só aceita, pede ajuste ou marca falha — não cria agentes.",
+      "reviewModel": "O revisor roda no modelo da rotina",
+      "modelOfMember": "O modelo em que este agente roda",
+      "limits": "limites desta rotina",
+      "simultaneous": "Agentes ao mesmo tempo",
+      "ofMax": "de {{max}}",
+      "corrections": "Correções do revisor",
+      "perAgent": "por agente",
+      "onFailure": "Se um agente falhar",
+      "onFailureBranch": "Parar só o ramo",
+      "onFailureHint": "Um agente que falha descarta só quem esperava por ele; o resto segue."
     }
   },
   "queue": {
@@ -3139,6 +3366,114 @@
     "zoomReset": "Zoom padrão (100%)",
     "unavailable": "Artefato indisponível"
   },
+  "widgets": {
+    "title": "Widgets",
+    "tabs": {
+      "fragments": "Fragmentos",
+      "widgets": "Widgets"
+    },
+    "filters": {
+      "title": "Mostrar",
+      "all": "Todos",
+      "native": "Nativos",
+      "fragments": "Fragmentos",
+      "count": "widgets",
+      "hintAll": "Os widgets que vêm com o Orbit e os que seus fragmentos oferecem.",
+      "hintNative": "Widgets desenhados pelo próprio app — vêm com o Orbit.",
+      "hintFragments": "Widgets oferecidos pelos fragmentos deste Orbit."
+    },
+    "native": {
+      "badge": "nativo",
+      "hint": "Um widget nativo: vem com o Orbit, lê os dados do próprio app e não pode ser editado."
+    },
+    "nativeWidgets": {
+      "usageDay": {
+        "name": "Hoje",
+        "description": "Tempo, tokens e conversas de hoje"
+      },
+      "usageProject": {
+        "name": "Projeto",
+        "description": "O que o projeto aberto gastou"
+      },
+      "usageChat": {
+        "name": "Conversa",
+        "description": "O que esta conversa gastou"
+      },
+      "activity": {
+        "name": "Atividade",
+        "description": "Um ano de trabalho como uma grade de dias",
+        "streak_one": "{{count}} dia seguido",
+        "streak_other": "{{count}} dias seguidos",
+        "weeks_one": "{{count}} semana",
+        "weeks_other": "{{count}} semanas",
+        "nothing": "nada",
+        "today": "hoje"
+      },
+      "routines": {
+        "name": "Rotinas",
+        "description": "A próxima, o que está rodando e o que acabou de rodar",
+        "active_one": "{{count}} ativa",
+        "active_other": "{{count}} ativas",
+        "upcoming": "Próximas",
+        "none": "Nenhuma rotina ainda",
+        "noneUpcoming": "Nada agendado.",
+        "nothingRunning": "Nada rodando",
+        "unknown": "Rotina",
+        "loading": "Carregando…"
+      },
+      "pipeline": {
+        "name": "Esteira",
+        "description": "Quantas tarefas estão rodando e o que terminou",
+        "running_one": "{{count}} rodando",
+        "running_other": "{{count}} rodando",
+        "paused_one": "{{count}} pausada",
+        "paused_other": "{{count}} pausadas",
+        "idle": "Parada",
+        "finished": "Terminou",
+        "nothingRecent": "Nada terminou recentemente",
+        "none": "Nenhuma esteira ainda",
+        "loading": "Carregando…"
+      },
+      "usage": {
+        "time": "Tempo",
+        "tokens": "Tokens",
+        "chats": "conversas",
+        "replies": "respostas",
+        "cost": "Custo",
+        "week": "Últimos 7 dias",
+        "total": "Total",
+        "noProject": "Sem projeto",
+        "noChat": "Nenhuma conversa aberta",
+        "oneDay": "1 dia",
+        "days": "{{count}} dias"
+      }
+    },
+    "panel": {
+      "label": "Widgets na borda",
+      "title": "Widgets",
+      "settings": "Configurar widgets",
+      "collapse": "Recolher",
+    "pin": "Deixar fixado",
+    "unpin": "Não deixar fixado",
+      "rail": "Widgets"
+    },
+    "tab": {
+      "hint": "Clique em um widget para colocar no painel — o mesmo pode repetir em qualquer página. Arraste para a grade para escolher onde ele fica, e clique num card do painel para mudar o tamanho, pedir uma mudança no chat ou tirar.",
+      "empty": "Nenhum fragmento oferece widgets ainda. Peça ao agente para criar um.",
+      "preview": "Como vai aparecer",
+      "drop": "Arraste um widget para cá",
+      "select": "Clique em um card do painel para ver o widget no tamanho real, mudar o tamanho ou pedir uma mudança no chat.",
+      "dragOut": "Solte fora do preview para tirar o widget.",
+      "close": "Fechar",
+      "remove": "Tirar do painel",
+      "requestChange": "Pedir mudança no chat",
+      "previousPage": "Página anterior",
+      "nextPage": "Próxima página",
+      "page": "Página {{page}}",
+      "addPage": "Nova página",
+      "removePage": "Remover a página vazia"
+    }
+  },
   "fragments": {
     "reload": "Recarregar",
     "model": "Modelo",
@@ -3161,6 +3496,22 @@
     "search": "Buscar fragmentos",
     "new": "Novo fragmento",
     "filterAll": "Todos",
+    "origins": {
+      "title": "Biblioteca",
+      "count_one": "{{count}} fragmento",
+      "count_other": "{{count}} fragmentos",
+      "all": "Todos",
+      "native": "Nativos",
+      "integration": "Integrações",
+      "imported": "Importados",
+      "local": "Locais",
+      "allHint": "Tudo o que existe neste Orbit.",
+      "nativeHint": "Os fragmentos que vêm com o Orbit.",
+      "integrationHint": "Puxados por uma integração MCP.",
+      "importedHint": "Chegaram por link, repositório ou arquivo.",
+      "localHint": "Criados por você neste Orbit.",
+      "nativeEmpty": "Nenhum fragmento vem com o Orbit ainda."
+    },
     "emptyTitle": "Nenhum fragmento ainda",
     "emptyHint": "Um fragmento é uma tela pequena que o Orbit monta com você — um acompanhamento, um painel, uma ferramenta. Crie um e continue refinando ao vivo.",
     "noMatch": "Nenhum fragmento encontrado.",
@@ -3173,10 +3524,6 @@
     "pinPanel": "Mostrar na lista Abrir do painel",
     "openInPanel": "Abrir no painel lateral",
     "modelFollowChat": "Modelo do chat",
-    "composeTitle": "Crie {{what}} com o Orbit",
-    "composeHint": "Descreva o que precisa ou parta de um exemplo. O Orbit monta aqui mesmo, ao vivo.",
-    "creatingTitle": "O Orbit está montando seu fragmento…",
-    "creatingHint": "Ele aparece aqui assim que a primeira versão existir, e continua atualizando enquanto o Orbit trabalha.",
     "kind": {
       "screen": {
         "name": "Tela",
@@ -3187,15 +3534,8 @@
         "name": "Painel lateral",
         "description": "Uma aba compacta para o painel lateral, ao lado do chat.",
         "indef": "um painel lateral"
-      },
-      "widget": {
-        "name": "Widget",
-        "description": "Um cartão pequeno para a tela inicial.",
-        "indef": "um widget"
       }
     },
-    "kindLabel": "Onde ele vive",
-    "startFrom": "Ou comece por um destes",
     "sectionPinned": "Fixados",
     "sectionOthers": "Outros",
     "activity": "O que o Orbit está fazendo",
@@ -3204,28 +3544,6 @@
     "iconHint": "Qualquer ícone da biblioteca Lucide. Busque pelo nome, em inglês.",
     "iconSearch": "Buscar ícones (ex.: chart, wallet, timer)",
     "iconNone": "Nenhum ícone com esse nome.",
-    "phase1": "Criando…",
-    "phase2": "Montando a tela…",
-    "phase3": "Escrevendo a primeira versão…",
-    "phase4": "Ajustando os detalhes…",
-    "phase5": "Quase pronto…",
-    "starters": {
-      "spending": {
-        "title": "Painel de gastos",
-        "hint": "Entradas, saídas e gráfico",
-        "prompt": "Um painel para acompanhar meus gastos do mês: lançar entradas e saídas por categoria e ver um gráfico de para onde vai o dinheiro."
-      },
-      "tasks": {
-        "title": "Lista de tarefas",
-        "hint": "Com prioridades",
-        "prompt": "Uma lista de tarefas com prioridades e prazos, onde eu marque o que foi feito e filtre o que está pendente."
-      },
-      "ai": {
-        "title": "Gerador com IA",
-        "hint": "Usa o seu modelo",
-        "prompt": "Uma ferramenta pequena que recebe um tema e usa IA para gerar um rascunho, com um botão para copiar o resultado."
-      }
-    },
     "action": {
       "create": "Criando o fragmento",
       "createNamed": "Criando · {{name}}",
@@ -3236,7 +3554,8 @@
       "remove": "Removendo {{path}}",
       "logs": "Conferindo erros da página",
       "ai": "Declarando o uso de IA",
-      "models": "Declarando um seletor de modelo"
+      "models": "Declarando um seletor de modelo",
+      "notify": "Declarando o envio de avisos"
     },
     "chat": {
       "show": "Mostrar conversa",
@@ -3246,9 +3565,6 @@
       "empty": "Nada pedido ainda.",
       "history": "Chats deste fragmento"
     },
-    "creationEnded": "Não terminou",
-    "discardCreation": "Descartar",
-    "backToList": "Voltar à lista",
     "card": "Fragmento",
     "gone": "Este fragmento não existe mais.",
     "fullscreen": "Abrir em tela cheia",
@@ -3256,6 +3572,8 @@
     "provenance": {
       "title": "Origem",
       "local": "Criado neste computador",
+      "localText": "Criado aqui por você em {{date}}.",
+      "thirdPartyText": "Importado de {{owner}} em {{date}}.",
       "thirdParty": "De terceiros",
       "owner": "Autor",
       "source": "Fonte",
@@ -3279,12 +3597,17 @@
     },
     "details": {
       "title": "Detalhes",
+      "tabDetails": "Detalhes",
+      "tabData": "Banco",
+      "tabHistory": "Histórico",
+      "revisionShort": "rev {{revision}}",
       "weight": "Peso",
       "code": "Código",
       "data": "Dados salvos",
       "settings": "Configurações",
       "model": "Modelo",
-      "thinking": "Raciocínio",
+      "widgets": "Widgets",
+      "widgetsOpen": "Ver no painel",
       "on": "Ligado",
       "off": "Desligado",
       "pins": "Fixado em",
@@ -3293,15 +3616,25 @@
       "none": "lugar nenhum",
       "revision": "Revisão",
       "capabilities": "Capacidades",
+      "permissions": "Permissões",
+      "permissionsEmpty": "Não pediu nenhuma permissão",
+      "more": "Mais",
+      "moreHint": "gasto, arquivos, origem",
+      "usage": "Gasto",
+      "notificationsError": "Não foi possível ler os agendamentos",
       "cap": {
         "ai": "Usar seu modelo de IA",
         "models": "Escolher o modelo dentro da própria tela",
         "http": "Acessar estes endereços da internet",
-        "mcp": "Usar estas ferramentas MCP conectadas"
+        "mcp": "Usar estas ferramentas MCP conectadas",
+        "notify": "Enviar avisos",
+        "microphone": "Gravar áudio do microfone"
       },
       "allowed": "Permitido",
       "allow": "Permitir",
       "notRequested": "Não pedido",
+      "capabilitiesEmpty": "Nenhuma capacidade pedida",
+      "capabilitiesEmptyHint": "Sem IA, modelo, internet, MCP, avisos ou microfone.",
       "tokens": "Gasto pelos chats",
       "chats": "Chats",
       "input": "Entrada",
@@ -3311,8 +3644,12 @@
       "databaseEmpty": "Nada salvo ainda.",
       "packages": "Pacotes de terceiros",
       "packagesEmpty": "Nenhum.",
-      "pinHome": "tela inicial",
-      "history": "Histórico"
+      "appears": "Onde aparece",
+      "dataSaved": "Dados salvos",
+      "history": "Histórico",
+      "notifications": "Notificações",
+      "notificationsEmpty": "Nenhum aviso agendado",
+      "notificationsHint": "Só chegam com o Orbit aberto."
     },
     "inspect": "Escolher um elemento para mudar",
     "data": {
@@ -3322,13 +3659,29 @@
       "refresh": "Atualizar",
       "truncated": "Mostrado só em parte."
     },
-    "pinHome": "Mostrar na tela inicial",
     "openFull": "Abrir o fragmento",
     "ask": {
       "ai": "Este fragmento quer usar o seu modelo de IA.",
       "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela.",
       "http": "Este fragmento quer acessar a internet: {{what}}.",
-      "mcp": "Este fragmento quer usar suas ferramentas MCP conectadas: {{what}}."
+      "mcp": "Este fragmento quer usar suas ferramentas MCP conectadas: {{what}}.",
+      "notify": "Este fragmento quer te enviar avisos.",
+      "microphone": "Este fragmento quer usar o microfone.",
+      "other": "Outra opção",
+      "create": "Criar",
+      "complement": "Complementar",
+      "complementPlaceholder": "Complete com o que faltar…",
+      "back": "Voltar",
+      "placeholder": "Descreva do seu jeito…",
+      "send": "Enviar",
+      "skip": "Pular esta pergunta",
+      "hint": "A peça continua sendo montada com o padrão."
+    },
+    "notify": {
+      "daily": "Todo dia às {{time}}",
+      "every": "A cada {{minutes}} min",
+      "at": "Uma vez, {{date}}",
+      "cancel": "Cancelar"
     },
     "askAllow": "Permitir",
     "history": {
@@ -4304,6 +4657,7 @@
     "remote": {
       "empty": "Ainda não há chats em {{name}}.",
       "pick": "Escolha um chat de {{name}} na barra lateral.",
+      "sessions": "Sessões",
       "loading": "Carregando…",
       "loadError": "Não foi possível carregar este chat: {{error}}",
       "inputPlaceholder": "Mensagem para este chat em {{name}}",
@@ -4431,9 +4785,9 @@
     "done": "Terminou — abra para ver"
   },
   "specialists": {
-    "title": "Especialistas",
+    "title": "Agentes",
     "builtin": {
-      "title": "Especialistas nativos",
+      "title": "Agentes nativos",
       "description": "Agentes enxutos para um ofício. Cada um substitui a configuração geral na conversa inteira. Somente leitura.",
       "badge": "Nativo",
       "edited": "Editado"
@@ -4628,7 +4982,7 @@
     "skills": "Skills fixas: {{skills}}",
     "add": "Adicionar agente",
     "discard": "Descartar",
-    "added": "Agente adicionado — está em Ferramentas → Especialistas",
+    "added": "Agente adicionado — está em Ferramentas → Agentes",
     "discarded": "Proposta descartada."
   },
   "proposal": {
@@ -4650,7 +5004,7 @@
     "when": "Quando",
     "whatItDoes": "O que faz",
     "folders": "Pastas",
-    "noFolder": "Nenhuma · roda como chat",
+    "noFolder": "Nenhuma · usa só a pasta da rotina",
     "routineCodeNote": "Com pasta, a rotina roda sozinha e pode ler e editar arquivos nela, sem perguntar.",
     "whenToUse": "Quando usar",
     "pinnedSkills": "Skills fixas",
