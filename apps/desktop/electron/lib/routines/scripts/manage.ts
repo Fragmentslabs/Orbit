@@ -1,5 +1,5 @@
 import type { Routine, RoutineScript, ScriptTestResult } from '@shared/routines'
-import { SECRET_NAME_PATTERN, scriptFingerprint } from '@shared/routines'
+import { SECRET_NAME_PATTERN, scriptFingerprint, scriptRoots } from '@shared/routines'
 import { listRoutines, updateRoutine } from '../repo'
 import { emit } from '../scheduler'
 import { runScript, type ScriptOutcome } from './runner'
@@ -91,7 +91,7 @@ export async function testScript(routineId: string, scriptId: string): Promise<S
   const script = routine?.scripts?.find((s) => s.id === scriptId)
   if (!routine || !script) return { ok: false, error: 'Script not found.', logs: [] }
   const { state } = await readScriptRecord(routineId)
-  const outcome = await runScript({ script, folders: routine.folders, state })
+  const outcome = await runScript({ script, folders: scriptRoots(routine.folder, routine.folders), state })
   return outcome.ok
     ? { ok: true, result: outcome.result, fires: outcome.fires, logs: outcome.logs }
     : { ok: false, error: outcome.error, logs: outcome.logs }

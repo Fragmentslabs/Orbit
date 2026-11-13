@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, ChevronDownIcon } from "lucide-react"
 import { userProfileId } from "@shared/agents"
 import type { PendingRoutine, RoutineModes, Schedule } from "@shared/routines"
-import {
-  applyAgentModes,
-  DEFAULT_ROUTINE_PERMISSION,
-  parseTime,
-  restrictModesToChat,
-  routineModeFor,
-} from "@shared/routines"
+import { applyAgentModes, DEFAULT_ROUTINE_PERMISSION, parseTime } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -18,7 +12,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { BranchSelector } from "@/src/components/branch-selector"
-import { ModelPicker } from "@/src/components/model-picker"
 import { useStartChatWith } from "@/src/hooks/use-creation-chat"
 import { agentsAreValid, draftOf, emptyAgents, isTeam, soloAgent, storedFields, type AgentsDraft } from "@/src/lib/agents-draft"
 import { lastUsedChat } from "@/src/lib/last-chat"
@@ -30,6 +23,7 @@ import { useRoutinesStore } from "@/src/stores/routines-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { AgentsEditor } from "./agents-editor"
+import { ReviewerRow, TeamReview } from "./team-review"
 import { AbilitiesField, Field, FoldersField } from "./form-parts"
 import { describeWhen } from "./schedule"
 import { ScheduleEditor } from "./schedule-editor"
@@ -50,21 +44,19 @@ export function CreateRoutineDialog({
   open,
   onOpenChange,
   onCreated,
-  defaultMode = "code",
   proposal,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (routineId: string) => void
-  /** Mode of the page that opened the form. It only seeds the folders: a code page starts with the
-   *  workspace's folders attached, a chat page with none. The routine's own mode follows its folders. */
-  defaultMode: "chat" | "code"
   /** A routine the chat proposed: the form opens filled in with it, and creating keeps the
    *  proposal's id so its card recognises the routine. */
   proposal?: PendingRoutine
 }) {
   const { t } = useTranslation()
-  const { folders: workspaceFolders } = useWorkspace()
+  // The page that opens the form seeds the working folders: a code page starts with the
+  // workspace's folders attached, a chat page with none.
+  const { mode: pageMode, folders: workspaceFolders } = useWorkspace()
   const allAgents = useAgents()
   const create = useRoutinesStore((s) => s.create)
   const sessions = useSessionStore((s) => s.sessions)
@@ -72,6 +64,8 @@ export function CreateRoutineDialog({
   // Vision model configured in the preferences: it is what the routine stores when vision is on
   // (the main process does not read localStorage).
   const visionModel = useProviderStore((s) => s.visionModel)
+  // How many adjustment rounds the reviewer gets per agent — a setting of the chat, shown read-only.
+  const adjustmentsPerWorker = useProviderStore((s) => s.orchestrationSettings.adjustmentsPerWorker)
 
   const [step, setStep] = useState<1 | 2>(1)
   const [whenKind, setWhenKind] = useState<WhenKind>("schedule")
@@ -83,12 +77,11 @@ export function CreateRoutineDialog({
   const [agents, setAgents] = useState<AgentsDraft>(emptyAgents)
   const [modes, setModes] = useState<RoutineModes>({ permissionMode: DEFAULT_ROUTINE_PERMISSION })
   const [saving, setSaving] = useState(false)
-  const mode = routineModeFor(folders)
   const team = isTeam(agents)
 
   /** A new routine starts on the model of the last chat used, like any new chat. */
   const fallback = useMemo<SelectedModel | null>(
-    () => sessionModelFor(lastUsedChat(sessions, defaultMode)?.id ?? null),
+    () => sessionModelFor(lastUsedChat(sessions, pageMode)?.id ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [open],
   )
@@ -102,8 +95,11 @@ export function CreateRoutineDialog({
     setSchedule(proposal?.schedule ?? { time: "09:00" })
     setTitle(proposal?.title ?? "")
     setModel(proposal?.model ?? fallback)
-    setFolders(proposal ? proposal.folders : defaultMode === "chat" ? [] : workspaceFolders)
-    setAgents(proposal ? draftOf(proposal) : emptyAgents())
+    setFolders(proposal ? proposal.folders : pageMode === "chat" ? [] : workspaceFolders)
+    const draft = proposal ? draftOf(proposal) : emptyAgents()
+    // A team of two or more is reviewed by default: the members do not talk to each other, and the
+    // reviewer is the only one that sees the whole plan. It costs more — the switch is right there.
+    setAgents(isTeam(draft) && draft.review === undefined ? { ...draft, review: true } : draft)
     setModes(proposal?.modes ?? { permissionMode: DEFAULT_ROUTINE_PERMISSION })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -137,9 +133,8 @@ export function CreateRoutineDialog({
     try {
       const stored = storedFields(agents)
       const selected = allAgents.find((a) => userProfileId(a.id) === stored.agent)
-      // The agent decides the abilities; no folders means only the chat abilities exist.
-      const withAgent = selected ? applyAgentModes(modes, selected.features) : modes
-      const effective = mode === "chat" ? restrictModesToChat(withAgent) : withAgent
+      // The agent decides the abilities.
+      const effective = selected ? applyAgentModes(modes, selected.features) : modes
       const routine = await create({
         title: title.trim(),
         prompt: prompt.trim(),
@@ -147,11 +142,9 @@ export function CreateRoutineDialog({
         model,
         // Vision only works with the configured vision model: without one it is left off.
         modes: effective.vision && !visionModel ? { ...effective, vision: undefined } : effective,
-        mode,
         folders,
         // Kept whenever there is one: an agent that allows vision may switch it on later.
         visionModel: visionModel ?? undefined,
-        // A team with no folder works in a scratch folder the run makes for itself.
         ...stored,
         // Scripts and their trigger ride along from the agent's proposal (the form has no editor for them).
         ...(proposal?.scripts?.length ? { scripts: proposal.scripts, trigger: proposal.trigger } : {}),
@@ -195,7 +188,7 @@ export function CreateRoutineDialog({
               <Field label={t("routines.review.schedule")}>
                 <div className="space-y-2">
                   <SegmentedControl<WhenKind>
-                    size="sm"
+                   
                     value={whenKind}
                     onChange={setWhenKind}
                     options={[
@@ -210,23 +203,30 @@ export function CreateRoutineDialog({
                   ) : (
                     <div className="space-y-2 rounded-lg border border-dashed p-3">
                       <p className="text-xs text-muted-foreground">{t("routines.form.eventExplain")}</p>
-                      <Button size="sm" onClick={() => goToChat("event")}>
+                      <Button onClick={() => goToChat("event")}>
                         {t("routines.form.eventContinue")}
                       </Button>
                     </div>
                   )}
                 </div>
               </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <FoldersField folders={folders} onChange={setFolders} />
+                  {folders[0] && <BranchSelector repoPath={folders[0]} />}
+                </div>
+              </div>
             </div>
             <div className="mt-3 flex items-center gap-2 border-t pt-3">
-              <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => goToChat("prefer")}>
+              <Button variant="ghost" className="text-muted-foreground" onClick={() => goToChat("prefer")}>
                 {t("routines.form.preferChat")}
               </Button>
               <span className="flex-1" />
-              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button size="sm" disabled={!canContinue} onClick={goToReview}>
+              <Button disabled={!canContinue} onClick={goToReview}>
                 {t("routines.form.next")}
               </Button>
             </div>
@@ -234,45 +234,113 @@ export function CreateRoutineDialog({
         ) : (
           <div key="step2" className="animate-in slide-in-from-right-8 fade-in-0 duration-200">
             <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
-              {/* What step 1 said, read-only: changing it is a trip back, not a second copy of the form. */}
-              <div className="space-y-1.5 rounded-lg border bg-card p-3">
-                <p className="line-clamp-3 whitespace-pre-wrap text-xs">{prompt}</p>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="min-w-0 flex-1 truncate">{describeWhen({ schedule, trigger: proposal?.trigger }, t)}</span>
-                  <button type="button" onClick={() => setStep(1)} className="shrink-0 hover:text-foreground">
-                    {t("routines.form.edit")}
-                  </button>
+              <Field label={t("routines.review.titleField")}>
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-sm" />
+              </Field>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <p className="flex-1 text-xs font-semibold">{t("routines.agents.teamTitle")}</p>
+                  {team && (
+                    <span className="rounded-md border bg-muted/40 px-1.5 py-px text-[10.5px] leading-4 text-muted-foreground">
+                      {t("routines.agents.teamCount", { count: agents.members.length })}
+                    </span>
+                  )}
                 </div>
+                {proposal && team ? (
+                  <div className="overflow-hidden rounded-xl border bg-card/40">
+                    <TeamReview value={agents} onChange={setAgents} model={model} />
+                    <ReviewerRow
+                      review={agents.review === true}
+                      onChange={(review) => setAgents({ ...agents, review })}
+                      model={model}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <AgentsEditor value={agents} onChange={setAgents} limits={false} />
+                    {team && (
+                      <div className="overflow-hidden rounded-xl border bg-card/40">
+                        <ReviewerRow
+                          review={agents.review === true}
+                          onChange={(review) => setAgents({ ...agents, review })}
+                          model={model}
+                          border={false}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {proposal && team && <p className="text-[10.5px] text-muted-foreground">{t("routines.agents.proposalTeam")}</p>}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t("routines.review.titleField")}>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" />
-                </Field>
-                <Field label={t("routines.create.model")}>
-                  <ModelPicker value={model} onValueChange={setModel} />
-                </Field>
-              </div>
-
-              <div className="space-y-1">
-                <FoldersField folders={folders} onChange={setFolders} />
-                {folders[0] && <BranchSelector repoPath={folders[0]} />}
-              </div>
-
-              <AgentsEditor value={agents} onChange={setAgents} />
-
-              <details className="rounded-lg border px-3 py-2">
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("routines.form.advanced")}</summary>
-                <div className="mt-2.5">
-                  <AbilitiesField agent={soloAgent(agents)} team={team} modes={modes} onChange={setModes} chatOnly={mode === "chat"} />
+              <details className="group overflow-hidden rounded-xl border bg-card/40">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+                  <span className="text-xs font-semibold">{t("routines.form.advanced")}</span>
+                  <span className="ml-auto text-[10.5px] text-muted-foreground">{t("routines.agents.limits")}</span>
+                  <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="divide-y border-t px-3 pb-1.5">
+                  {team && (
+                    <>
+                      <LimitRow label={t("routines.agents.simultaneous")}>
+                        <div className="inline-flex items-baseline gap-1 rounded-md border bg-background/50 px-2 py-0.5">
+                          <input
+                            type="number"
+                            min={1}
+                            max={8}
+                            value={agents.maxParallel ?? ""}
+                            placeholder="4"
+                            onChange={(e) => setAgents({ ...agents, maxParallel: e.target.value ? Number(e.target.value) : undefined })}
+                            className="w-6 bg-transparent text-center text-[11.5px] font-semibold tabular-nums outline-none"
+                          />
+                          <span className="text-[10px] text-muted-foreground">{t("routines.agents.ofMax", { max: 8 })}</span>
+                        </div>
+                      </LimitRow>
+                      <LimitRow label={t("routines.agents.budget")}>
+                        <div className="inline-flex items-baseline gap-1 rounded-md border bg-background/50 px-2 py-0.5">
+                          <input
+                            type="number"
+                            min={1}
+                            value={agents.tokenBudget ? Math.round(agents.tokenBudget / 1000) : ""}
+                            placeholder="∞"
+                            onChange={(e) => setAgents({ ...agents, tokenBudget: e.target.value ? Number(e.target.value) * 1000 : undefined })}
+                            className="w-7 bg-transparent text-center text-[11.5px] font-semibold tabular-nums outline-none"
+                          />
+                          <span className="text-[10px] text-muted-foreground">{t("routines.agents.budgetUnit")}</span>
+                        </div>
+                      </LimitRow>
+                      <LimitRow label={t("routines.agents.corrections")}>
+                        <div className="inline-flex items-baseline gap-1 rounded-md border bg-background/50 px-2 py-0.5">
+                          <span className="text-[11.5px] font-semibold tabular-nums">{adjustmentsPerWorker}</span>
+                          <span className="text-[10px] text-muted-foreground">{t("routines.agents.perAgent")}</span>
+                        </div>
+                      </LimitRow>
+                      <LimitRow label={t("routines.agents.onFailure")}>
+                        <div
+                          className="inline-flex min-w-32 items-center justify-between gap-2 rounded-md border bg-background/50 px-2 py-0.5"
+                          title={t("routines.agents.onFailureHint")}
+                        >
+                          <span className="text-[11px]">{t("routines.agents.onFailureBranch")}</span>
+                        </div>
+                      </LimitRow>
+                    </>
+                  )}
+                  <div className="py-2">
+                    <AbilitiesField agent={soloAgent(agents)} team={team} modes={modes} onChange={setModes} />
+                  </div>
                 </div>
               </details>
             </div>
-            <div className="mt-3 flex justify-end gap-2 border-t pt-3">
-              <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
+            <div className="mt-3 flex items-center gap-2 border-t pt-3">
+              <Button variant="ghost" onClick={() => setStep(1)}>
                 {t("routines.review.back")}
               </Button>
-              <Button size="sm" disabled={!canCreate} onClick={() => void handleCreate()}>
+              <span className="flex-1" />
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button disabled={!canCreate} onClick={() => void handleCreate()}>
                 {t("routines.review.create")}
               </Button>
             </div>
@@ -280,6 +348,16 @@ export function CreateRoutineDialog({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** One row of the "Advanced" block: the label on the left, the control on the right. */
+function LimitRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      <span className="flex-1 text-[11px] text-muted-foreground">{label}</span>
+      {children}
+    </div>
   )
 }
 

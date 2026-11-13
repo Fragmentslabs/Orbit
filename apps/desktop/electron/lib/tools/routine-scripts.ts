@@ -1,7 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
-import { scriptApproved } from '@shared/routines'
+import { scriptApproved, scriptRoots } from '@shared/routines'
 import { describeOutcome } from '../routines/scripts/manage'
 import { runScript } from '../routines/scripts/runner'
 import { readScriptRecord } from '../routines/scripts/store'
@@ -28,7 +28,8 @@ export function createRunScriptTool(routine: NonNullable<SendMessageInput['routi
       if (!script) return `No script named "${name}". Available: ${scripts.map((s) => s.name).join(', ') || 'none'}.`
       if (!scriptApproved(script)) return `The script "${name}" is not approved: it has not run. Ask the person to approve it on the routine screen.`
       const { state } = await readScriptRecord(routine.id)
-      return describeOutcome(await runScript({ script, folders: routine.folders, state, input }))
+      // The routine's own folder is a reading root too: memory.md and whatever its scripts keep there.
+      return describeOutcome(await runScript({ script, folders: scriptRoots(routine.folder, routine.folders), state, input }))
     },
   })
 }

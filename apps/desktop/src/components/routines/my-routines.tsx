@@ -1,18 +1,34 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { CalendarClockIcon, FolderIcon } from "lucide-react"
+import {
+  CalendarClockIcon,
+  Ellipsis,
+  Loader2,
+  PauseIcon,
+  PencilIcon,
+  PlayIcon,
+  Trash2Icon,
+} from "lucide-react"
 import type { Routine, RoutineRun } from "@shared/routines"
-import { nextRoutineRun } from "@shared/routines"
+import { isFinishedOnce, nextRoutineRun } from "@shared/routines"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { formatWhen } from "@/src/lib/format"
 import { useRoutinesStore } from "@/src/stores/routines-store"
+import { AgentAvatars } from "./agent-avatars"
 import { describeWhen } from "./schedule"
-import { ActiveSwitch } from "./schedule-editor"
-import { Truncate } from "@/components/ui/truncated-text"
+import { RescheduleDialog } from "./reschedule-dialog"
 
-/** Routine list: the cards of the Routines page. The detail lives in routine-detail.tsx. */
+/** Routine list: the rows of the Routines page. The screen lives in routine-screen.tsx. */
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
@@ -27,17 +43,14 @@ export function routineMatches(routine: Routine, query: string, t: TFunction): b
   )
 }
 
-export function RoutineList({ routines, scope, query, selectedId, onSelect, onCreateNew, onCreateManual }: {
+export function RoutineList({ routines, query, selectedId, onSelect, onCreateNew }: {
   routines: Routine[]
-  scope: "chat" | "code" | "all"
   query: string
   selectedId: string | null
-  /** Opens the routine in the side panel. */
+  /** Opens the routine's screen (the page becomes its chat). */
   onSelect: (id: string) => void
   /** Starts the creation chat. */
   onCreateNew: () => void
-  /** Opens the form instead, for who knows exactly what they want. */
-  onCreateManual?: () => void
 }) {
   const { t } = useTranslation()
 
@@ -48,39 +61,38 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
 
   if (routines.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <CalendarClockIcon className="size-10 text-muted-foreground/50" />
         <div>
           <p className="text-sm font-medium">{t("routines.list.emptyTitle")}</p>
           <p className="mx-auto max-w-sm text-xs text-muted-foreground">
-            {t(scope === "chat" ? "routines.list.emptySubtitleChat" : "routines.list.emptySubtitle")}
+            {t("routines.list.emptySubtitle")}
           </p>
         </div>
         <Button size="lg" onClick={onCreateNew}>
           <CalendarClockIcon className="size-4" />
           {t("routines.list.createFirst")}
         </Button>
-        {onCreateManual && (
-          <Button variant="ghost" size="sm" className="text-xs" onClick={onCreateManual}>
-            {t("routines.create.viaForm")}
-          </Button>
-        )}
       </div>
     )
   }
 
   if (sorted.length === 0) {
+    // The message fills the rest of the list: without flex-1 the foot line of the page
+    // would rise up to right below it whenever the search finds nothing.
     return (
-      <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-        {t("routines.list.noResults", { query: query.trim() })}
-      </p>
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+          {t("routines.list.noResults", { query: query.trim() })}
+        </p>
+      </div>
     )
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-1">
       {sorted.map((routine) => (
-        <RoutineCard
+        <RoutineRow
           key={routine.id}
           routine={routine}
           selected={routine.id === selectedId}
@@ -91,91 +103,174 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
   )
 }
 
-/** The state the card's dot and badges say: what needs the user's eyes first. */
-type RoutineState = "running" | "failed" | "paused" | "ok"
+/** What the leading icon and the pill say: what needs the user's eyes first. */
+type RoutineState = "running" | "failed" | "finished" | "paused" | "ok"
 
-function RoutineCard({ routine, selected, onOpen }: {
+/**
+ * One routine, as the row of the page: the state on the left, the name and when it runs in the
+ * middle, the team and the next call on the right, and one pill. The whole row opens the
+ * routine's screen; the pill is the state, and the options button appears beside it on hover —
+ * the pill stays and the row shifts left to make room (the button acts on the row, it does not
+ * open it).
+ */
+function RoutineRow({ routine, selected, onOpen }: {
   routine: Routine
-  /** Open in the panel on the right. */
   selected?: boolean
   onOpen: () => void
 }) {
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
+  const remove = useRoutinesStore((s) => s.remove)
+  const openSettings = useRoutinesStore((s) => s.openSettings)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
   const running = useRoutinesStore((s) => s.runs.some((r) => r.routineId === routine.id && r.status === "running"))
-  // The last execution failed: the card says so, instead of waiting for the user to open it.
+  // The last execution failed: the row says so, instead of waiting for the user to open it.
   const failed = useRoutinesStore((s) => {
     let last: RoutineRun | undefined
     for (const r of s.runs) if (r.routineId === routine.id && (!last || r.startedAt > last.startedAt)) last = r
     return last?.status === "error"
   })
   const next = nextRoutineRun(routine)
-  const state: RoutineState = running ? "running" : failed ? "failed" : !routine.active ? "paused" : "ok"
+  // A one-off that already ran is finished, not paused: the scheduler turned it off, the user did not.
+  const finished = isFinishedOnce(routine)
+  const state: RoutineState = running ? "running" : failed ? "failed" : finished ? "finished" : !routine.active ? "paused" : "ok"
+  const members = routine.team?.members.map((member) => member.name) ?? []
+  const folder = routine.folders[0]?.split(/[\\/]/).filter(Boolean).pop()
+  const label =
+    state === "running" ? t("routines.list.running")
+      : state === "failed" ? t("routines.list.failedShort")
+        : state === "finished" ? t("routines.list.finished")
+          : state === "paused" ? t("routines.list.paused")
+            : t("routines.list.active")
 
   return (
     <div
       className={cn(
-        "relative flex items-start gap-2.5 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-ring",
-        selected && "border-primary/70",
+        "group relative flex items-center gap-3 rounded-[10px] border px-3 py-[11px] transition-colors",
+        selected ? "border-border bg-card" : "border-transparent hover:bg-accent",
       )}
     >
-      {/* The state is a bullet on the far left of the card, like the memories: everything else
-          sits in a column beside it, so the lines under the title line up with the title. */}
       <span
         className={cn(
-          "mt-[7px] size-2 shrink-0 rounded-full",
-          state === "running" && "bg-blue-400",
-          state === "failed" && "bg-destructive",
-          state === "paused" && "bg-muted-foreground/60",
-          state === "ok" && "bg-emerald-500",
+          "grid size-[31px] shrink-0 place-items-center rounded-[9px]",
+          state === "running" && "bg-blue-500/13 text-blue-500",
+          state === "failed" && "bg-destructive/13 text-destructive",
+          state === "finished" && "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+          (state === "paused" || state === "ok") && "bg-muted/60 text-muted-foreground",
         )}
-        aria-hidden
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex items-center gap-2">
-          {/* The title is a button that stretches over the whole card; the switch sits above it. */}
-          <button
-            type="button"
-            onClick={onOpen}
-            className="min-w-0 flex-1 truncate text-left text-sm font-medium after:absolute after:inset-0 after:content-['']"
-          >
-            {routine.title}
-          </button>
-          <span className="relative z-10">
-            <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
-          </span>
-        </div>
+      >
+        {state === "running" ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <CalendarClockIcon className="size-3.5" />
+        )}
+      </span>
 
-        <Truncate>
-          <p className="truncate text-xs text-muted-foreground">{describeWhen(routine, t)}</p>
-        </Truncate>
-
-        <div className="flex items-center gap-1.5">
-          {routine.folders.length > 0 && (
-            <span className="inline-flex max-w-32 shrink-0 items-center gap-1 rounded-md bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-              <FolderIcon className="size-2.5 shrink-0" />
-              <span className="truncate">{routine.folders[0].split(/[\\/]/).filter(Boolean).pop() ?? routine.folders[0]}</span>
-            </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="min-w-0 truncate text-left text-[12.5px] font-semibold after:absolute after:inset-0 after:content-['']"
+        >
+          {routine.title}
+        </button>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground">
+          <span className="truncate">{describeWhen(routine, t)}</span>
+          {folder && (
+            <>
+              <span className="shrink-0 text-muted-foreground/40">·</span>
+              <span className="truncate">{t("routines.list.folder", { name: folder })}</span>
+            </>
           )}
-          {state === "running" && (
-            <span className="shrink-0 rounded-md bg-blue-500/15 px-1.5 py-px text-[10px] text-blue-600 dark:text-blue-300">
-              {t("routines.list.runningNow")}
-            </span>
-          )}
-          {state === "failed" && (
-            <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-px text-[10px] text-destructive">
-              {t("routines.list.failed")}
-            </span>
-          )}
-          {!routine.active && (
-            <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-600 dark:text-amber-400">
-              {t("routines.list.paused")}
-            </span>
-          )}
-          <span className="flex-1" />
-          {next && <span className="shrink-0 text-[11px] text-muted-foreground">{formatWhen(next, i18n.language)}</span>}
         </div>
       </div>
+
+      {members.length > 0 && (
+        <AgentAvatars names={members} size={20} className="pointer-events-none relative z-10" />
+      )}
+
+      <div className="hidden shrink-0 text-right sm:block">
+        <div className="text-[9px] uppercase tracking-[0.07em] text-muted-foreground/60">
+          {t("routines.list.nextLabel")}
+        </div>
+        <div className="mt-0.5 whitespace-nowrap text-[10.5px] text-muted-foreground">
+          {next ? formatWhen(next, i18n.language) : "—"}
+        </div>
+      </div>
+
+      <div className="relative z-10 flex shrink-0 items-center justify-end gap-1">
+        <span
+          className={cn(
+            "inline-flex min-w-[66px] items-center justify-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px]",
+            state === "running" && "border-blue-500/30 text-blue-500",
+            state === "failed" && "border-destructive/30 text-destructive",
+            state === "finished" && "border-emerald-500/30 text-emerald-600 dark:text-emerald-400",
+            state === "paused" && "border-border text-muted-foreground/60",
+            state === "ok" && "border-border text-muted-foreground",
+          )}
+        >
+          {state === "running" && <Loader2 className="size-2.5 animate-spin" />}
+          {state === "ok" && <span className="size-[5px] rounded-full bg-emerald-500" />}
+          {state === "failed" && <span className="size-[5px] rounded-full bg-destructive" />}
+          {state === "finished" && <span className="size-[5px] rounded-full bg-emerald-500" />}
+          {state === "paused" && <span className="size-[5px] rounded-full bg-muted-foreground/40" />}
+          {label}
+        </span>
+        {/* The options button: it grows from nothing and pushes the row left; the pill never leaves. */}
+        <span
+          className={cn(
+            "flex items-center overflow-hidden transition-all duration-200 focus-within:w-6 focus-within:opacity-100",
+            menuOpen ? "w-6 opacity-100" : "w-0 opacity-0 group-hover:w-6 group-hover:opacity-100",
+          )}
+        >
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger
+              aria-label={t("routines.list.options")}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Ellipsis className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem
+                onClick={() => {
+                  // A finished one-off has no date left to resume: the dialog picks a new one.
+                  if (!routine.active && finished) {
+                    setRescheduling(true)
+                    return
+                  }
+                  void update(routine.id, { active: !routine.active })
+                }}
+              >
+                {routine.active ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+                {routine.active ? t("routines.detail.pause") : finished ? t("routines.detail.reschedule") : t("routines.detail.activate")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openSettings(routine.id)}>
+                <PencilIcon className="size-3.5" />
+                {t("routines.list.edit")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
+                <Trash2Icon className="size-3.5" />
+                {t("routines.list.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      </div>
+
+      <RescheduleDialog routine={routine} open={rescheduling} onOpenChange={setRescheduling} />
+
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={t("routines.list.deleteTitle")}
+        description={t("routines.list.deleteDescription", { title: routine.title })}
+        confirmLabel={t("routines.list.delete")}
+        destructive
+        onConfirm={() => void remove(routine.id)}
+      />
     </div>
   )
 }

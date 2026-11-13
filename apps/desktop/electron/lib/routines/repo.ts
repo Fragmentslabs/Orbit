@@ -109,8 +109,6 @@ function mapRoutine(raw: Json): Routine {
     schedule: mapSchedule((pick<Json>(raw, 'schedule', 'agenda') ?? {}) as Json),
     model: mapModel(pick<Json>(raw, 'model', 'modelo')),
     modes: mapModes(pick<Json>(raw, 'modes', 'modos')),
-    // Routines created before the explicit `mode` field are code routines.
-    mode: (raw.mode as Routine['mode'] | undefined) ?? 'code',
     folders: asArray<string>(pick(raw, 'folders', 'pastas')),
     ...(raw.visionModel !== undefined ? { visionModel: mapModel(raw.visionModel as Json) } : {}),
     active: Boolean(pick<boolean>(raw, 'active', 'ativa') ?? true),
@@ -143,7 +141,6 @@ function mapProposal(raw: Json): PendingRoutine {
     prompt: (raw.prompt as string) ?? '',
     schedule: mapSchedule((pick<Json>(raw, 'schedule', 'agenda') ?? {}) as Json),
     modes: mapModes(pick<Json>(raw, 'modes', 'modos')),
-    mode: (raw.mode as PendingRoutine['mode'] | undefined) ?? 'code',
     folders: asArray<string>(pick(raw, 'folders', 'pastas')),
     model: mapModel(pick<Json>(raw, 'model', 'modelo')),
     ...(raw.visionModel !== undefined ? { visionModel: mapModel(raw.visionModel as Json) } : {}),
@@ -283,15 +280,8 @@ async function write(file: string, value: unknown): Promise<void> {
 
 // ─── Routines ────────────────────────────────────────────────────────────────
 
-/**
- * Reading routines ALWAYS with the normalization applied — including on the
- * write paths: an `updateRoutine` reading the raw JSON would emit a routine
- * without `mode` in the event, and the renderer filters it out of the mode
- * listing (`r.mode === mode`) — the routine "disappears" when it is turned off.
- * Normalizing here also self-heals the file on the next write.
- */
 async function readRoutines(): Promise<Routine[]> {
-  return (await read<Routine[]>(ROUTINES, [])).map((routine) => ({ ...routine, mode: routine.mode ?? 'code' }))
+  return read<Routine[]>(ROUTINES, [])
 }
 
 export function listRoutines(): Promise<Routine[]> {

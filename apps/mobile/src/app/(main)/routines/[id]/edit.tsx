@@ -1,7 +1,7 @@
 /**
  * Edit routine — the same RoutineForm as the creation, pre-filled with the
  * routine. Only the editable fields of the desktop: title, prompt, schedule,
- * modes and model (the mode and the folders do not change on edition).
+ * modes and model.
  */
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -33,7 +33,7 @@ export default function EditRoutineScreen() {
         <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('routines.list.edit')}</Text>
         <View style={s.headerBtn} />
       </View>
-      <RoutineForm mode={routine.mode} routine={routine} onDone={() => router.back()} />
+      <RoutineForm routine={routine} onDone={() => router.back()} />
     </SafeScreen>
   )
 }

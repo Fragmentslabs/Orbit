@@ -2,7 +2,7 @@ import { create } from "zustand"
 
 export type ViewScope = "chat" | "code" | "all"
 /** The pages that list chat's and code's data and let the header choose which. */
-export type ScopedPage = "memories" | "routines" | "media"
+export type ScopedPage = "memories" | "media"
 
 /**
  * Which data a page lists: the chat's, the code's or both. A page the user has not chosen

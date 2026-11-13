@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  CalendarClockIcon,
   FolderIcon,
   FolderOpenIcon,
   Loader2,
@@ -8,12 +9,14 @@ import {
   PauseIcon,
   PencilIcon,
   PlayIcon,
+  SparklesIcon,
   Trash2Icon,
+  UsersIcon,
   XIcon,
 } from "lucide-react"
 import { userProfileId } from "@shared/agents"
 import type { SessionInfo } from "@shared/chat"
-import { isEventTriggered, isScriptTriggered, nextRoutineRun, ROUTINE_CHAT_MODES, scriptApproved, type Routine, type RoutineRun } from "@shared/routines"
+import { isEventTriggered, isFinishedOnce, isScriptTriggered, nextRoutineRun, scriptApproved, type Routine, type RoutineRun } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import {
@@ -34,7 +37,6 @@ import { useAgents } from "@/src/stores/agents-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useSessionStore } from "@/src/stores/session-store"
-import { EditRoutineDialog } from "./edit-routine-dialog"
 import { LastResult } from "./last-result"
 import { ScriptActivityCard } from "./script-activity"
 import { WebhookCard } from "./webhook-card"
@@ -65,6 +67,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
   const runNow = useRoutinesStore((s) => s.runNow)
+  const openSettings = useRoutinesStore((s) => s.openSettings)
   const remove = useRoutinesStore((s) => s.remove)
   const allRuns = useRoutinesStore((s) => s.runs)
   const approveScript = useRoutinesStore((s) => s.approveScript)
@@ -78,7 +81,6 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const agents = useAgents()
   const agentName = routine.agent ? agents.find((a) => userProfileId(a.id) === routine.agent)?.name : undefined
   const [tab, setTab] = useState<DetailTab>("overview")
-  const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
   const runs = useMemo(() => allRuns.filter((r) => r.routineId === routine.id), [allRuns, routine.id])
@@ -86,7 +88,8 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const executions: Execution[] = useMemo(() => {
     const metrics = new Map(runs.map((r) => [r.sessionId, r]))
     return sessions
-      .filter((s) => s.routineId === routine.id)
+      // The routine's OWN chat is not an execution: the runs are its children.
+      .filter((s) => s.routineId === routine.id && !s.routineChat)
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((session) => ({
         session,
@@ -96,9 +99,11 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   }, [sessions, runs, routine.id])
   const stats = useMemo(() => routineStats(runs, Date.now()), [runs])
   const next = nextRoutineRun(routine)
-  const available = routine.mode === "chat" ? ROUTINE_CHAT_MODES : undefined
 
   const scripts = routine.scripts ?? []
+  const teamMembers = routine.team?.members.map((m) => m.name) ?? []
+  // A one-off that already ran is finished, not paused.
+  const finished = isFinishedOnce(routine)
   const watched = isScriptTriggered(routine)
   const eventDriven = isEventTriggered(routine)
   const unapproved = scripts.filter((s) => !scriptApproved(s)).length
@@ -106,7 +111,11 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const numbers = [
     {
       label: t("routines.detail.next"),
-      value: eventDriven ? t(watched ? "routines.scripts.whenItFires" : "routines.webhook.whenCalled") : next ? formatWhen(next, i18n.language) : t("routines.list.paused"),
+      value: eventDriven
+        ? t(watched ? "routines.scripts.whenItFires" : "routines.webhook.whenCalled")
+        : next
+          ? formatWhen(next, i18n.language)
+          : t(finished ? "routines.list.finished" : "routines.list.paused"),
     },
     {
       label: t("routines.detail.success"),
@@ -132,11 +141,20 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
               <MoreHorizontalIcon className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem onClick={() => void update(routine.id, { active: !routine.active })}>
+              <DropdownMenuItem
+                onClick={() => {
+                  // Finished one-off: there is no date left to resume — open the editor to pick one.
+                  if (!routine.active && finished) {
+                    openSettings(routine.id)
+                    return
+                  }
+                  void update(routine.id, { active: !routine.active })
+                }}
+              >
                 {routine.active ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
-                {routine.active ? t("routines.detail.pause") : t("routines.detail.activate")}
+                {routine.active ? t("routines.detail.pause") : finished ? t("routines.detail.reschedule") : t("routines.detail.activate")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditing(true)}>
+              <DropdownMenuItem onClick={() => openSettings(routine.id)}>
                 <PencilIcon className="size-3.5" />
                 {t("routines.list.edit")}
               </DropdownMenuItem>
@@ -154,7 +172,11 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {!routine.active && <Chip>{t("routines.list.paused")}</Chip>}
+          {finished ? (
+            <Chip>{t("routines.list.finished")}</Chip>
+          ) : (
+            !routine.active && <Chip>{t("routines.list.paused")}</Chip>
+          )}
           <Chip>{describeWhen(routine, t)}</Chip>
         </div>
       </div>
@@ -246,17 +268,22 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
         </TabsContent>
 
         <TabsContent value="config" className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-          <div className="rounded-lg border bg-card px-4 py-3.5">
-            <p className="mb-1.5 text-[11px] text-muted-foreground">{t("routines.detail.what")}</p>
+          {/* Four blocks, each with the count of what it holds: the configuration reads as a
+              summary first, and the detail is one step below. */}
+          <ConfigGroup icon={SparklesIcon} title={t("routines.detail.groupWhat")}>
             <RoutinePrompt text={routine.prompt} />
-            <div className="mt-2.5">
-              <ModeBadges modes={routine.modes} permission available={available} />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 rounded-lg border bg-card px-4 py-3.5 text-xs">
+            <ModeBadges modes={routine.modes} permission />
+          </ConfigGroup>
+
+          <ConfigGroup icon={CalendarClockIcon} title={t("routines.detail.groupWhen")}>
             <ConfigRow label={t("routines.detail.when")}>{describeWhen(routine, t)}</ConfigRow>
-            {agentName && <ConfigRow label={t("routines.form.agent")}>{agentName}</ConfigRow>}
-            <ConfigRow label={t("routines.detail.model")}>{modelName}</ConfigRow>
+          </ConfigGroup>
+
+          <ConfigGroup
+            icon={FolderOpenIcon}
+            title={t("routines.detail.groupTouches")}
+            count={routine.folders.length + scripts.length}
+          >
             <ConfigRow label={t("routines.detail.folders")}>
               {routine.folders.length === 0 ? (
                 <span className="text-muted-foreground">{t("proposal.noFolder")}</span>
@@ -273,15 +300,32 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
                 </span>
               )}
             </ConfigRow>
-          </div>
-          <Button variant="outline" size="sm" className="self-start" onClick={() => setEditing(true)}>
+            {scripts.length > 0 && (
+              <ConfigRow label={t("routines.scripts.tab")}>{scripts.map((script) => script.name).join(", ")}</ConfigRow>
+            )}
+            {routine.tokenBudget !== undefined && (
+              <ConfigRow label={t("routines.detail.limit")}>
+                {t("routines.detail.tokensPerRun", { tokens: routine.tokenBudget })}
+              </ConfigRow>
+            )}
+          </ConfigGroup>
+
+          <ConfigGroup icon={UsersIcon} title={t("routines.detail.groupWho")}>
+            {teamMembers.length > 0 ? (
+              <ConfigRow label={t("routines.agents.title")}>{teamMembers.join(", ")}</ConfigRow>
+            ) : agentName ? (
+              <ConfigRow label={t("routines.form.agent")}>{agentName}</ConfigRow>
+            ) : null}
+            <ConfigRow label={t("routines.detail.model")}>{modelName}</ConfigRow>
+          </ConfigGroup>
+
+          <Button variant="outline" size="sm" className="self-start" onClick={() => openSettings(routine.id)}>
             <PencilIcon className="size-3.5" />
             {t("routines.list.edit")}
           </Button>
         </TabsContent>
       </Tabs>
 
-      <EditRoutineDialog routine={routine} open={editing} onOpenChange={setEditing} />
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
@@ -292,6 +336,27 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
         onConfirm={() => void remove(routine.id)}
       />
     </div>
+  )
+}
+
+/** One of the four blocks of the configuration: an icon, a title and the count of what is inside. */
+function ConfigGroup({ icon: Icon, title, count, children }: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  count?: number
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-lg border bg-card">
+      <header className="flex items-center gap-2 border-b px-4 py-2.5">
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <h3 className="flex-1 text-[13px] font-semibold">{title}</h3>
+        {count !== undefined && count > 0 && (
+          <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
+        )}
+      </header>
+      <div className="flex flex-col gap-2 px-4 py-3 text-xs">{children}</div>
+    </section>
   )
 }
 

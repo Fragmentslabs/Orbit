@@ -20,7 +20,6 @@ function routine(over: Partial<Routine> = {}): Routine {
     schedule: { time: "09:00" },
     model: { providerId: "p", modelId: "m" },
     modes: {},
-    mode: "code",
     folders: ["/a"],
     active: true,
     createdAt: 0,

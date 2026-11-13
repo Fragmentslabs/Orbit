@@ -91,7 +91,6 @@ describe('upcomingRuns', () => {
     schedule,
     model: { providerId: 'p', modelId: 'm' },
     modes: { permissionMode: 'approve' },
-    mode: 'code',
     folders: [],
     active,
     createdAt: 0,

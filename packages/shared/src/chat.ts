@@ -29,6 +29,8 @@ export interface SessionOrchestration {
   options?: SendMessageOptions
   /** Worker Vision mode (see OrchestrationTask.vision) */
   vision?: boolean
+  /** The model this worker runs on (a member of a routine's team can have its own). */
+  model?: { providerId: string; modelId: string }
 }
 
 /** Active revert state in a session. The revert truncates the messages
@@ -159,12 +161,17 @@ export interface SessionInfo {
    *  the sidebar (never in a folder) and is deleted together with the routine. */
   routineId?: string
   /**
+   * The routine's MAIN chat — the one conversation that outlives the executions. The runs
+   * are child sessions of it and appear in it as cards; only this one is listed in the sidebar.
+   */
+  routineChat?: boolean
+  /**
    * The chat that builds a Fragment. It runs LEAN: a minimal system prompt, only the
    * fragment tools, no memories or skills. It does not show in the chat list; its work is
    * followed from the fragment itself (the activity feed), and the full conversation
    * opens on demand in the side panel. `kind` is where the person asked it to live.
    */
-  fragment?: { kind: 'screen' | 'panel' | 'widget' }
+  fragment?: { kind: 'screen' | 'panel' }
   /**
    * A specialist chat: it runs with the lean profile of its craft (a focused prompt, only the
    * tools of the craft, none of the usual memory/skills blocks). The Fragment chat is the
@@ -589,9 +596,32 @@ export interface DesignQuotePayload {
   html?: string
 }
 
+/**
+ * Widget of a fragment pointed at in the Widgets tab — the user asks for a change on THAT
+ * widget ("this one is cramped at 2x1") without the model having to guess which of the
+ * fragment's widgets the sentence is about. The address is the fragment and the widget id,
+ * which is what the fragment tools edit; the size travels along because the complaint is
+ * usually about one of them.
+ */
+export interface WidgetQuotePayload {
+  kind: "widget"
+  /** Fragment that owns the widget (frag-…). */
+  fragmentId: string
+  /** Display name of the fragment. */
+  fragmentName?: string
+  /** Widget id inside the fragment manifest. */
+  widgetId: string
+  /** Widget name, as the fragment declares it. */
+  name: string
+  /** Size the widget has on the board (`2x1`) — the one the request is about. */
+  size: string
+  /** Every size the widget declares. */
+  sizes?: string[]
+}
+
 /** What an attachment of a citation carries: document passage (document|source),
- *  composition instant (motion) or design element. See DOCUMENT_QUOTE_MIME. */
-export type QuotePayload = DocumentQuotePayload | MotionQuotePayload | DesignQuotePayload
+ *  composition instant (motion), design element or fragment widget. See DOCUMENT_QUOTE_MIME. */
+export type QuotePayload = DocumentQuotePayload | MotionQuotePayload | DesignQuotePayload | WidgetQuotePayload
 
 /**
  * The text the model reads when it receives a pointed design element. In English
@@ -615,6 +645,25 @@ export function formatDesignQuoteText(quote: DesignQuotePayload, userText?: stri
   } else {
     lines.push("Selection: the whole artboard.")
   }
+  const note = userText?.trim()
+  if (note) lines.push("---", note)
+  return lines.join("\n")
+}
+
+/** The text the model reads when it receives a widget pointed at in the Widgets tab. In
+ *  English because the recipient is the model; the user's note comes pasted, as in the other
+ *  citations. */
+export function formatWidgetQuoteText(quote: WidgetQuotePayload, userText?: string): string {
+  const lines = [
+    `[Fragment widget — "${quote.name}" at ${quote.size}${quote.fragmentName ? `, from the fragment "${quote.fragmentName}"` : ""}]`,
+    `Fragment id: ${quote.fragmentId} — the widget is declared in its manifest (fragment_set_widgets changes the declaration).`,
+  ]
+  if (quote.sizes?.length) {
+    lines.push(
+      `Sizes it declares: ${quote.sizes.join(", ")} — the page draws it with ?widget=<id>&size=<size>, and it has to work at every one of them.`,
+    )
+  }
+  lines.push("Edit the fragment it belongs to with fragment_read_file / fragment_edit_file (or fragment_write_file).")
   const note = userText?.trim()
   if (note) lines.push("---", note)
   return lines.join("\n")
@@ -815,6 +864,34 @@ export interface DocumentPart {
   revision?: number
 }
 
+/**
+ * One execution of a routine, inside the routine's OWN chat.
+ *
+ * The routine has a single conversation (the one the person talks to); every execution is
+ * written into it as one of these cards instead of becoming a chat of its own. The work still
+ * ran in a session of its own (`sessionId` — it is what "ver detalhes" opens), so the model
+ * that executes never carries the history of the previous months.
+ */
+export interface RoutineRunPart {
+  id: string
+  type: "routine-run"
+  /** The execution this card speaks for (`RoutineRun.sessionId`). */
+  runId: string
+  /** Session the execution ran in — the workers' parent. */
+  sessionId: string
+  status: "running" | "ok" | "error"
+  startedAt: number
+  finishedAt?: number
+  /** What the execution delivered (the final text, condensed). */
+  summary?: string
+  error?: string
+  cost?: number
+  /** How it started: the calendar, the person, or a script/webhook. */
+  reason?: "schedule" | "manual" | "event"
+  /** Team members that took part, in order (the avatar group). */
+  agents?: string[]
+}
+
 export type MessagePart =
   | TextPart
   | ReasoningPart
@@ -826,6 +903,7 @@ export type MessagePart =
   | AgentPart
   | ArtifactPart
   | DocumentPart
+  | RoutineRunPart
 
 /**
  * The file parts that go TO THE MODEL in a user message.
@@ -1131,7 +1209,7 @@ export interface AskItem {
      *  "a Motion chat" (or the agent's name) instead of a plain subchat. */
     profile?: ProfileId
     /** For a fragment suggestion: the kind the agent asked for, carried into the new chat. */
-    fragmentKind?: "screen" | "panel" | "widget"
+    fragmentKind?: "screen" | "panel"
   }
 }
 
@@ -1236,6 +1314,8 @@ export interface OrchestrationTask {
   /** Vision mode: outside SendMessageOptions because vision is switched on by
    *  the presence of a visionModel, not by an option flag. */
   vision?: boolean
+  /** The model this task runs on; absent = the orchestrator's worker model. */
+  model?: { providerId: string; modelId: string }
   /** Child session created during execution */
   workerSessionId?: string
   status: ChatStatus
@@ -1562,7 +1642,7 @@ export interface SendMessageInput {
    * Set by the routines scheduler on the execution of a routine that has scripts: the scripts the
    * agent may call with `run_script`, and the folders they may read. Never typed by the person.
    */
-  routineContext?: { id: string; folders: string[]; scripts: import('./routines').RoutineScript[] }
+  routineContext?: { id: string; folder?: string; folders: string[]; scripts: import('./routines').RoutineScript[] }
   /** Files attached to the user message */
   files?: FilePart[]
   /**

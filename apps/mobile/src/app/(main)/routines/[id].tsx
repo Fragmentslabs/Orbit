@@ -5,7 +5,8 @@
  * sessionId). Tapping a session opens the chat of that execution.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet, Alert } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import {
@@ -20,7 +21,7 @@ import {
   Play,
   Trash2,
 } from 'lucide-react-native'
-import { nextRoutineRun, ROUTINE_CHAT_MODES } from '@orbit/shared'
+import { nextRoutineRun } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -37,6 +38,7 @@ import { ActiveSwitch, ModeBadges } from '~/components/routines/schedule-editor'
 export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const routines = useRoutinesStore((s) => s.routines)
@@ -81,17 +83,16 @@ export default function RoutineDetailScreen() {
   const next = nextRoutineRun(routine)
   const modelName = catalog?.[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId
 
-  const confirmRemoval = () => {
-    Alert.alert(t('routines.list.deleteTitle'), t('routines.list.deleteDescription', { title: routine.title }), [
-      { text: t('sidebar.cancel'), style: 'cancel' },
-      {
-        text: t('routines.list.delete'),
-        style: 'destructive',
-        onPress: () => {
-          void remove(routine.id).then(() => router.back())
-        },
-      },
-    ])
+  const confirmRemoval = async () => {
+    const ok = await confirm({
+      title: t('routines.list.deleteTitle'),
+      description: t('routines.list.deleteDescription', { title: routine.title }),
+      confirmLabel: t('routines.list.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    void remove(routine.id).then(() => router.back())
   }
 
   const menuItems: ActionMenuItem[] = [
@@ -136,16 +137,7 @@ export default function RoutineDetailScreen() {
         <View style={[s.infoCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <Text style={[s.prompt, { color: tokens.mutedForeground }]}>{routine.prompt}</Text>
           <View style={s.badgesRow}>
-            <ModeBadges
-              modes={routine.modes}
-              permission
-              available={routine.mode === 'chat' ? ROUTINE_CHAT_MODES : undefined}
-            />
-            {routine.mode === 'chat' && (
-              <View style={[s.modeBadge, { backgroundColor: tokens.muted }]}>
-                <Text style={[s.modeBadgeText, { color: tokens.mutedForeground }]}>{t('routines.mode.chat')}</Text>
-              </View>
-            )}
+            <ModeBadges modes={routine.modes} permission />
           </View>
           <Text numberOfLines={1} style={[s.muted, { color: tokens.mutedForeground }]}>
             {modelName}

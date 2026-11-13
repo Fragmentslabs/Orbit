@@ -1,15 +1,13 @@
 /**
- * Routines screen — mirror of the desktop's RoutinesView: lists the routines of
- * the workspace's current mode (the chat one lists only chat routines, the code
- * one only code routines) with the "New routine" button at the top. Creation
- * and detail are routes of their own: /routines/new and /routines/[id].
+ * Routines screen — mirror of the desktop's RoutinesView: one list of routines,
+ * with the "New routine" button at the top. Creation and detail are routes of
+ * their own: /routines/new and /routines/[id].
  */
 import { useCallback, useEffect, useMemo } from 'react'
 import { View, Text, Pressable, FlatList, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CalendarClock, MessageSquare, Plus, Terminal } from 'lucide-react-native'
-import { useWorkspaceStore } from '~/stores/workspace-store'
+import { ArrowLeft, CalendarClock, Plus } from 'lucide-react-native'
 import { useSessionStore } from '~/stores/session-store'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -21,7 +19,6 @@ export default function RoutinesScreen() {
   const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const mode = useWorkspaceStore((s) => s.mode)
   const routines = useRoutinesStore((s) => s.routines)
   const loading = useRoutinesStore((s) => s.loading)
   const loaded = useRoutinesStore((s) => s.loaded)
@@ -44,12 +41,9 @@ export default function RoutinesScreen() {
     })()
   }, [])
 
-  // The page belongs to the mode that opened it: the chat one lists only chat
-  // routines and the code one only the code ones (the sidebar splits the
-  // sessions the same way).
-  const ofMode = useMemo(
-    () => routines.filter((r) => r.mode === mode).sort((a, b) => b.createdAt - a.createdAt),
-    [routines, mode],
+  const listed = useMemo(
+    () => [...routines].sort((a, b) => b.createdAt - a.createdAt),
+    [routines],
   )
 
   const createNew = useCallback(() => {
@@ -58,23 +52,13 @@ export default function RoutinesScreen() {
 
   return (
     <SafeScreen style={s.container}>
-      {/* Header: title + mode badge + "New routine" button at the top */}
+      {/* Header: title + "New routine" button at the top */}
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
         <View style={s.headerTitle}>
           <Text style={[s.headerTitleText, { color: tokens.foreground }]}>{t('routines.title')}</Text>
-          <View style={[s.modeBadge, { backgroundColor: tokens.muted }]}>
-            {mode === 'chat' ? (
-              <MessageSquare size={11} color={tokens.mutedForeground} />
-            ) : (
-              <Terminal size={11} color={tokens.mutedForeground} />
-            )}
-            <Text style={[s.modeBadgeText, { color: tokens.mutedForeground }]}>
-              {mode === 'chat' ? t('routines.mode.chat') : t('routines.mode.code')}
-            </Text>
-          </View>
         </View>
         <Pressable onPress={createNew} style={[s.newButton, { backgroundColor: tokens.primary }]}>
           <Plus size={15} color={tokens.primaryForeground} />
@@ -83,20 +67,18 @@ export default function RoutinesScreen() {
       </View>
 
       <View style={s.body}>
-        <Text style={[s.subtitle, { color: tokens.mutedForeground }]}>
-          {mode === 'chat' ? t('routines.subtitleChat') : t('routines.subtitle')}
-        </Text>
+        <Text style={[s.subtitle, { color: tokens.mutedForeground }]}>{t('routines.subtitle')}</Text>
 
         {!loaded && loading ? (
           <View style={s.centerBox}>
             <ActivityIndicator color={tokens.primary} />
           </View>
-        ) : ofMode.length === 0 ? (
+        ) : listed.length === 0 ? (
           <View style={s.centerBox}>
             <CalendarClock size={36} color={tokens.mutedForeground} style={{ opacity: 0.5 }} />
             <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('routines.list.emptyTitle')}</Text>
             <Text style={[s.emptyDescription, { color: tokens.mutedForeground }]}>
-              {t(mode === 'chat' ? 'routines.list.emptySubtitleChat' : 'routines.list.emptySubtitle')}
+              {t('routines.list.emptySubtitle')}
             </Text>
             <Pressable onPress={createNew} style={[s.emptyButton, { borderColor: tokens.border }]}>
               <CalendarClock size={15} color={tokens.foreground} />
@@ -105,7 +87,7 @@ export default function RoutinesScreen() {
           </View>
         ) : (
           <FlatList
-            data={ofMode}
+            data={listed}
             keyExtractor={(r) => r.id}
             renderItem={({ item }) => (
               <View style={{ marginBottom: 10 }}>

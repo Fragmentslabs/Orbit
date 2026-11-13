@@ -175,6 +175,8 @@ interface SessionState {
   ) => Promise<SessionInfo | null>
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
+  /** Zeroes the unread count of these sessions (opening a routine reads its executions too). */
+  clearUnread: (ids: readonly string[]) => void
   setPendingFolder: (folderId: string | null) => void
   setPendingProfile: (profile: ProfileId | null) => void
   renameSession: (id: string, title: string) => void
@@ -527,6 +529,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }))
     if (id) await get().ensureMessages(id)
   },
+
+  clearUnread: (ids) =>
+    set((state) => {
+      if (ids.length === 0) return state
+      let changed = false
+      const unreadCounts = { ...state.unreadCounts }
+      for (const id of ids) {
+        if (unreadCounts[id]) {
+          delete unreadCounts[id]
+          changed = true
+        }
+      }
+      return changed ? { unreadCounts } : state
+    }),
 
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
   setPendingProfile: (profile) => set({ pendingProfile: profile }),

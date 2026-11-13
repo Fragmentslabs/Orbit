@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, ArrowLeft, Folder, MessageSquare, Sparkles } from 'lucide-react-native'
+import { AlertCircle, ArrowLeft, Folder, Sparkles } from 'lucide-react-native'
 import type { Routine, RoutineModel, RoutineModes, RoutineSuggestion, Schedule } from '@orbit/shared'
-import { DEFAULT_ROUTINE_PERMISSION, parseTime, ROUTINE_CHAT_MODES } from '@orbit/shared'
+import { DEFAULT_ROUTINE_PERMISSION, parseTime } from '@orbit/shared'
 import { Input } from '~/components/ui/input'
 import { Textarea } from '~/components/ui/textarea'
 import { Skeleton } from '~/components/ui/skeleton'
@@ -30,12 +30,9 @@ import { RoutineModelPicker } from './routine-model-picker'
  * in.
  */
 export function RoutineForm({
-  mode,
   routine,
   onDone,
 }: {
-  /** Routine mode — fixed on creation (comes from the screen), inherited on edition. */
-  mode: 'chat' | 'code'
   /** Present on edition; absent on creation. */
   routine?: Routine
   onDone: (routine: Routine) => void
@@ -65,9 +62,10 @@ export function RoutineForm({
   const draftModel = useSessionModel(null)
   const [model, setModel] = useState<RoutineModel | null>(routine?.model ?? last?.model ?? draftModel)
 
-  // Folders are chosen IN STEP 1, together with the model — the generation
-  // already uses those folders as prompt context. They only exist in code mode.
-  const [folders, setFolders] = useState<string[]>(routine?.mode === 'code' ? routine.folders : [])
+  // Working folders are chosen IN STEP 1, together with the model — the generation
+  // already uses those folders as prompt context. They are optional: without any,
+  // the routine works only in its own folder.
+  const [folders, setFolders] = useState<string[]>(routine?.folders ?? [])
 
   // Review fields (start from the suggestion/routine, but follow the edition)
   const [title, setTitle] = useState(routine?.title ?? '')
@@ -88,7 +86,7 @@ export function RoutineForm({
       // Language name in English, used in the system prompts sent to the model
       // (same as the desktop: LOCALE_PROMPT_NAME).
       const language = i18n.language.toLowerCase().startsWith('pt') ? 'Portuguese' : 'English'
-      const result = await generate(description.trim(), model, folders, language, mode, visionAvailable)
+      const result = await generate(description.trim(), model, folders, language, visionAvailable)
       if (!result.ok) {
         setError(result.error)
         return
@@ -105,15 +103,11 @@ export function RoutineForm({
     }
   }
 
-  // Folder is required only in code mode: the scheduler refuses to fire a
-  // routine without a working folder — without this check here, the routine
-  // would be created and never run, with no warning at the time.
   const canSave =
     !!model &&
     title.trim().length > 0 &&
     prompt.trim().length > 0 &&
     !!parseTime(schedule.time) &&
-    (mode === 'chat' || folders.length > 0) &&
     !saving
 
   const handleCreate = async () => {
@@ -129,8 +123,7 @@ export function RoutineForm({
         // turned the badge on in the review without one, the mode is created
         // off (the scheduler would have nothing to send in `visionModel`).
         modes: modes.vision && !visionModel ? { ...modes, vision: undefined } : modes,
-        mode,
-        folders: mode === 'chat' ? [] : folders,
+        folders,
         visionModel: modes.vision ? (visionModel ?? undefined) : undefined,
         active: true,
       })
@@ -177,7 +170,7 @@ export function RoutineForm({
           <Textarea
             value={description}
             onChangeText={setDescription}
-            placeholder={t(mode === 'chat' ? 'routines.create.placeholderChat' : 'routines.create.placeholder')}
+            placeholder={t('routines.create.placeholder')}
             placeholderTextColor={tokens.mutedForeground}
             style={{ minHeight: 120, maxHeight: 240 }}
             editable={!generating}
@@ -200,11 +193,9 @@ export function RoutineForm({
           )}
 
           <View style={s.step1Row}>
-            {mode === 'code' && (
-              <View style={{ flex: 1 }}>
-                <FolderSelector folders={folders} onFoldersChange={setFolders} />
-              </View>
-            )}
+            <View style={{ flex: 1 }}>
+              <FolderSelector folders={folders} onFoldersChange={setFolders} />
+            </View>
             <RoutineModelPicker value={model} onChange={setModel} />
           </View>
           {!model && <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('routines.create.noModel')}</Text>}
@@ -224,18 +215,10 @@ export function RoutineForm({
             </Text>
           </Pressable>
 
-          {/* The mode hint sits below the button, taking the full width. */}
-          {mode === 'chat' ? (
-            <View style={s.modeHint}>
-              <MessageSquare size={14} color={tokens.mutedForeground} />
-              <Text style={[s.hint, { color: tokens.mutedForeground, flex: 1 }]}>{t('routines.create.modeChatHint')}</Text>
-            </View>
-          ) : (
-            folders.length === 0 && (
-              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                {t('routines.review.noFolders')}
-              </Text>
-            )
+          {folders.length === 0 && (
+            <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+              {t('routines.review.noFolders')}
+            </Text>
           )}
         </>
       ) : (
@@ -260,35 +243,29 @@ export function RoutineForm({
           </Field>
 
           <Field label={t('routines.review.modes')} hint={t('routines.review.modesHint')}>
-            <ModesEditor
-              modes={modes}
-              onChange={setModes}
-              available={mode === 'chat' ? ROUTINE_CHAT_MODES : undefined}
-            />
+            <ModesEditor modes={modes} onChange={setModes} />
           </Field>
 
           <Field label={t('routines.create.model')}>
             <RoutineModelPicker value={model} onChange={setModel} />
           </Field>
 
-          {mode === 'code' && (
-            <Field label={t('routines.review.folders')} hint={t('routines.review.foldersHint')}>
-              {folders.length === 0 ? (
-                <Text style={[s.hint, { color: tokens.destructive }]}>{t('routines.review.noFolders')}</Text>
-              ) : (
-                <View style={{ gap: 4 }}>
-                  {folders.map((folder) => (
-                    <View key={folder} style={s.folderRow}>
-                      <Folder size={13} color={tokens.mutedForeground} />
-                      <Text style={[s.folderText, { color: tokens.mutedForeground }]} numberOfLines={1}>
-                        {folder}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </Field>
-          )}
+          <Field label={t('routines.review.folders')} hint={t('routines.review.foldersHint')}>
+            {folders.length === 0 ? (
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('routines.review.noFolders')}</Text>
+            ) : (
+              <View style={{ gap: 4 }}>
+                {folders.map((folder) => (
+                  <View key={folder} style={s.folderRow}>
+                    <Folder size={13} color={tokens.mutedForeground} />
+                    <Text style={[s.folderText, { color: tokens.mutedForeground }]} numberOfLines={1}>
+                      {folder}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </Field>
 
           {error && (
             <View style={[s.errorBox, { borderColor: tokens.destructive }, errorTint]}>
@@ -347,7 +324,6 @@ const s = StyleSheet.create({
   errorText: { flex: 1, fontSize: 12 },
   generatingBox: { borderRadius: 10, borderWidth: 1, padding: 12, gap: 8 },
   step1Row: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  modeHint: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',

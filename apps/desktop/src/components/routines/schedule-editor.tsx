@@ -30,6 +30,17 @@ export function ScheduleEditor({ schedule, onChange }: { schedule: Schedule; onC
   const mode = scheduleMode(schedule)
   const names = shortDays(t)
   const timeValid = !!parseTime(schedule.time)
+  // The one-off moment already passed: the routine would be created and never run.
+  const onceAt = (() => {
+    if (!schedule.onceDate) return null
+    const hm = parseTime(schedule.time)
+    if (!hm) return null
+    const date = new Date(`${schedule.onceDate}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return null
+    date.setHours(hm.hour, hm.minute, 0, 0)
+    return date.getTime()
+  })()
+  const oncePast = mode === "once" && onceAt !== null && onceAt <= Date.now()
 
   const changeMode = (next: ScheduleMode) => {
     if (next === "daily") onChange({ time: schedule.time })
@@ -165,12 +176,15 @@ export function ScheduleEditor({ schedule, onChange }: { schedule: Schedule; onC
             {t("routines.schedule.em")}
             <input
               type="date"
+              min={todayIso()}
               value={schedule.onceDate ?? todayIso()}
               onChange={(e) => e.target.value && onChange({ time: schedule.time, onceDate: e.target.value })}
               className="rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             />
           </label>
-          <p className="text-[11px] text-muted-foreground">{t("routines.schedule.onceHint")}</p>
+          <p className={cn("text-[11px]", oncePast ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
+            {t(oncePast ? "routines.schedule.pastDate" : "routines.schedule.onceHint")}
+          </p>
         </div>
       )}
 
@@ -194,7 +208,7 @@ const MODE_ICON: Record<(typeof ROUTINE_MODES)[number], typeof Bot> = {
   vision: Eye,
 }
 
-/** Editable mode keys — the subset depends on the routine's mode. */
+/** Editable mode keys. */
 type ModeKey = (typeof ROUTINE_MODES)[number]
 
 /**
@@ -209,7 +223,7 @@ export function ModesEditor({
 }: {
   modes: RoutineModes
   onChange: (modes: RoutineModes) => void
-  /** Modes shown — a chat routine receives ROUTINE_CHAT_MODES. */
+  /** Modes shown — empty when an agent or a team decides the abilities. */
   available?: ModeKey[]
 }) {
   const { t } = useTranslation()
@@ -294,9 +308,7 @@ export function ModeBadges({
 }: {
   modes: RoutineModes
   permission?: boolean
-  /** Modes taken into account — a chat routine does not show
-   *  loop/orchestrate even if a hand-edited routines.json has the field (the
-   *  scheduler ignores it anyway). */
+  /** Modes taken into account — empty when an agent or a team decides the abilities. */
   available?: ModeKey[]
 }) {
   const { t } = useTranslation()

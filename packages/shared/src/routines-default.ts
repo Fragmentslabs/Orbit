@@ -8,12 +8,11 @@ import type { RoutineModes, Schedule } from './routines'
  * reaches memories with an expiry (seasonal and project/context), which are the
  * minority, and chats are never touched.
  *
- * Both are CHAT mode, and that is deliberate: neither needs to read files.
- * Consolidating memories touches ids (memory_list / memory_update /
- * memory_delete / memory_link), not code — giving them a working folder would
- * grant disk reads for nothing. As a consequence, consolidation cannot VERIFY
- * obsolescence, and the prompts forbid concluding it: that is the job of a
- * code routine, per project, which the user assembles whenever they want.
+ * Neither reads project files, and that is deliberate: consolidating memories
+ * touches ids (memory_list / memory_update / memory_delete / memory_link), not
+ * code. As a consequence, consolidation cannot VERIFY obsolescence, and the
+ * prompts forbid concluding it: that is the job of a routine pointed at a
+ * project, which the user assembles whenever they want.
  *
  * The prompts are written in English (like the other prompts of the product)
  * and tell the agent to answer in the user's language — the app language
@@ -38,7 +37,6 @@ export interface DefaultRoutine {
   prompt: string
   schedule: Schedule
   modes: RoutineModes
-  mode: 'chat' | 'code'
 }
 
 const MAINTENANCE_MODES: RoutineModes = {
@@ -65,7 +63,6 @@ export const DEFAULT_ROUTINES: DefaultRoutine[] = [
     title: 'Archive inactive chats',
     schedule: { time: '03:00', days: [1] },
     modes: MAINTENANCE_MODES,
-    mode: 'chat',
     prompt: `Archive chats that fell out of use, so the sidebar stays readable.
 
 You run unattended, with nobody to ask. Do not ask questions and do not request approval.
@@ -98,7 +95,6 @@ RULES
     title: 'Consolidate memories',
     schedule: { time: '03:30', days: [1] },
     modes: MAINTENANCE_MODES,
-    mode: 'chat',
     prompt: `Review the stored memories: merge what is duplicated and reconnect what got
 orphaned. Only memories with an expiry are cleaned automatically, and those are
 the minority — everything else piles up with nobody ever reviewing it.

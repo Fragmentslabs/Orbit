@@ -289,8 +289,8 @@ async function runWorkerTurn(
     await runChat(win, {
       sessionId: worker.id,
       text,
-      providerId: input.workerModel?.providerId ?? input.providerId,
-      modelId: input.workerModel?.modelId ?? input.modelId,
+      providerId: worker.orchestration?.model?.providerId ?? input.workerModel?.providerId ?? input.providerId,
+      modelId: worker.orchestration?.model?.modelId ?? input.workerModel?.modelId ?? input.modelId,
       mode: 'code',
       options: {
         ...worker.orchestration?.options,
@@ -356,18 +356,18 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
 
 /**
  * A routine's own team: the plan comes from the members the author defined, so there is no
- * planning pass, and it runs unattended (see `unattended` in SendMessageOptions). The scheduler
- * gives a team with no folder of its own a scratch folder per run; if there is still no
- * directory, there is nowhere for the workers to work and it falls back to a plain turn.
+ * planning pass, and it runs unattended (see `unattended` in SendMessageOptions). Every routine
+ * has a folder of its own; when the input has no directory there is nowhere for the workers to
+ * work and it falls back to a plain turn.
  */
 export async function runTeam(
   win: BrowserWindow,
   input: SendMessageInput,
   team: RoutineTeam,
-  /** `scratch`: the folder was made for this run only, so members may leave their results in it. */
-  opts: { scratch?: boolean } = {},
+  /** `handoff`: the team shares a folder, so members may leave their results in it as files. */
+  opts: { handoff?: boolean } = {},
 ): Promise<void> {
-  const plan = input.directory ? planFromTeam(team, newId, { handoff: opts.scratch }) : null
+  const plan = input.directory ? planFromTeam(team, newId, { handoff: opts.handoff }) : null
   if (!plan) return runChat(win, input)
   const { sessionId } = input
   controllers.get(sessionId)?.abort()
@@ -1025,7 +1025,15 @@ async function approvePlanTurn(
         // The modes come from the plan: the orchestrator chose them task by task,
         // within the session ceiling. They stay on the session so whoever continues
         // the conversation later (review, message_worker) uses the same ones.
-        orchestration: { role: 'worker', parentSessionId: sessionId, task: task.title, options: task.options, vision: task.vision },
+        orchestration: {
+          role: 'worker',
+          parentSessionId: sessionId,
+          task: task.title,
+          options: task.options,
+          vision: task.vision,
+          // A team member can bring its own model; without one the worker follows the run's.
+          ...(task.model ? { model: task.model } : {}),
+        },
         parentId: sessionId,
         createdAt: now,
         updatedAt: now,

@@ -1,27 +1,20 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageSquarePlusIcon, PenLineIcon, PlusIcon } from "lucide-react"
+import { CalendarDaysIcon, ClockIcon, ListIcon, SearchIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { SegmentedControl } from "@/components/ui/segmented-control"
-import { useWorkspace } from "@/lib/workspace-context"
 import { useStacked } from "@/src/hooks/use-stacked"
 import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
-import { ListToolbar } from "@/src/components/list-toolbar"
-import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
-import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
-import { CreateRoutineDialog } from "./create-routine-dialog"
+import { useSessionStore } from "@/src/stores/session-store"
 import { RoutineList, routineMatches } from "./my-routines"
+import { RoutineScreen } from "./routine-screen"
 import { RoutinesAgenda } from "./routines-agenda"
-import { RoutinesStatsBar } from "./routines-stats"
 import { RoutinesSummary } from "./routines-summary"
 
 type RoutinesLayout = "list" | "agenda"
 /**
- * The summary column follows the width of the page continuously, and only when there is no room
- * for it beside the routines (less than 640px: the side panel eats the page, not only the window)
- * does it go below them.
+ * The summary column is fixed (372px, as the design); only when there is no room for it beside
+ * the routines (the side panel eats the page) does it go below them.
  */
 const STACK_BELOW_PX = 640
 
@@ -36,32 +29,26 @@ function savedLayout(): RoutinesLayout {
 }
 
 /**
- * Routines page (in the sidebar, of the chat and code modes). Two levels, like
- * the pipeline:
+ * Routines page (in the sidebar, in every mode). Two levels, like the pipeline:
  *
- *   routine list  →  [open]  →  routine detail (executed sessions)
+ *   routine list  →  [open]  →  the routine's screen (its chat + the floating card)
  *
- * The header chooses what the page lists: the chat routines, the code ones or both (until the
- * user picks, it follows the workspace mode). Creating is a MODAL, not a tab: the
- * page is the list, and creating is an action on it. In the detail the list
- * header disappears — whoever is there is inside ONE routine, and the header
- * is that routine's.
+ * The page is the design of the list: the routines on the left (search, the counts, the rows
+ * and the foot line) and, on the right, the general summary — the numbers, the next calls of
+ * the whole week and the recent runs. Opening a routine replaces the page with its screen, and
+ * "voltar" in the header brings the list back.
  */
 export function RoutinesView() {
   const { t } = useTranslation()
-  const { mode } = useWorkspace()
   const loaded = useRoutinesStore((s) => s.loaded)
   const load = useRoutinesStore((s) => s.load)
   const routines = useRoutinesStore((s) => s.routines)
+  const runs = useRoutinesStore((s) => s.runs)
   const prune = useRoutinesStore((s) => s.prune)
   const sessions = useSessionStore((s) => s.sessions)
   const sessionsLoaded = useSessionStore((s) => s.initialized)
-  const [createOpen, setCreateOpen] = useState(false)
   const startCreation = useStartCreationChat()
 
-  // What the page lists is chosen in the header (chat, code or both); until then it follows
-  // the workspace mode, as it always did.
-  const [scope] = useViewScope("routines", mode)
   const [query, setQuery] = useState("")
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const stacked = useStacked(root, STACK_BELOW_PX)
@@ -75,21 +62,13 @@ export function RoutinesView() {
       /* private mode: the choice just does not stick */
     }
   }
-  const inScope = routines.filter((r) => scope === "all" || r.mode === scope)
 
-  // A routine opens as a tab of the side panel (the panel of the active conversation, like
-  // the memories): the page keeps the list or the agenda and the summary, and the tab has the
-  // room of the panel, which resizes. The highlighted routine is the one whose tab is active.
-  const panelKey = useActiveSession(mode)?.id ?? ORPHAN_KEY
-  const openRoutineTab = usePanelStore((s) => s.openRoutineTab)
-  const openedId = usePanelStore((s) => {
-    const active = s.activeTabBySession[panelKey]
-    return s.tabsBySession[panelKey]?.find((tab) => tab.id === active && tab.type === "routine")?.routineId
-  })
-  const openRoutine = (id: string) => {
-    const routine = routines.find((r) => r.id === id)
-    if (routine) openRoutineTab(panelKey, { routineId: id, title: routine.title })
-  }
+  // A routine opens ITS OWN screen (the chat takes the page); the list stays behind it, and
+  // "voltar" in the header brings it back. The open one lives in the store so the header of the
+  // window (App) can show the routine instead of the page title.
+  const openId = useRoutinesStore((s) => s.openId)
+  const openRoutine = useRoutinesStore((s) => s.open)
+  const opened = openId ? routines.find((r) => r.id === openId) : undefined
 
   useEffect(() => {
     if (!loaded) void load()
@@ -117,114 +96,108 @@ export function RoutinesView() {
     return <p className="p-6 text-center text-xs text-muted-foreground">{t("routines.loading")}</p>
   }
 
-  const filtered = inScope.filter((r) => routineMatches(r, query, t))
+  // One routine open: the page IS its screen (the window header shows the routine).
+  if (opened) return <RoutineScreen routine={opened} />
 
-  const dialog = (
-    <CreateRoutineDialog
-      open={createOpen}
-      onOpenChange={setCreateOpen}
-      onCreated={openRoutine}
-      defaultMode={scope === "all" ? mode : scope}
-    />
-  )
+  const filtered = routines.filter((r) => routineMatches(r, query, t))
 
   // With no routine at all the screen is just the empty state with the call to create — a
   // search field and an empty panel on the side would be noise.
-  if (inScope.length === 0) {
+  if (routines.length === 0) {
     return (
       <div ref={setRoot} className="flex min-h-0 flex-1 flex-col">
         <RoutineList
-          routines={inScope}
-          scope={scope}
+          routines={routines}
           query=""
           selectedId={null}
           onSelect={openRoutine}
           onCreateNew={() => void startCreation("routine")}
-          onCreateManual={() => setCreateOpen(true)}
         />
-        {dialog}
       </div>
     )
   }
 
+  const activeCount = routines.filter((r) => r.active).length
+  const runningCount = routines.filter((r) => runs.some((run) => run.routineId === r.id && run.status === "running")).length
+  const counts = [
+    t("routines.list.count", { count: routines.length }),
+    t("routines.list.countActive", { count: activeCount }),
+    ...(runningCount > 0 ? [t("routines.list.countRunning", { count: runningCount })] : []),
+  ].join(" · ")
+
   return (
-    <div ref={setRoot} className={cn("flex min-h-0 flex-1", stacked ? "flex-col gap-3" : "gap-4")}>
-      {/* The routines, as a list or as the week; the toggle sits with the search. */}
-      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !stacked && "border-r pr-4")}>
-        <ListToolbar
-          query={query}
-          onQueryChange={setQuery}
-          placeholder={t("routines.list.search")}
-          actionLabel={t("routines.list.new")}
-          actionIcon={PlusIcon}
-          onAction={() => void startCreation("routine")}
-          actionOptions={[
-            {
-              id: "chat",
-              icon: MessageSquarePlusIcon,
-              title: t("routines.create.viaChat"),
-              description: t("routines.create.viaChatHint"),
-              onSelect: () => void startCreation("routine"),
-            },
-            {
-              id: "form",
-              icon: PenLineIcon,
-              title: t("routines.create.viaForm"),
-              description: t("routines.create.viaFormHint"),
-              onSelect: () => setCreateOpen(true),
-            },
-          ]}
-        >
-          <SegmentedControl<RoutinesLayout>
-            size="sm"
-            value={layout}
-            onChange={chooseLayout}
-            options={[
-              { value: "list", label: t("routines.view.list") },
-              { value: "agenda", label: t("routines.view.agenda") },
-            ]}
-          />
-        </ListToolbar>
+    <div ref={setRoot} className={cn("flex min-h-0 flex-1", stacked && "flex-col")}>
+      {/* The routines: search, the counts, the rows and the foot line. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-muted-foreground focus-within:ring-1 focus-within:ring-ring">
+            <SearchIcon className="size-3.5 shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("routines.list.search")}
+              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          {/* How the routines are read: the rows, or the week. Two segments, the active one
+              lit — a switch, not a button that hides which view it leads to. */}
+          <div className="flex shrink-0 items-center rounded-lg border bg-card p-0.5">
+            {([
+              { view: "list", icon: ListIcon, label: t("routines.view.list") },
+              { view: "agenda", icon: CalendarDaysIcon, label: t("routines.view.agenda") },
+            ] as const).map(({ view, icon: Icon, label }) => (
+              <button
+                key={view}
+                type="button"
+                aria-label={label}
+                aria-pressed={layout === view}
+                title={label}
+                onClick={() => chooseLayout(view)}
+                className={cn(
+                  "flex size-6 items-center justify-center rounded-md transition-colors",
+                  layout === view
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         {layout === "list" ? (
-          <RoutineList
-            routines={inScope}
-            scope={scope}
-            query={query}
-            selectedId={openedId ?? null}
-            onSelect={openRoutine}
-            onCreateNew={() => void startCreation("routine")}
-            onCreateManual={() => setCreateOpen(true)}
-          />
+          <>
+            <p className="shrink-0 px-3.5 pb-1 pt-2.5 text-[10px] text-muted-foreground/70">{counts}</p>
+            <RoutineList
+              routines={routines}
+              query={query}
+              selectedId={null}
+              onSelect={openRoutine}
+              onCreateNew={() => void startCreation("routine")}
+            />
+            <p className="flex shrink-0 items-center gap-1.5 border-t px-3.5 py-2.5 text-[10px] text-muted-foreground/60">
+              <ClockIcon className="size-3 shrink-0" />
+              {t("routines.list.tail")}
+            </p>
+          </>
         ) : (
-          <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
-        )}
-        {/* Narrow page: the numbers go under the list, with a line before the summary strip. */}
-        {stacked && (
-          <div className="mt-2.5 shrink-0">
-            <RoutinesStatsBar routines={inScope} separated />
+          <div className="flex min-h-0 flex-1 flex-col p-3">
+            <RoutinesAgenda routines={filtered} selectedId={null} onSelect={openRoutine} />
           </div>
         )}
       </div>
 
-      {/* How the routines are doing and what is next; a routine opens in the side panel. It never
-          goes away: it narrows, and when even that does not fit it goes below the routines. */}
-      {stacked ? (
-        <div className="max-h-[40%] shrink-0 overflow-y-auto">
-          <RoutinesSummary routines={inScope} variant="strip" onSelect={openRoutine} />
-        </div>
-      ) : (
-        // Its width follows the page continuously (17rem to 27rem), so there is nothing to wait for.
-        <div className="@container flex min-h-0 w-[clamp(17rem,40%,27rem)] shrink-0 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <RoutinesSummary routines={inScope} onSelect={openRoutine} />
-          </div>
-          {/* Fixed at the bottom of the column: the summary scrolls, the numbers stay. */}
-          <div className="mt-2.5 shrink-0">
-            <RoutinesStatsBar routines={inScope} />
-          </div>
-        </div>
-      )}
-      {dialog}
+      {/* The general summary: numbers, the week ahead and the recent runs. It never goes away:
+          it narrows, and when even that does not fit it goes below the routines. */}
+      <aside
+        className={cn(
+          "flex min-h-0 flex-col",
+          stacked ? "max-h-[45%] shrink-0 border-t px-3 pt-3" : "w-60 shrink-0 border-l px-3",
+        )}
+      >
+        <RoutinesSummary routines={routines} onSelect={openRoutine} onShowAll={() => chooseLayout("agenda")} />
+      </aside>
     </div>
   )
 }

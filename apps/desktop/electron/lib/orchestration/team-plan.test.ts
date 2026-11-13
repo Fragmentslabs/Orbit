@@ -28,6 +28,20 @@ describe('planFromTeam', () => {
     expect(plan.status).toBe('proposed')
   })
 
+  it('gives each task the model of its member, and leaves the rest on the run default', () => {
+    const plan = planFromTeam(
+      {
+        members: [
+          { id: 'a', name: 'Researcher', task: 'Read', model: { providerId: 'anthropic', modelId: 'claude-haiku-4-5' } },
+          { id: 'b', name: 'Writer', task: 'Write' },
+        ],
+      },
+      newId,
+    )!
+    expect(plan.tasks[0].model).toEqual({ providerId: 'anthropic', modelId: 'claude-haiku-4-5' })
+    expect(plan.tasks[1].model).toBeUndefined()
+  })
+
   it('hands results over through the folder when the team has one of its own', () => {
     const team = { members: [{ id: 'a', name: 'Weekly Report', task: 'Write' }, { id: 'b', name: 'Voice', task: 'Speak', dependsOn: ['a'] }] }
     const plain = planFromTeam(team, newId)!

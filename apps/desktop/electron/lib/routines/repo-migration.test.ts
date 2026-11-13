@@ -119,7 +119,6 @@ describe('legacy data migration', () => {
       schedule: { time: '09:00', days: [1, 3] },
       model: { providerId: 'anthropic', modelId: 'claude' },
       modes: { loop: true, brain: false, web: true, allowAll: false, permissionMode: 'acceptEdits' },
-      mode: 'code',
       folders: ['/repo'],
       visionModel: { providerId: 'anthropic', modelId: 'claude' },
       active: true,
@@ -130,7 +129,6 @@ describe('legacy data migration', () => {
       id: 'rot_2',
       title: 'Backup',
       schedule: { intervalDays: 7, intervalHours: 6, onceDate: '2024-05-01' },
-      mode: 'code',
       folders: [],
       active: false,
     })
@@ -158,7 +156,6 @@ describe('legacy data migration', () => {
       title: 'Proposta',
       schedule: { time: '18:00', days: [1, 2, 3, 4, 5] },
       modes: { loop: false, brain: true, web: false, allowAll: false },
-      mode: 'chat',
       folders: ['/repo'],
       createdAt: 1700000000000,
     })

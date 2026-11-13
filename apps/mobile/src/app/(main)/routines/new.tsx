@@ -1,13 +1,12 @@
 /**
  * New routine — mirror of the desktop's CreateRoutineDialog, as a route: the
- * RoutineForm handles both steps (describe → generate → review). The routine is
- * born in the workspace's current mode and does not change afterwards.
+ * RoutineForm handles both steps (describe → generate → review). The screen's mode only
+ * seeds the working folders.
  */
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react-native'
-import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { SafeScreen } from '~/components/layout/SafeScreen'
@@ -17,7 +16,6 @@ export default function NewRoutineScreen() {
   const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const mode = useWorkspaceStore((s) => s.mode)
 
   return (
     <SafeScreen style={{ flex: 1 }}>
@@ -28,10 +26,7 @@ export default function NewRoutineScreen() {
         <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('routines.create.title')}</Text>
         <View style={s.headerBtn} />
       </View>
-      <RoutineForm
-        mode={mode}
-        onDone={(routine) => router.replace(`/(main)/routines/${routine.id}`)}
-      />
+      <RoutineForm onDone={(routine) => router.replace(`/(main)/routines/${routine.id}`)} />
     </SafeScreen>
   )
 }

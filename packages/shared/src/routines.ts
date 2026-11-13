@@ -1,5 +1,5 @@
 /**
- * Routines — chats that come back on their own, in chat and code modes.
+ * Routines — chats that come back on their own.
  *
  * A routine is a prompt + a schedule. At the appointed time the main-process
  * scheduler creates a fresh chat session and dispatches it through the SAME
@@ -12,12 +12,9 @@
  * history on the routine screen and the individual deletion from the sidebar possible.
  * "Remembering the previous day" is the Brain's job, enabled through the routine's modes.
  *
- * The `mode` field separates the two worlds:
- *   - 'code': runs inside the working `folders`; every mode is available.
- *   - 'chat': no folders (conversation and chat tools only); the modes are
- *     restricted to the chat subset (ROUTINE_CHAT_MODES).
- * Each execution's session inherits the routine's mode, and the sidebar only
- * shows the "Routines" group of the matching mode.
+ * Every routine owns a folder of its own — memory.md, scripts/ and whatever it produces —
+ * and runs inside it. The `folders` are the EXTRA folders the prompt points it at: projects
+ * it may read and edit, never where it keeps its own things.
  */
 
 import type { AgentFeature } from './agents'
@@ -34,6 +31,19 @@ export const ROUTINE_SESSION_PREFIX = 'routine_'
 export const LEGACY_ROUTINE_SESSION_PREFIX = 'rotina_'
 
 /** True when the session id was minted by a routine run (current or legacy prefix). */
+/**
+ * Id of the routine's main chat. No timestamp on purpose: the executions are the ones that
+ * are born per run (children of this one); the conversation is the routine's, always the same.
+ */
+export function routineChatSessionId(routineId: string): string {
+  return `${ROUTINE_SESSION_PREFIX}${routineId}`
+}
+
+/** Message of one execution inside the routine's chat — the anchor the panel jumps to. */
+export function routineRunMessageId(sessionId: string): string {
+  return `run_card_${sessionId}`
+}
+
 export function isRoutineSessionId(id: string): boolean {
   return id.startsWith(ROUTINE_SESSION_PREFIX) || id.startsWith(LEGACY_ROUTINE_SESSION_PREFIX)
 }
@@ -105,33 +115,6 @@ export const ROUTINE_MODES: (keyof Omit<RoutineModes, 'permissionMode'>)[] = [
   'search',
   'vision',
 ]
-
-/**
- * Modes available in a chat-mode routine — mirrors the chat-mode toggles
- * (chat-input.tsx). Loop, subagents, orchestration and plan do not exist there.
- */
-export const ROUTINE_CHAT_MODES: (keyof Omit<RoutineModes, 'permissionMode'>)[] = [
-  'search',
-  'browser',
-  'simple',
-  'brain',
-  'vision',
-]
-
-/**
- * A routine's mode follows its folders: with at least one it runs as code, without any it runs
- * as a chat. The person never picks a mode — they attach folders, or not.
- */
-export function routineModeFor(folders: readonly string[]): 'chat' | 'code' {
-  return folders.length > 0 ? 'code' : 'chat'
-}
-
-/** The modes a chat routine can keep: the code-only ones are dropped, the permission stays. */
-export function restrictModesToChat(modes: RoutineModes): RoutineModes {
-  const out: RoutineModes = { permissionMode: modes.permissionMode }
-  for (const key of ROUTINE_CHAT_MODES) if (modes[key]) out[key] = true
-  return out
-}
 
 /**
  * What an agent lets a routine do. An agent's features say what it does NOT block, so a routine run
@@ -314,6 +297,8 @@ export interface TeamMember {
   task: string
   /** The agent that runs it (`agent:<id>` or a built-in); absent = the general setup. */
   agent?: ProfileId
+  /** The model this member runs on; absent = the routine's model. */
+  model?: RoutineModel
   /** Members that must finish first; their result reaches this one. */
   dependsOn?: string[]
 }
@@ -335,6 +320,11 @@ export interface RoutineModel {
   modelId: string
 }
 
+/** Roots a routine's scripts may read: its own folder first, then the working folders. */
+export function scriptRoots(folder: string | undefined, folders: readonly string[]): string[] {
+  return folder ? [folder, ...folders] : [...folders]
+}
+
 export interface Routine {
   id: string
   title: string
@@ -343,13 +333,10 @@ export interface Routine {
   schedule: Schedule
   model: RoutineModel
   modes: RoutineModes
-  /**
-   * Routine mode: 'code' runs inside the working folders; 'chat' runs without
-   * folders, with the modes restricted to the chat subset.
-   */
-  mode: 'chat' | 'code'
-  /** Working folders, inherited from the workspace at creation time (code only) */
+  /** Folders the prompt hands to the agent: projects it may read and edit. Absent = only its own folder. */
   folders: string[]
+  /** Absolute path of the routine's own folder (memory.md, scripts) — created with it. */
+  folder?: string
   /**
    * Vision model stored at creation time when the Vision mode is on — the
    * main process does not read the renderer's localStorage, so the routine is
@@ -380,8 +367,6 @@ export interface NewRoutineInput {
   schedule: Schedule
   model: RoutineModel
   modes: RoutineModes
-  /** Absent = 'code' (older routines and external callers) */
-  mode?: 'chat' | 'code'
   folders: string[]
   visionModel?: RoutineModel
   agent?: ProfileId
@@ -416,7 +401,6 @@ export interface PendingRoutine {
   prompt: string
   schedule: Schedule
   modes: RoutineModes
-  mode: 'chat' | 'code'
   folders: string[]
   model: RoutineModel
   visionModel?: RoutineModel
@@ -439,6 +423,8 @@ export interface RoutineRun {
   startedAt: number
   completedAt?: number
   status: RoutineRunStatus
+  /** How it started: the clock, the button, or the trigger (`event`). */
+  reason?: 'schedule' | 'manual' | 'event'
   error?: string
   /** Scratch folder of a team that had no folder of its own: kept after the run, so the files can be opened. */
   folder?: string
@@ -656,6 +642,22 @@ export function nextRoutineRun(routine: Routine, now = Date.now()): number | nul
   // A script or a webhook decides when it runs, not the calendar.
   if (!routine.active || isEventTriggered(routine)) return null
   return nextRun(routine.schedule, now, routine.lastRun)
+}
+
+/**
+ * A one-off whose moment has already passed: it is FINISHED, not paused — the scheduler turns it
+ * off after the run, and turning it back on has to choose a new date. Telling the two apart keeps
+ * the list from calling "paused" something the person never paused.
+ */
+export function isFinishedOnce(routine: Routine, now = Date.now()): boolean {
+  const { onceDate, time } = routine.schedule
+  if (!onceDate) return false
+  const hm = parseTime(time)
+  if (!hm) return false
+  const date = new Date(`${onceDate}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return false
+  date.setHours(hm.hour, hm.minute, 0, 0)
+  return date.getTime() <= now
 }
 
 /**

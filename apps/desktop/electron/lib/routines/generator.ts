@@ -15,18 +15,20 @@ import { interleavedReasoningField, normalizeMessages } from '../reasoning'
  * confirms everything in the review screen — nothing that comes out of here goes
  * straight to disk.
  *
- * The SYSTEM changes with the routine's mode: in chat mode there are no working
- * folders and the modes are restricted to the chat subset (ROUTINE_CHAT_MODES).
+ * Every routine works inside a folder of its own (memory.md, scripts/) and may also be given
+ * working folders — projects the prompt sends it to. The system prompt describes both.
  */
 
-const SYSTEM_CODE = `You design scheduled routines for Orbit's CODE mode: a routine is a prompt that an autonomous coding agent runs by itself, on a schedule, inside the user's working folders.
+const SYSTEM = `You design scheduled routines for Orbit: a routine is a prompt that an autonomous agent runs by itself, on a schedule.
+
+Every routine has a folder of its own — memory.md and scripts/ live there, and so does whatever it produces. It may also be given WORKING FOLDERS: projects it may read and edit when the prompt sends it there. Scripts and documents it creates belong in its own folder unless the user explicitly asks for them in a working folder.
 
 From the user's description, produce ONE routine.
 
 Rules:
 - The prompt must be SELF-CONTAINED: the agent that runs it has no memory of this conversation and no one to ask. State the goal, the folders/files involved when known, what to inspect, and what a finished run looks like.
 - Write title and prompt in the SAME LANGUAGE as the user's description (a Portuguese description yields a Portuguese prompt — never switch to English unless asked).
-- The routine's result is a chat message the user reads: by default the prompt just answers in the chat. It must NOT create, modify or delete files, folders or scripts in the working folders, and must not commit or install anything, unless the user's description EXPLICITLY asks to persist something to disk (e.g. "save to a file", "write a JSON"). If the goal is delivering information — a greeting, the news, a summary — deliver it as plain text in the reply.
+- The routine's result is a chat message the user reads: by default the prompt just answers in the chat. It may write scripts and documents inside its own folder, but it must NOT create, modify or delete anything in the working folders — and must not commit or install anything — unless the user's description EXPLICITLY asks it to (e.g. "save to the project", "write a JSON there"). If the goal is delivering information — a greeting, the news, a summary — deliver it as plain text in the reply.
 - "Create tasks" is NOT a request to persist to disk. See the PIPELINE section below.
 - The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
 - schedule.time is "HH:MM" (24h, local time). schedule.days is 0-6 with 0 = Sunday; omit days for every day. Use intervalDays only for "every N days" and intervalHours only for "every N hours" (one cadence, never two). For a one-time request ("once on DATE", "tomorrow at 9", "remind me on the 5th"), set onceDate as "YYYY-MM-DD" plus time — the routine turns itself off after that single run.
@@ -51,30 +53,6 @@ PIPELINE = ORBIT'S TASK BOARD, never a file:
 
 Answer with JSON ONLY — no prose, no markdown fences:
 {"title":"...","prompt":"...","schedule":{"time":"09:00","days":[1,2,3,4,5]},"modes":{"loop":true,"subagents":false,"orchestrate":false,"brain":true,"browser":false,"search":false,"vision":false,"plan":false,"simple":false}}`
-
-const SYSTEM_CHAT = `You design scheduled routines for Orbit's CHAT mode: a routine is a prompt that an autonomous chat agent runs by itself, on a schedule. It has NO working folders — it cannot create, modify or delete files. Its whole world is the conversation and the chat tools (web search, browser, memory).
-
-From the user's description, produce ONE routine.
-
-Rules:
-- The prompt must be SELF-CONTAINED: the agent that runs it has no memory of this conversation and no one to ask. State the goal, what to look up, and what a finished run looks like.
-- Write title and prompt in the SAME LANGUAGE as the user's description (a Portuguese description yields a Portuguese prompt — never switch to English unless asked).
-- The result is a chat message the user reads: the prompt just answers in the chat — it must NOT touch files or the filesystem in any way.
-- "Pipeline"/"pipeline mode" names Orbit's task board, not a file and not CI/CD. If the description asks to turn something into tasks, the prompt must use the pipeline tools (pipeline_list, then pipeline_create_task per task) — never describe writing a file, which this mode cannot do anyway.
-- The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
-- schedule.time is "HH:MM" (24h, local time). schedule.days is 0-6 with 0 = Sunday; omit days for every day. Use intervalDays only for "every N days" and intervalHours only for "every N hours" (one cadence, never two). For a one-time request ("once on DATE", "tomorrow at 9", "remind me on the 5th"), set onceDate as "YYYY-MM-DD" plus time — the routine turns itself off after that single run.
-- If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
-- Suggest modes conservatively, from the CHAT-ONLY set:
-  - brain: the routine should remember previous runs (daily briefings, follow-ups, anything cumulative).
-  - simple: plain-text answer, no formatting.
-  - browser: the routine has to look at a live web page in the panel browser.
-  - search: the routine needs up-to-date web research (deep research with search tools).
-  - vision: only when the user mentions images/screenshots AND a vision model is available.
-  - NEVER suggest loop, subagents, orchestrate or plan — they do not exist in chat mode.
-- Leave every other mode key as false.
-
-Answer with JSON ONLY — no prose, no markdown fences:
-{"title":"...","prompt":"...","schedule":{"time":"09:00","days":[1,2,3,4,5]},"modes":{"brain":true,"simple":false,"browser":false,"search":false,"vision":false}}`
 
 const MAX_OUTPUT = 20_000
 
@@ -125,20 +103,10 @@ function normalizeSchedule(raw: unknown): Schedule {
   return schedule
 }
 
-function normalizeModes(raw: unknown, mode: 'chat' | 'code', visionAvailable: boolean): RoutineModes {
+function normalizeModes(raw: unknown, visionAvailable: boolean): RoutineModes {
   const obj = (raw ?? {}) as Record<string, unknown>
   const bool = (key: string) => obj[key] === true
   const modes: RoutineModes = { permissionMode: DEFAULT_ROUTINE_PERMISSION }
-  // A chat routine ignores the modes chat does not have: even if the model slips
-  // a loop/subagents into the JSON, the suggestion reaches the review clean.
-  if (mode === 'chat') {
-    if (bool('brain')) modes.brain = true
-    if (bool('browser')) modes.browser = true
-    if (bool('simple')) modes.simple = true
-    if (bool('search')) modes.search = true
-    if (bool('vision') && visionAvailable) modes.vision = true
-    return modes
-  }
   if (bool('loop')) modes.loop = true
   if (bool('subagents')) modes.subagents = true
   if (bool('orchestrate')) modes.orchestrate = true
@@ -159,7 +127,6 @@ export async function generateRoutine(
   model: RoutineModel,
   folders: string[],
   language?: string,
-  mode: 'chat' | 'code' = 'code',
   visionAvailable = true,
 ): Promise<GenerationResult> {
   const text = description.trim()
@@ -167,11 +134,9 @@ export async function generateRoutine(
 
   const provider = await getProvider(model.providerId)
   const context = [
-    mode === 'chat'
-      ? 'Mode: CHAT — no working folders, the agent only chats and uses chat tools.'
-      : folders.length
-        ? `Working folders: ${folders.join(', ')}`
-        : 'Working folders: (none selected)',
+    folders.length
+      ? `Working folders: ${folders.join(', ')}`
+      : 'Working folders: (none — the routine works only in its own folder)',
     language ? `User language: ${language}` : null,
     `Today: ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })})`,
   ]
@@ -183,7 +148,7 @@ export async function generateRoutine(
     const resolved = await resolveModel(model.providerId, model.modelId)
     const stream = streamText({
       model: resolved,
-      system: mode === 'chat' ? SYSTEM_CHAT : SYSTEM_CODE,
+      system: SYSTEM,
       messages: normalizeMessages(
         [{ role: 'user', content: `${context}\n\n## Routine described by the user\n${text}` }],
         interleavedReasoningField(provider, model.modelId),
@@ -217,7 +182,7 @@ export async function generateRoutine(
     title: (typeof raw.title === 'string' && raw.title.trim()) || text.slice(0, 60),
     prompt,
     schedule: normalizeSchedule(raw.schedule),
-    modes: normalizeModes(raw.modes, mode, visionAvailable),
+    modes: normalizeModes(raw.modes, visionAvailable),
   }
   return { ok: true, suggestion }
 }

@@ -40,7 +40,6 @@ interface RoutinesState {
     model: RoutineModel,
     folders: string[],
     language?: string,
-    mode?: 'chat' | 'code',
     visionAvailable?: boolean,
   ) => Promise<GenerationResult>
   create: (input: NewRoutineInput) => Promise<Routine>
@@ -110,10 +109,10 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
     }
   },
 
-  generate: (description, model, folders, language, mode, visionAvailable) => {
+  generate: (description, model, folders, language, visionAvailable) => {
     const { wsClient } = useConnectionStore.getState()
     return wsClient
-      .send({ type: 'routines:generate', description, model, folders, language, mode, visionAvailable })
+      .send({ type: 'routines:generate', description, model, folders, language, visionAvailable })
       .then((res) => (res.ok && res.data ? (res.data as GenerationResult) : { ok: false, error: res.error ?? 'Failed to generate' }))
   },
 

@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import type { Routine } from "@shared/routines"
+import { isFinishedOnce, type Routine } from "@shared/routines"
 import { StatBadges } from "@/src/components/stat-badges"
 import { formatCost } from "@/src/lib/format"
 import { useRoutinesStore } from "@/src/stores/routines-store"
@@ -25,6 +25,8 @@ export function RoutinesStatsBar({ routines, separated }: { routines: Routine[];
     const last30 = mine.filter((r) => r.startedAt >= now - 30 * DAY_MS)
     return {
       active: routines.filter((r) => r.active).length,
+      // A finished one-off is inactive but was not paused by anyone: it does not count here.
+      paused: routines.filter((r) => !r.active && !isFinishedOnce(r)).length,
       failures: failures.length,
       failedTitles: [...new Set(failures.map((r) => byId.get(r.routineId)?.title).filter((x): x is string => !!x))],
       cost: last30.reduce((sum, r) => sum + r.cost, 0),
@@ -39,7 +41,7 @@ export function RoutinesStatsBar({ routines, separated }: { routines: Routine[];
         {
           label: t("routines.summary.active"),
           value: t("routines.summary.activeOf", { active: stats.active, total: routines.length }),
-          title: t("routines.summary.paused", { count: routines.length - stats.active }),
+          title: t("routines.summary.paused", { count: stats.paused }),
         },
         {
           label: t("routines.summary.failures"),

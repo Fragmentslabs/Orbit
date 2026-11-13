@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   broadcastSessionEvent: vi.fn(),
   broadcastChatEvent: vi.fn(),
   dispatchAsk: vi.fn(async (_target: string, _item: unknown, _signal?: AbortSignal) => 'deny'),
-  createSubchatRecord: vi.fn(async () => ({
+  createSubchatRecord: vi.fn(async (_args?: unknown) => ({
     id: 'ses_child',
     title: 'CSV parser',
     mode: 'code' as const,
@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
     updatedAt: 1,
   })),
   modelSelect: vi.fn(),
+  // The parent's history: what the specialist brief reads to carry pending tasks.
+  readJson: vi.fn(async (_key: string): Promise<unknown> => null),
 }))
 
 vi.mock('../chat-engine', () => ({ runChat: mocks.runChat, getRunningSessionIds: () => mocks.running }))
@@ -66,6 +68,7 @@ vi.mock('../agents/suggestions', () => ({
   suggestibleAgent: (id: string) => (id === 'agent:vid' ? { id: 'vid', name: 'Video agent' } : null),
   profileLabel: (id: string) => (id === 'agent:vid' ? 'Video agent' : id),
 }))
+vi.mock('../storage', () => ({ readJson: mocks.readJson, writeJson: vi.fn() }))
 vi.mock('../ask-dispatch', () => ({ dispatchAsk: mocks.dispatchAsk }))
 vi.mock('../subchat-wake', () => ({ wakeParentOf: mocks.wakeParentOf }))
 vi.mock('../subchats', () => ({
@@ -136,6 +139,18 @@ describe('suggest_subchat', () => {
     expect(request.subchat.profile).toBe('agent:vid')
     expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'agent:vid' }))
     expect(String(result)).toContain('Video agent chat was opened')
+  })
+
+  it('delegates a craft before the work starts: the card carries the craft and accepting opens its specialist chat', async () => {
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const result = await exec(createSubchatTools(input({ sessionId: 'ses_craft' }), win), 'suggest_subchat')(
+      { title: 'Fragment: Habits', brief: BRIEF, agent: 'fragment' },
+      {},
+    )
+    const request = mocks.dispatchAsk.mock.calls[0][1] as { subchat: { profile?: string } }
+    expect(request.subchat.profile).toBe('fragment')
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'fragment' }))
+    expect(String(result)).toContain('Fragment chat was opened')
   })
 
   it('refuses an agent that is not in the catalog, without asking the user', async () => {
@@ -442,6 +457,7 @@ describe('tool descriptions', () => {
     const schema = JSON.stringify(z.toJSONSchema(tools.suggest_subchat.inputSchema as z.ZodType))
     expect(schema).toContain('exact paths')
     expect(schema).toContain('NEW top-level conversation')
+    expect(schema).toContain('built-in craft')
   })
 })
 
@@ -470,13 +486,47 @@ describe('withSpecialistOffer', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('hands the specialist the pending tasks of the parent, not only the request', async () => {
+    mocks.readJson.mockResolvedValueOnce([
+      {
+        id: 'm1',
+        role: 'assistant',
+        createdAt: 1,
+        parts: [
+          {
+            id: 'p1',
+            type: 'tool',
+            tool: 'todowrite',
+            state: 'done',
+            input: {
+              items: [
+                { content: 'Build the intro', status: 'in_progress' },
+                { content: 'An old step', status: 'completed' },
+                { content: 'Add the soundtrack', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const { tools } = make()
+    const wrapped = withSpecialistOffer(tools, input({ sessionId: 'offer-todo', text: 'animate my logo' }), win)
+    await call(wrapped, 'motion_write', { name: 'logo' })
+    const body = (mocks.createSubchatRecord.mock.calls[0][0] as { body: string }).body
+    expect(body).toContain('animate my logo')
+    expect(body).toContain('Build the intro')
+    expect(body).toContain('Add the soundtrack')
+    expect(body).not.toContain('An old step')
+  })
+
   it('opens a specialist subchat on "new" and creates nothing here', async () => {
     mocks.dispatchAsk.mockResolvedValue('new')
     const { run, tools } = make()
     const wrapped = withSpecialistOffer(tools, input({ sessionId: 'offer-2' }), win)
     const result = await call(wrapped, 'motion_write', { name: 'intro' })
     expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'motion' }))
-    expect(String(result)).toContain('motion chat')
+    expect(String(result)).toContain('Motion chat')
     expect(run).not.toHaveBeenCalled()
   })
 
@@ -484,8 +534,8 @@ describe('withSpecialistOffer', () => {
     mocks.dispatchAsk.mockResolvedValue('new')
     const { tools } = make()
     const wrapped = withSpecialistOffer(tools, input({ sessionId: 'offer-kind' }), win)
-    await call(wrapped, 'fragment_create', { name: 'clock', kind: 'widget' })
-    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'fragment', fragmentKind: 'widget' }))
+    await call(wrapped, 'fragment_create', { name: 'clock', kind: 'panel' })
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'fragment', fragmentKind: 'panel' }))
   })
 
   it('on "here" runs the original tool and does not ask again in that conversation', async () => {

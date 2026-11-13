@@ -77,12 +77,15 @@ export async function approvePendingRoutine(id: string): Promise<Routine | null>
     schedule: proposal.schedule,
     model: proposal.model,
     modes: proposal.modes,
-    mode: proposal.mode,
     folders: proposal.folders,
     visionModel: proposal.visionModel,
     agent: proposal.agent,
     team: proposal.team,
     tokenBudget: proposal.tokenBudget,
+    // A team of two or more is reviewed by default: the members do not talk to each other, and the
+    // reviewer is the only one that sees the whole plan before it is accepted. Turning it off is
+    // done in the form, where the switch is.
+    review: proposal.team && proposal.team.members.length >= 2 ? true : undefined,
     // Approving the card is what approves the scripts it shows (see createRoutine).
     scripts: proposal.scripts,
     trigger: proposal.trigger,

@@ -26,11 +26,15 @@ const NUMBER_INPUT = "h-8 w-20 text-sm"
  * starts right away or after others) that opens to edit; the limits appear below (how many work at
  * once, how many tokens one execution may spend).
  */
-export function AgentsEditor({ value, onChange, routineId }: {
+export function AgentsEditor({ value, onChange, routineId, limits = true, heading = true }: {
   value: AgentsDraft
   onChange: (next: AgentsDraft) => void
   /** The routine being edited: its past runs make the token estimate honest. */
   routineId?: string
+  /** The limits (parallel, budget, review) can live elsewhere in the form — the "Advanced" block. */
+  limits?: boolean
+  /** The editor's own title ("Agents"); off when the caller already shows one. */
+  heading?: boolean
 }) {
   const { t } = useTranslation()
   const agents = useAgents()
@@ -55,12 +59,14 @@ export function AgentsEditor({ value, onChange, routineId }: {
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2">
-        <p className="flex-1 text-xs font-medium">
-          {t("routines.agents.title")}
-          {team && <span className="ml-1.5 font-normal text-muted-foreground">{t("routines.agents.count", { count: members.length })}</span>}
-        </p>
-      </div>
+      {heading && (
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-xs font-medium">
+            {t("routines.agents.title")}
+            {team && <span className="ml-1.5 font-normal text-muted-foreground">{t("routines.agents.count", { count: members.length })}</span>}
+          </p>
+        </div>
+      )}
 
       {!team ? (
         <div className="flex items-center gap-2 rounded-lg border bg-card p-2.5">
@@ -157,7 +163,7 @@ export function AgentsEditor({ value, onChange, routineId }: {
         {t("routines.agents.add")}
       </button>
 
-      {team && (
+      {team && limits && (
         <>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <label className="flex items-center gap-2">

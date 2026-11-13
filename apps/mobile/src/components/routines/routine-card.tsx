@@ -2,7 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { CalendarClock, Loader2 } from 'lucide-react-native'
 import type { Routine } from '@orbit/shared'
-import { nextRoutineRun, ROUTINE_CHAT_MODES } from '@orbit/shared'
+import { nextRoutineRun } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { useThemeStore } from '~/stores/theme-store'
@@ -47,7 +47,7 @@ export function RoutineCard({ routine, onOpen }: { routine: Routine; onOpen: () 
         <Text numberOfLines={2} style={[s.prompt, { color: tokens.mutedForeground }]}>
           {routine.prompt}
         </Text>
-        <ModeBadges modes={routine.modes} permission available={routine.mode === 'chat' ? ROUTINE_CHAT_MODES : undefined} />
+        <ModeBadges modes={routine.modes} permission />
         <Text numberOfLines={1} style={[s.muted, { color: tokens.mutedForeground }]}>
           {modelName}
         </Text>

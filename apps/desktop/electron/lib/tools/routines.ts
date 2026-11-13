@@ -1,9 +1,9 @@
 import { tool } from 'ai'
 import { ASK_WHEN_VAGUE } from './proposal-guidance'
 import { z } from 'zod'
-import type { SendMessageInput } from '@shared/chat'
+import { StorageKeys, type SendMessageInput, type SessionInfo } from '@shared/chat'
 import type { PendingRoutine, RoutineModes, Schedule } from '@shared/routines'
-import { nextRoutineRun, parseTime, routineModeFor } from '@shared/routines'
+import { nextRoutineRun, parseTime } from '@shared/routines'
 import { userProfileId } from '@shared/agents'
 import { listAgentsSync, loadAgents } from '../agents/store'
 import { removeRoutineCompletely, runNow, updateRoutineFields } from '../routines'
@@ -13,6 +13,7 @@ import { buildTeam } from '../routines/team-validate'
 import { cleanDatabases, cleanHosts, cleanSecretNames, describeOutcome, newScriptId, saveScriptFromAgent, validScriptName } from '../routines/scripts/manage'
 import { runScript } from '../routines/scripts/runner'
 import { listSecretNames } from '../routines/scripts/secrets-store'
+import { readJson } from '../storage'
 import { MAX_SCRIPT_EVERY_MINUTES, MIN_SCRIPT_EVERY_MINUTES, type RoutineScript, type RoutineTrigger } from '@shared/routines'
 
 /**
@@ -104,17 +105,9 @@ function normalizeSchedule(schedule: Schedule): Schedule {
   return { time: schedule.time }
 }
 
-/** Modes respecting the routine's mode (chat has no loop/orchestration/plan). */
-function normalizeModes(modes: RoutineModes, mode: 'chat' | 'code', hasVision: boolean): RoutineModes {
+/** The modes actually stored: the rules below are the same ones the generator applies. */
+function normalizeModes(modes: RoutineModes, hasVision: boolean): RoutineModes {
   const base: RoutineModes = { permissionMode: modes.permissionMode ?? 'approve' }
-  if (mode === 'chat') {
-    if (modes.brain) base.brain = true
-    if (modes.browser) base.browser = true
-    if (modes.simple) base.simple = true
-    if (modes.search) base.search = true
-    if (modes.vision && hasVision) base.vision = true
-    return base
-  }
   if (modes.loop) base.loop = true
   if (modes.subagents) base.subagents = true
   if (modes.orchestrate) {
@@ -136,22 +129,22 @@ function normalizeModes(modes: RoutineModes, mode: 'chat' | 'code', hasVision: b
 export function createRoutinesTool(input: SendMessageInput) {
   return tool({
     description:
-      'Manages Orbit routines: chats that run by themselves, in chat or code mode, woken by a schedule, by a script or by an incoming webhook request. A routine can carry scripts: small programs that read a spreadsheet, call an API or watch for something. A script can be called by the routine\'s agent (run_script) or be the routine\'s trigger (it checks every N minutes and calls fire() to wake the routine, so the agent only runs when something happens). A script can use a stored secret (an API token) by NAME through fetch auth: the value is never readable by you, by the script or in any log — use "list_secrets" to see which names exist, and if one is missing, tell the person to add it on the routine\'s Scripts tab (never ask them to paste it in the chat). A webhook routine ("webhook" in "create") runs when something calls its local address: Orbit only listens on this computer while it is open, and the person exposes it with their own tunnel if the sender is on the internet. Scripts need the person\'s approval before they run, and they only work while Orbit is open. Before "create", unless the job is trivial, think about who should do it: ONE agent (the default), or a team where each agent has a clear piece of the work (specialists of the person\'s, or the general Orbit setup working in separate chats). Ask the person once, briefly: whether they want a team, which pieces could go to specialists, and whether you should first create agents (create_agent) for something specific; then create those agents and use their ids in the team. A team without a folder works in a scratch folder the run makes for itself. Write a script, try it with "test_script" until it works, then include it in "create"; "save_script" adds or changes a script of an existing routine (it then waits for approval). Actions: "list" lists existing routines; "create" proposes a new routine (it shows a confirmation card in the conversation — the routine is only created when the user approves it in the card); "run" runs a routine immediately; "pause"/"resume" pause/resume it; "remove" deletes it. For "create": list first to avoid duplicates, write a self-contained prompt (the agent that runs it later has no memory of this conversation), keep the schedule exactly as the user asked (intervalHours for "every N hours", onceDate for a one-time request), and suggest modes conservatively. After "create", briefly explain what was proposed. ' + ASK_WHEN_VAGUE,
+      'Manages Orbit routines: chats that run by themselves, woken by a schedule, by a script or by an incoming webhook request. A routine can carry scripts: small programs that read a spreadsheet, call an API or watch for something. A script can be called by the routine\'s agent (run_script) or be the routine\'s trigger (it checks every N minutes and calls fire() to wake the routine, so the agent only runs when something happens). A script can use a stored secret (an API token) by NAME through fetch auth: the value is never readable by you, by the script or in any log — use "list_secrets" to see which names exist, and if one is missing, tell the person to add it on the routine\'s Scripts tab (never ask them to paste it in the chat). A webhook routine ("webhook" in "create") runs when something calls its local address: Orbit only listens on this computer while it is open, and the person exposes it with their own tunnel if the sender is on the internet. Scripts need the person\'s approval before they run, and they only work while Orbit is open. Before "create", unless the job is trivial, think about who should do it: ONE agent (the default), or a team where each agent has a clear piece of the work (specialists of the person\'s, or the general Orbit setup working in separate chats). Ask the person once, briefly: whether they want a team, which pieces could go to specialists, and whether you should first create agents (create_agent) for something specific; then create those agents and use their ids in the team. A team works inside the routine folder, where the members leave their results. Write a script, try it with "test_script" until it works, then include it in "create"; "save_script" adds or changes a script of an existing routine (it then waits for approval). Actions: "list" lists existing routines; "create" proposes a new routine (it shows a confirmation card in the conversation — the routine is only created when the user approves it in the card); "run" runs a routine immediately; "pause"/"resume" pause/resume it; "remove" deletes it; "update_team" replaces the team (or the single agent) right away — use it when the person asks in the routine\'s chat to change who participates, with each agent\'s name, task and dependencies. For "create": list first to avoid duplicates, write a self-contained prompt (the agent that runs it later has no memory of this conversation), keep the schedule exactly as the user asked (intervalHours for "every N hours", onceDate for a one-time request), and suggest modes conservatively. After "create", briefly explain what was proposed. ' + ASK_WHEN_VAGUE,
     inputSchema: z.object({
-      action: z.enum(['list', 'create', 'run', 'pause', 'resume', 'remove', 'test_script', 'save_script', 'list_secrets']).describe('The action to perform.'),
+      action: z.enum(['list', 'create', 'run', 'pause', 'resume', 'remove', 'update_team', 'test_script', 'save_script', 'list_secrets']).describe('The action to perform.'),
       routineId: z.string().optional().describe('Routine id (from "list"). Required for run/pause/resume/remove; for "test_script" it makes the script use that routine\'s folders.'),
-      title: z.string().optional().describe('Routine title (action "create").'),
-      prompt: z.string().optional().describe('Self-contained prompt that runs at every execution (action "create").'),
-      schedule: scheduleSchema.optional().describe('Schedule (action "create").'),
-      modes: modesSchema.optional().describe('Modes (action "create"). Omit for safe defaults (approve, no extra modes).'),
-      scripts: z.array(scriptSchema).max(6).optional().describe('Scripts attached to the new routine (action "create").'),
+      title: z.string().optional().describe('Routine title (actions "create" and "update_team").'),
+      prompt: z.string().optional().describe('Self-contained prompt that runs at every execution (actions "create" and "update_team").'),
+      schedule: scheduleSchema.optional().describe('Schedule (actions "create" and "update_team").'),
+      modes: modesSchema.optional().describe('Modes (actions "create" and "update_team"). Omit for safe defaults (approve, no extra modes).'),
+      scripts: z.array(scriptSchema).max(6).optional().describe('Scripts attached to the new routine (actions "create" and "update_team").'),
       trigger: z
         .object({
           script: z.string().describe('Name of one of the scripts above: it decides when the routine runs.'),
           everyMinutes: z.number().int().min(MIN_SCRIPT_EVERY_MINUTES).max(MAX_SCRIPT_EVERY_MINUTES).describe('How often the script checks.'),
         })
         .optional()
-        .describe('Wake the routine from a script instead of the schedule (action "create"). The schedule is then ignored.'),
+        .describe('Wake the routine from a script instead of the schedule (actions "create" and "update_team"). The schedule is then ignored.'),
       webhook: z
         .object({ signed: z.boolean().optional().describe('True to also require an HMAC-SHA256 signature made with a secret Orbit generates.') })
         .optional()
@@ -176,13 +169,13 @@ export function createRoutinesTool(input: SendMessageInput) {
           tokenBudget: z.number().int().min(10000).optional().describe('Tokens the whole team may spend per execution.'),
         })
         .optional()
-        .describe('A team of agents instead of a single one (action "create"). With no folder the team works in a scratch folder of each run. Agents that depend on none start together.'),
-      agent: z.string().optional().describe('Id (`agent:<id>`) of one of the person\'s agents that should do the work (action "create"). Its features decide the routine\'s abilities. Omit for the general setup.'),
+        .describe('A team of agents instead of a single one (actions "create" and "update_team"). The team works inside the routine folder, where the members leave their results. Agents that depend on none start together.'),
+      agent: z.string().optional().describe('Id (`agent:<id>`) of one of the person\'s agents that should do the work (actions "create" and "update_team"). Its features decide the routine\'s abilities. Omit for the general setup.'),
     }),
     execute: async ({ action, routineId, title, prompt, schedule, modes, scripts, trigger, webhook, script, agent, team }) => {
+      // The conversation's folders become the routine's working folders — the projects its prompt
+      // points at. The routine's own folder is created by the main process when it is needed.
       const folders = [input.directory, ...(input.extraDirectories ?? [])].filter((p): p is string => Boolean(p))
-      // Folders are optional: the routine runs as code when the conversation has some, as a chat when not.
-      const mode = routineModeFor(folders)
       const model = { providerId: input.providerId, modelId: input.modelId }
 
       if (action === 'list') {
@@ -192,7 +185,15 @@ export function createRoutinesTool(input: SendMessageInput) {
           .map((r) => {
             const next = nextRoutineRun(r)
             const when = next ? new Date(next).toLocaleString('en-US') : ''
-            return `- ${r.title} (id: ${r.id}) — ${r.mode}, ${summarizeSchedule(r.schedule)}, ${r.active ? 'active' : 'paused'}${when ? `, next run: ${when}` : ''}`
+            const names = new Map((r.team?.members ?? []).map((m) => [m.id, m.name] as [string, string]))
+            const members = (r.team?.members ?? []).map((m) => {
+              const after = m.dependsOn?.length ? ' after ' + m.dependsOn.map((d) => names.get(d) ?? d).join(', ') : ''
+              return m.name + ' [' + m.task.trim() + ']' + after
+            })
+            const people = r.team
+              ? 'team of ' + r.team.members.length + ': ' + members.join('; ')
+              : r.agent ? 'one agent (' + r.agent + ')' : 'general setup'
+            return '- ' + r.title + ' (id: ' + r.id + ') — ' + summarizeSchedule(r.schedule) + ', ' + (r.active ? 'active' : 'paused') + (when ? ', next run: ' + when : '') + ' · ' + people
           })
           .join('\n')
       }
@@ -230,8 +231,6 @@ export function createRoutinesTool(input: SendMessageInput) {
         const built: RoutineScript[] = []
         for (const s of scripts ?? []) {
           if (!validScriptName(s.name)) return `Invalid script name "${s.name}": use lower case letters, digits and underscores.`
-          if (s.databases?.length && (mode === 'chat' || folders.length === 0)) return 'A script can only open a database in a routine that has a folder.'
-          if (s.readFiles && (mode === 'chat' || folders.length === 0)) return 'A script can only read files in a routine that has a folder.'
           built.push({ id: newScriptId(), name: s.name, summary: s.summary.trim(), code: s.code, hosts: cleanHosts(s.hosts), readFiles: s.readFiles || undefined, secrets: cleanSecretNames(s.secrets), databases: cleanDatabases(s.databases) })
         }
         await loadAgents()
@@ -258,9 +257,8 @@ export function createRoutinesTool(input: SendMessageInput) {
           ...(builtTeam?.ok ? { team: { ...builtTeam.team, ...(team?.maxParallel ? { maxParallel: team.maxParallel } : {}) }, ...(team?.tokenBudget ? { tokenBudget: team.tokenBudget } : {}) } : {}),
           ...(built.length > 0 ? { scripts: built } : {}),
           ...(resolvedTrigger ? { trigger: resolvedTrigger } : {}),
-          modes: normalizeModes(modes ?? {}, mode, Boolean(input.visionModel)),
-          mode,
-          folders: mode === 'chat' ? [] : folders,
+          modes: normalizeModes(modes ?? {}, Boolean(input.visionModel)),
+          folders,
           model,
           // Kept whenever there is one: an agent that allows vision may switch it on later.
           visionModel: input.visionModel ?? undefined,
@@ -275,31 +273,55 @@ export function createRoutinesTool(input: SendMessageInput) {
         )
       }
 
-      if (!routineId) return 'Provide routineId (use "list" to find the id).'
-      const routine = (await listRoutines()).find((r) => r.id === routineId)
-      if (!routine) return `Routine ${routineId} not found.`
+      // In a routine's own chat the person talks about THAT routine: the id comes from the session.
+      const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId)).catch(() => null)
+      const targetId = routineId ?? session?.routineId
+      if (!targetId) return 'Provide routineId (use "list" to find the id).'
+      const routine = (await listRoutines()).find((r) => r.id === targetId)
+      if (!routine) return `Routine ${targetId} not found.`
 
       if (action === 'save_script') {
         if (!script) return 'Provide the script to save.'
         if (script.readFiles && routine.folders.length === 0) return 'This routine has no folder, so a script cannot read files.'
         if (script.databases?.length && routine.folders.length === 0) return 'This routine has no folder, so a script cannot open a database.'
-        const saved = await saveScriptFromAgent(routineId, { ...script })
+        const saved = await saveScriptFromAgent(targetId, { ...script })
         if (!saved.ok) return saved.error
         return `Script "${script.name}" saved on "${routine.title}". It is NOT approved yet and cannot run: tell the person to open the routine and approve it (they see exactly what it does first).`
       }
 
+      if (action === 'update_team') {
+        if (team && agent) return 'Give either a team or one agent, not both.'
+        if (!team && !agent) return 'Provide the team (at least two members) or the id of one agent.'
+        await loadAgents()
+        if (team) {
+          const known = new Set(listAgentsSync().map((a) => userProfileId(a.id)))
+          const built = buildTeam(team.members, known, () => newScriptId())
+          if (!built.ok) return built.error
+          await updateRoutineFields(targetId, {
+            team: { ...built.team, ...(team.maxParallel ? { maxParallel: team.maxParallel } : {}) },
+            tokenBudget: team.tokenBudget ?? routine.tokenBudget,
+            agent: undefined,
+          })
+          return 'Team of "' + routine.title + '" updated: ' + built.team.members.length + ' agents. It applies from the next execution.'
+        }
+        const chosen = listAgentsSync().find((a) => userProfileId(a.id) === agent)
+        if (!chosen) return 'No agent with id ' + agent + '.'
+        await updateRoutineFields(targetId, { agent: userProfileId(chosen.id), team: undefined })
+        return '"' + routine.title + '" now runs with ' + chosen.name + ', alone. It applies from the next execution.'
+      }
+
       if (action === 'run') {
-        const sessionId = await runNow(routineId)
+        const sessionId = await runNow(targetId)
         return sessionId
           ? `Execution fired in session ${sessionId}. Its chat shows up in the "Routines" group of the sidebar.`
           : `Routine "${routine.title}" is already running or could not run now (no working folder).`
       }
       if (action === 'pause' || action === 'resume') {
         const active = action === 'resume'
-        await updateRoutineFields(routineId, { active })
+        await updateRoutineFields(targetId, { active })
         return `Routine "${routine.title}" ${active ? 'resumed' : 'paused'}.`
       }
-      await removeRoutineCompletely(routineId)
+      await removeRoutineCompletely(targetId)
       return `Routine "${routine.title}" removed. The chats of past executions stay in the sidebar and can be deleted by hand.`
     },
   })

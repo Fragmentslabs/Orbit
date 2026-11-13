@@ -33,6 +33,7 @@ export function planFromTeam(
       status: 'idle',
       ...(dependsOn.length > 0 ? { dependsOn } : {}),
       ...(m.agent ? { agent: m.agent } : {}),
+      ...(m.model ? { model: m.model } : {}),
     }
   })
   return { id: newId('plan'), tasks, status: 'proposed' }

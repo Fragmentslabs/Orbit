@@ -10,11 +10,12 @@ import { runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration, runTeam } from '../orchestrator'
 import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
-import { dataDir, readJson, writeJson } from '../storage'
+import { readJson, writeJson } from '../storage'
 import { readAppLanguage } from '../app-language'
 import { t } from '../i18n'
 import { listRoutines, listRuns, saveRun, updateRoutine } from './repo'
-import { createRunFolder } from './run-folder'
+import { appendRunCard, ensureRoutineChat, finishRunCard } from './chat-session'
+import { ensureRoutineFolder, readMemory } from './folder'
 import { promptWithEvents } from './scripts/event-prompt'
 import { superviseScripts, type SupervisorDeps } from './scripts/supervisor'
 import { stopWebhooks, tickWebhooks } from './webhooks/service'
@@ -59,25 +60,25 @@ function stamp(when: number): string {
 }
 
 /**
- * Every execution is born in a session of its own — that is what gives the
- * routine its chat history. `folderId` stays null on purpose: routine chats
- * live only in the "Routines" group of the sidebar, never inside a folder. The
- * session inherits the routine's mode: that is what makes the sidebar separate
- * chat routines from code routines.
+ * Every execution is born in a session of its own, CHILD of the routine's chat: the run is
+ * detail, not a conversation of its own. `folderId` stays null on purpose: routine chats
+ * live only in the "Routines" group of the sidebar, never inside a folder.
+ *
+ * The execution works INSIDE the routine's own folder; the working folders ride along as
+ * extra directories — projects the prompt points the agent at.
  */
-async function createSession(routine: Routine, when: number, scratch?: string): Promise<SessionInfo> {
-  // A team with no folder of its own works in the scratch folder of the run, so it is code.
-  const chat = routine.mode === 'chat' && !scratch
+async function createSession(routine: Routine, when: number, folder: string, parentId?: string): Promise<SessionInfo> {
   const session: SessionInfo = {
     id: `${ROUTINE_SESSION_PREFIX}${routine.id}_${when.toString(36)}`,
     title: `${routine.title} — ${stamp(when)}`,
-    mode: chat ? 'chat' : 'code',
+    mode: 'code',
     pinned: false,
     archived: false,
     folderId: null,
-    directory: scratch ?? (chat ? undefined : routine.folders[0]),
-    extraDirectories: chat ? undefined : routine.folders.slice(1),
+    directory: folder,
+    ...(routine.folders.length > 0 ? { extraDirectories: [...routine.folders] } : {}),
     routineId: routine.id,
+    ...(parentId ? { parentId } : {}),
     // A routine run by an agent opens its chats as that agent's chats.
     ...(routine.agent ? { profile: routine.agent } : {}),
     createdAt: when,
@@ -130,14 +131,17 @@ async function notify(routine: Routine, run: RoutineRun): Promise<void> {
     : await t('notif.routine.failed', {
         error: (run.error ?? '').slice(0, 120) || (await t('notif.routine.unknownError')),
       })
-  new Notification({ title: routine.title, body, silent: ok }).show()
+  // The title says WHERE it came from and names the routine: a banner from a routine must
+  // be told apart from one from a fragment (or from a message in a chat).
+  const origin = await t('notif.routine.title')
+  new Notification({ title: `${origin} · ${routine.title}`, body, silent: ok }).show()
 }
 
 // ─── Execution ───────────────────────────────────────────────────────────────
 
 /**
  * Runs the routine now. Returns the created sessionId, or null when the routine
- * is already running or has no working folder.
+ * is already running or its folder cannot be created.
  */
 export async function runRoutine(
   routine: Routine,
@@ -148,31 +152,47 @@ export async function runRoutine(
   if (running.has(routine.id)) return null
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
   if (!win) return null
-  // A working folder is only required in code mode: the chat routine runs
-  // without a project, using only the chat-mode tools.
-  if (routine.mode !== 'chat' && !routine.folders[0]) {
-    console.warn(`[routines] "${routine.title}" has no working folder — execution skipped`)
-    return null
-  }
 
   running.add(routine.id)
   const start = Date.now()
-  // A team has to write somewhere: with no folder of its own it gets one for this run only,
-  // kept afterwards (the run row opens it).
-  const scratch = hasTeam(routine) && !routine.folders[0] ? await createRunFolder(path.join(dataDir(), 'routine-runs'), routine.id, start).catch(() => undefined) : undefined
-  const session = await createSession(routine, start, scratch)
+  // The routine's own folder is where the execution lives: created here the first time it is
+  // needed, since not every routine writes anything.
+  let routineFolder = routine.folder
+  if (!routineFolder) {
+    routineFolder = await ensureRoutineFolder(routine).catch(() => undefined)
+    if (routineFolder) {
+      const saved = await updateRoutine(routine.id, (r) => ({ ...r, folder: routineFolder }))
+      if (saved) emit({ type: 'routine', routine: saved })
+    }
+  }
+  if (!routineFolder) {
+    console.warn(`[routines] "${routine.title}" — could not create its folder, execution skipped`)
+    running.delete(routine.id)
+    return null
+  }
+  const memory = (await readMemory(routineFolder)).trim()
+  // The routine's own chat exists before the execution: the run is written INTO it as a card,
+  // and the execution's session is born as its child.
+  const chat = await ensureRoutineChat(routine, routineFolder)
+  const session = await createSession(routine, start, routineFolder, chat.id)
 
   let run: RoutineRun = {
     routineId: routine.id,
     sessionId: session.id,
     startedAt: start,
     status: 'running',
-    ...(scratch ? { folder: scratch } : {}),
+    reason,
     tokens: 0,
     cost: 0,
   }
   await saveRun(run)
   emit({ type: 'run', run })
+  // The card is born with the run, so the chat shows "running" while it works.
+  await appendRunCard(chat.id, {
+    run,
+    agents: routine.team?.members.map((member) => member.name) ?? [],
+    reason,
+  }).catch((err) => console.error('[routines] could not write the run card:', err))
 
   // `lastRun` is stamped BEFORE running: if it were left to the end, a long turn
   // would make the next tick believe the routine had not run yet.
@@ -191,26 +211,27 @@ export async function runRoutine(
     maxParallel: team?.maxParallel,
     review: routine.review,
   })
-  // A chat routine only knows the chat modes: not even a hand-edited
-  // routines.json should be able to turn orchestration/loop/subagents/plan on in
-  // a mode that does not support them (the orchestrator, for instance, pins
-  // worker sessions to mode 'code' — orchestration simply does not run in chat).
-  if (routine.mode === 'chat' && !scratch) {
-    options.orchestrate = undefined
-    options.loop = undefined
-    options.subagents = undefined
-    options.plan = undefined
-  }
+  const memoryBlock = memory ? `\n\n## Memória da rotina (memory.md)\n${memory}` : ''
+  // The routine's folder is its home: memory and scripts live there, and so does whatever it
+  // produces unless the prompt sends it to a working folder.
+  const folderBlock =
+    `\n\n## Pasta da rotina\nA sua pasta é ${routineFolder}. É onde ficam a memória (${path.join(routineFolder, 'memory.md')}) e os scripts (${path.join(routineFolder, 'scripts')}). Escreva nela os scripts e documentos que você criar, a menos que o pedido mande gravá-los em uma pasta de trabalho.` +
+    (routine.folders.length > 0
+      ? `\nAs pastas de trabalho desta rotina — para ler e editar conforme o pedido: ${routine.folders.join(', ')}.`
+      : '') +
+    '\nAo terminar, registre no memory.md o que precisar lembrar na próxima execução; se não houver nada, deixe o arquivo como está.'
   const language = await readAppLanguage()
   const input: SendMessageInput = {
     sessionId: session.id,
-    text: promptWithEvents(routine.prompt, events),
+    text: promptWithEvents(routine.prompt, events) + memoryBlock + folderBlock,
     providerId: routine.model.providerId,
     modelId: routine.model.modelId,
-    mode: scratch ? 'code' : session.mode,
+    mode: session.mode,
     options,
-    ...(routine.scripts?.length ? { routineContext: { id: routine.id, folders: routine.folders, scripts: routine.scripts } } : {}),
-    directory: scratch ?? session.directory,
+    ...(routine.scripts?.length
+      ? { routineContext: { id: routine.id, folder: routineFolder, folders: routine.folders, scripts: routine.scripts } }
+      : {}),
+    directory: session.directory,
     extraDirectories: session.extraDirectories,
     // Subagents/orchestration need a worker model; the routine uses its own,
     // which is the only model it knows.
@@ -229,7 +250,9 @@ export async function runRoutine(
   console.log(`[routines] firing "${routine.title}" (${reason}) in session ${session.id}`)
 
   try {
-    if (options.orchestrate && team) await runTeam(win, input, team, { scratch: !!scratch })
+    // The routine's folder is the team's shared working place: members leave their full
+    // result there as a file, not only in the summary the next member reads.
+    if (options.orchestrate && team) await runTeam(win, input, team, { handoff: true })
     else if (options.orchestrate) await runOrchestration(win, input)
     else if (options.loop) await runChatWithLoop(win, input, input.loopConfig!)
     else await runChat(win, input)
@@ -251,6 +274,8 @@ export async function runRoutine(
 
   await saveRun(run)
   emit({ type: 'run', run })
+  // Closes the card with what the execution delivered (or with the failure).
+  await finishRunCard(chat.id, run).catch((err) => console.error('[routines] could not close the run card:', err))
   void notify(routine, run)
 
   // One-time schedule: after running, the routine turns itself off. The

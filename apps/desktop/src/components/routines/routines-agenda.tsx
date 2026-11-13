@@ -188,7 +188,6 @@ export function RoutinesAgenda({ routines, selectedId, onSelect }: {
               )}
               {events.map((e) => {
                 const selected = e.routine.id === selectedId
-                const code = e.routine.mode === "code"
                 return (
                   <button
                     key={`${e.routine.id}:${e.at}`}
@@ -198,9 +197,7 @@ export function RoutinesAgenda({ routines, selectedId, onSelect }: {
                     className={cn(
                       "absolute box-border overflow-hidden rounded-md border px-1.5 py-0.5 text-left transition-colors",
                       e.routine.active
-                        ? code
-                          ? "border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-300"
-                          : "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                        ? "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300"
                         : "border-dashed border-muted-foreground/50 text-muted-foreground",
                       selected && "ring-2 ring-foreground",
                     )}

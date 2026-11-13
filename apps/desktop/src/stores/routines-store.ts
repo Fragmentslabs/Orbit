@@ -35,7 +35,18 @@ interface RoutinesState {
   /** Latest webhook calls per routine, kept live by the main process. */
   webhookActivity: Record<string, WebhookActivity>
   loaded: boolean
+  /** The routine open in the page's screen (null = the list). */
+  openId: string | null
+  /** The information panel open beside the routine's chat (the header's info button). */
+  detailsOpen: boolean
+  /** Which tab the panel shows: "config" is where "Edit" lands. */
+  detailsTab: "runs" | "config"
 
+  open: (id: string | null) => void
+  /** Opens the routine with the panel already on its settings tab (the list's "Edit"). */
+  openSettings: (id: string) => void
+  setDetailsTab: (tab: "runs" | "config") => void
+  toggleDetails: () => void
   load: () => Promise<void>
   applyEvent: (event: RoutineEvent) => void
 
@@ -95,8 +106,7 @@ async function seedDefaultRoutines(): Promise<void> {
         schedule: preset.schedule,
         model: { providerId: model.providerId, modelId: model.modelId },
         modes: preset.modes,
-        mode: preset.mode,
-        // Both presets are chat mode and do not read files — no folders.
+        // Both presets work only on chats and memories — no working folders.
         folders: [],
         active: false,
       })
@@ -115,6 +125,16 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   activity: {},
   webhookActivity: {},
   loaded: false,
+  openId: null,
+  detailsOpen: false,
+  detailsTab: "runs",
+
+  // Leaving the screen (id null) closes the panel too: the next routine opens with the chat
+  // whole, like a fragment does.
+  open: (id) => set({ openId: id, detailsOpen: false, detailsTab: "runs" }),
+  openSettings: (id) => set({ openId: id, detailsOpen: true, detailsTab: "config" }),
+  setDetailsTab: (detailsTab) => set({ detailsTab }),
+  toggleDetails: () => set((state) => ({ detailsOpen: !state.detailsOpen })),
 
   load: async () => {
     const data = await routinesApi.load()
@@ -146,6 +166,7 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
         set((state) => ({
           routines: state.routines.filter((r) => r.id !== event.id),
           runs: state.runs.filter((r) => r.routineId !== event.id),
+          openId: state.openId === event.id ? null : state.openId,
         }))
         break
       case "script-activity":
