@@ -12,6 +12,8 @@ import { documentInfo, readArtifact, readDocumentSource } from '../media'
 import { getSessionModelsCache } from '../companion-http'
 import { listDirectory, readProjectFile } from './fs-access'
 import { cleanControlSend } from './send-options'
+import { isToolsRequestType } from '@shared/tools-remote'
+import { handleToolsRequest } from './tools-requests'
 
 /**
  * The requests only a desktop peer makes (the allowlist in permissions.ts already
@@ -19,8 +21,9 @@ import { cleanControlSend } from './send-options'
  * `motion:props`, `design:readBoard`, … — so the other machine's main can answer
  * its own tabs as if the piece were local.
  *
- * Everything here is read-only. Ids and refs go through the same registries as
- * the local IPCs, so only pieces that this machine registered can be reached.
+ * The pieces and files are read-only: ids and refs go through the same registries as the
+ * local IPCs, so only pieces that this machine registered can be reached. The Tools screen
+ * (MCP, skills, hooks) is the one place a peer WRITES from here: tools-requests.ts.
  */
 
 type Req = { type: string; [key: string]: unknown }
@@ -113,6 +116,7 @@ export async function handleDesktopOnlyRequest(req: Req): Promise<unknown> {
       return readProjectFile(roots, req.root, req.path)
     }
     default:
+      if (isToolsRequestType(req.type)) return handleToolsRequest(req)
       throw new Error('unknown_request')
   }
 }

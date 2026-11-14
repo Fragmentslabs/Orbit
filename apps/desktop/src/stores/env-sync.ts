@@ -5,12 +5,13 @@ import { peersApi } from "@/src/lib/ipc"
 import { refreshRemoteProviders } from "@/src/hooks/use-env-providers"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { usePeersStore } from "@/src/stores/peers-store"
+import { useSkillsStore } from "@/src/stores/skills-store"
 import { applyPeerSync, useRemoteSyncStore } from "@/src/stores/remote-sync-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 
 /**
- * Keeps the screens that mirror a machine's work (routines, pipeline) pointed at
+ * Keeps the screens that mirror a machine's work (routines, pipeline, memories, tools) pointed at
  * the machine picked in the environment selector.
  *
  * Those stores have one copy of the data, so switching environment empties them
@@ -35,6 +36,7 @@ function resetWorkStores(): void {
     detailsTab: "runs",
   })
   useMemoryStore.getState().reset()
+  resetToolsStore()
   usePipelineStore.setState({
     projects: [],
     pipelines: [],
@@ -48,6 +50,13 @@ function resetWorkStores(): void {
     settingsOpen: false,
     planOpen: false,
   })
+}
+
+/** The "/" palette and the tools menu read the skills and MCP servers of the machine on screen. */
+function resetToolsStore(): void {
+  const skills = useSkillsStore.getState()
+  skills.reset()
+  if (skills.initialized) void skills.refresh().catch(() => {})
 }
 
 function applyEnv(env: string): void {
@@ -70,6 +79,7 @@ function refreshAfterReconnect(peerId: string): void {
   if (useRoutinesStore.getState().loaded) void useRoutinesStore.getState().load().catch(() => {})
   if (usePipelineStore.getState().loaded) void usePipelineStore.getState().load().catch(() => {})
   if (useMemoryStore.getState().initialized) void useMemoryStore.getState().refresh().catch(() => {})
+  if (useSkillsStore.getState().initialized) void useSkillsStore.getState().refresh().catch(() => {})
   void refreshRemoteProviders(peerId)
   if (useRemoteSyncStore.getState().byPeer[peerId]) void useRemoteSyncStore.getState().load(peerId, true)
 }

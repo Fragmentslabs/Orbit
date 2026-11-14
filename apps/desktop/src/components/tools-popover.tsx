@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Settings2, Wrench } from "lucide-react"
+import type { McpServerStatus } from "@shared/mcp"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -19,11 +20,24 @@ import { Truncate } from "@/components/ui/truncated-text"
  * or right click on the button).
  */
 export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; iconOnly?: boolean }) {
-  const { t } = useTranslation()
-  const { setView } = useWorkspace()
   const servers = useSkillsStore((s) => s.mcpServers)
   const selection = useToolsServers(sessionId)
   const setServers = useSessionTools((s) => s.setServers)
+  return <ToolsPopoverView servers={servers} selection={selection} onChange={(next) => setServers(sessionId, next)} iconOnly={iconOnly} />
+}
+
+/**
+ * The menu itself, fed by whoever owns the chat: this machine's stores for a local chat, the
+ * other desktop's mirrors for a remote one (RemoteComposer). `selection` null = every server on.
+ */
+export function ToolsPopoverView({ servers, selection, onChange, iconOnly }: {
+  servers: McpServerStatus[]
+  selection: string[] | null
+  onChange: (servers: string[] | null) => void
+  iconOnly?: boolean
+}) {
+  const { t } = useTranslation()
+  const { setView } = useWorkspace()
   const [open, setOpen] = useState(false)
 
   // With no server configured there is nothing to narrow: a fixed and
@@ -42,7 +56,7 @@ export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; icon
       : [...selected, name]
     // Selecting all again goes back to "all": the selection does not freeze the
     // list when the user did not make a real narrowing.
-    setServers(sessionId, next.length === available.length ? null : next)
+    onChange(next.length === available.length ? null : next)
   }
 
   const manage = () => {

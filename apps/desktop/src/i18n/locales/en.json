@@ -1810,9 +1810,12 @@
         "oauthClientSecretPlaceholder": "Confidential apps only",
         "oauthScope": "Scopes",
         "oauthRedirect": "Redirect URI",
+        "remoteSecretsHint": "Secrets of this server stay on that computer: •••••••• keeps the saved value, typing a new one replaces it.",
         "oauthRedirectHint": "Register exactly this URL in the provider's OAuth app."
       },
       "reauthorize": "Reauthorize",
+      "authorizeRemote": "Authorize",
+      "authorizeRemoteHint": "Sign-in opens a browser, so it has to be done on the computer that owns this server",
       "authorizeHint": "Opens the browser to sign in with the provider and grant access"
     },
     "skills": {

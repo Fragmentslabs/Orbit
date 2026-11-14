@@ -35,6 +35,11 @@ export function remoteModeActive(sync: RemoteSync, kind: ComposerKind, mode: Cha
   return defaults ? Boolean(defaults[mode as keyof typeof defaults]) : false
 }
 
+/** The servers this chat is narrowed to; null = every server on in the app (the default). */
+export function remoteTools(sync: RemoteSync, sessionId: string | undefined): string[] | null {
+  return (sessionId && sync.tools[sessionId]) || null
+}
+
 export function remotePermission(sync: RemoteSync, sessionId: string | undefined): PermissionMode {
   return (sessionId && sync.prefs.permission[sessionId]) || sync.appPrefs?.permissionMode || "ask"
 }
@@ -65,17 +70,20 @@ export interface RemoteComposerState {
   modes: Record<string, boolean>
   permission: PermissionMode
   thinking: { enabled: boolean; variantId: string | undefined }
+  /** MCP servers of the chat; null/absent = all of that machine's. */
+  tools?: string[] | null
 }
 
 /** The options of a turn, the same fields the phone's `messages:send` carries. */
 export function buildRemoteOptions(state: RemoteComposerState): SendMessageOptions {
-  const { kind, modes, permission, thinking } = state
+  const { kind, modes, permission, thinking, tools } = state
   return {
     research: modes.search,
     browser: modes.search,
     simple: modes.simple,
     brain: modes.brain,
     reasoning: { enabled: thinking.enabled, variantId: thinking.variantId },
+    ...(tools ? { toolsServers: tools } : {}),
     ...(kind === "code" ? { plan: modes.plan, subagents: modes.subagents, permissionMode: permission } : {}),
   }
 }

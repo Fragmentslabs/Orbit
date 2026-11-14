@@ -1,4 +1,5 @@
 import type { PeerGrants } from '@shared/peers'
+import { isToolsRequestType } from '@shared/tools-remote'
 
 /**
  * What a paired DESKTOP may ask of this machine.
@@ -11,6 +12,9 @@ import type { PeerGrants } from '@shared/peers'
  * So the default is full control: every companion request, exactly like the phone,
  * including creating/renaming/archiving/deleting chats, folders, memory, routines,
  * the pipeline, plan review and the agent's questions.
+ *
+ * The Tools screen (`mcp:*`, `skills:*`, `hooks:*`, see tools-remote.ts) is `control` and
+ * desktop-only: it edits what the agent can run on this machine, and has no phone UI.
  *
  * Two things stay outside the full-control grant:
  * - the project files (`fs:*`), which keep their own opt-in grant;
@@ -74,6 +78,7 @@ export function isDesktopOnlyRequest(type: string): boolean {
     type === 'artifact:read' ||
     type === 'document:source' ||
     type === 'document:info' ||
+    isToolsRequestType(type) ||
     FILES.has(type)
   )
 }

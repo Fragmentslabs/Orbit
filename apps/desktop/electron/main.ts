@@ -202,13 +202,20 @@ import { setupFragmentPermissions } from './lib/fragments/fragment-permissions'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
 import { importSkillSelection } from './lib/skills/import'
-import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
+import {
+  approveSkill,
+  discardSkill,
+  optimizeSkillBySlug,
+  removeSkill,
+  saveSkill,
+  setSkillPref,
+  skillMeta,
+  type SkillInput,
+} from './lib/skills/actions'
 import { computeAnalytics } from './lib/analytics'
 import { summarizeWork, type UsageSummaryInput } from './lib/usage-summary'
 import type { AnalyticsRange } from '@shared/analytics'
-import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
-import { metaViews, pruneOrphanCards, setPref, usageScope } from './lib/skills/meta'
-import { NoAuxModelError, optimizeSkill } from './lib/skills/optimize'
+import { listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import {
   adoptDraftDocuments,
@@ -2541,51 +2548,15 @@ app.whenReady().then(async () => {
   // Skills: list, create, and the watcher of the global folder notifies the renderer
   ipcMain.handle('skills:list', (_event, directory?: string) => loadSkills(directory))
   // Card state, preferences and usage of each skill (usage in the open repository, else global)
-  ipcMain.handle('skills:meta', async (_event, directory?: string) => {
-    const skills = await loadSkills(directory)
-    await pruneOrphanCards()
-    return metaViews(skills, await usageScope(directory ? 'code' : 'chat', directory))
-  })
-  ipcMain.handle('skills:optimize', async (_event, slug: string, directory?: string, language?: string) => {
-    const skill = (await loadSkills(directory)).find((s) => s.slug === slug)
-    if (!skill || skill.source === 'builtin') return { error: 'not-found' as const }
-    try {
-      return { card: await optimizeSkill(skill, { language }) }
-    } catch (err) {
-      if (err instanceof NoAuxModelError) return { error: 'no-aux-model' as const }
-      return { error: 'failed' as const, message: err instanceof Error ? err.message : String(err) }
-    }
-  })
-  ipcMain.handle('skills:set-pref', (_event, slug: string, patch: { pin?: boolean; never?: boolean }) =>
-    setPref(sanitizeSlug(slug), patch),
+  ipcMain.handle('skills:meta', (_event, directory?: string) => skillMeta(directory))
+  ipcMain.handle('skills:optimize', (_event, slug: string, directory?: string, language?: string) =>
+    optimizeSkillBySlug(slug, directory, language),
   )
-  ipcMain.handle('skills:create', async (_event, { name, description, content, slug, oldSlug }) => {
-    const safeSlug = slug ? sanitizeSlug(slug) : sanitizeSlug(name)
-    if (!safeSlug) return { error: 'Invalid slug — use only lowercase letters, numbers and underscores' }
-    const dir = globalSkillsDir()
-    await fs.mkdir(dir, { recursive: true })
-    const filePath = path.join(dir, `${safeSlug}.skill`)
-    // If the slug changed on edit, removes the old file
-    if (oldSlug && oldSlug !== safeSlug) {
-      const oldPath = path.join(dir, `${oldSlug}.skill`)
-      await fs.unlink(oldPath).catch(() => {})
-    }
-    await fs.writeFile(
-      filePath,
-      serializeSkill({ name, description: description ?? '', slug: safeSlug, content }),
-      'utf8',
-    )
-    return { filePath }
-  })
-  ipcMain.handle('skills:remove', async (_event, slug: string) => {
-    const dir = globalSkillsDir()
-    const safe = sanitizeSlug(slug)
-    if (!safe) return
-    // A skill can be a flat file (.skill/.md) or a bundle (folder with scripts)
-    await fs.unlink(path.join(dir, `${safe}.skill`)).catch(() => {})
-    await fs.unlink(path.join(dir, `${safe}.md`)).catch(() => {})
-    await fs.rm(path.join(dir, safe), { recursive: true, force: true }).catch(() => {})
-  })
+  ipcMain.handle('skills:set-pref', (_event, slug: string, patch: { pin?: boolean; never?: boolean }) =>
+    setSkillPref(slug, patch),
+  )
+  ipcMain.handle('skills:create', (_event, input: SkillInput) => saveSkill(input))
+  ipcMain.handle('skills:remove', (_event, slug: string) => removeSkill(slug))
 
   // Imports a skill via dialog: .skill/.md text (+ extras = bundle) OR a zipped
   // .skill from Claude (SKILL.md + scripts extracted as a bundle)
@@ -2607,15 +2578,8 @@ app.whenReady().then(async () => {
 
   // Agent proposals (tool create_skill): staging until the card is approved
   ipcMain.handle('skills:pending', () => listPendingSkills())
-  ipcMain.handle('skills:approve', async (_event, slug: string) => {
-    const ok = await approvePendingSkill(slug)
-    notifySkillsChanged()
-    return ok
-  })
-  ipcMain.handle('skills:discard', async (_event, slug: string) => {
-    await discardPendingSkill(slug)
-    notifySkillsChanged()
-  })
+  ipcMain.handle('skills:approve', (_event, slug: string) => approveSkill(slug))
+  ipcMain.handle('skills:discard', (_event, slug: string) => discardSkill(slug))
   setupSkillsWatcher(() => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('skills:changed')

@@ -8,6 +8,9 @@ import { mcpApi, skillsApi } from "@/src/lib/ipc"
  * reports changes in the global folder (including creations from the create_skill tool);
  * changing the workspace folder triggers a refresh with the active directory.
  *
+ * It follows the environment selector like the other mirrors: `skillsApi`/`mcpApi` answer from
+ * the machine on screen, and env-sync empties and reloads this store when it changes.
+ *
  * "discarded" keeps the slugs the USER really refused in the card
  * (persisted in localStorage). It is the only source for the "dismissed" state —
  * absence from "pending" is never treated as a refusal.
@@ -29,6 +32,10 @@ interface SkillsState {
   directory?: string
   initialize: () => Promise<void>
   refresh: (directory?: string) => Promise<void>
+  /** Only the MCP servers (the composer's tools menu needs no skills). */
+  refreshServers: () => Promise<void>
+  /** The environment changed: what is here belongs to the other machine. */
+  reset: () => void
   approve: (slug: string) => Promise<boolean>
   discard: (slug: string) => Promise<void>
 }
@@ -78,6 +85,12 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       directory: dir,
     })
   },
+
+  refreshServers: async () => {
+    set({ mcpServers: await mcpApi.status() })
+  },
+
+  reset: () => set({ skills: [], meta: {}, pending: [], mcpServers: [], directory: undefined }),
 
   approve: async (slug) => {
     const ok = await skillsApi.approve(slug)
