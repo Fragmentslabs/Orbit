@@ -48,7 +48,7 @@ import type {
   MessageQueueSnapshot,
   MessageQueueChangeEvent,
 } from '@shared/companion'
-import { SESSION_BUSY_ERROR } from '@shared/companion'
+import { SESSION_BUSY_ERROR, type ProvidersSnapshotResponse } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, RotationConfig } from '@shared/chat'
 import type { RoutineEvent } from '@shared/routines'
 import { setArchivedState } from '@shared/archive'
@@ -56,7 +56,6 @@ import type { PipelineEvent } from '@shared/pipeline'
 import { StorageKeys, normalizeOrchestrationPlan } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
-import { listCredentialProviders } from './auth'
 import { replyOrResume } from './ask-resume'
 import {
   revert as revertSession,
@@ -71,6 +70,9 @@ import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan, resumePlan 
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
+import type { MemoryEvent } from '@shared/memory'
+import { listCredentialProviders } from './auth'
+import { listCustomProviders } from './custom-providers'
 import { computeAnalytics } from './analytics'
 import { summarizeWork } from './usage-summary'
 import {
@@ -79,6 +81,8 @@ import {
   remove as removeMemory,
   promote as promoteMemory,
   getFull as getMemoryFull,
+  save as saveMemory,
+  link as linkMemories,
 } from './memory/service'
 import * as routines from './routines'
 import * as pipelineApi from './pipeline'
@@ -500,7 +504,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       return
     }
     if (req.type === 'messages:send') {
-      const clean = await sanitizeDesktopSend(req)
+      const clean = await sanitizeDesktopSend(req, client.grants)
       if (!clean) {
         sendResponse(ws, requestId, false, undefined, 'invalid')
         return
@@ -1171,6 +1175,35 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         break
       }
 
+      case 'providers:snapshot': {
+        const [catalog, credentialProviders, custom, selected] = await Promise.all([
+          getCatalog(),
+          listCredentialProviders(),
+          listCustomProviders(),
+          readJson<{ providerId: string; modelId: string }>(StorageKeys.selectedModel),
+        ])
+        const merged: Record<string, unknown> = { ...catalog }
+        for (const provider of custom) merged[provider.id] = provider
+        const withModels = custom.filter((p) => Object.keys(p.models).length > 0).map((p) => p.id)
+        sendResponse(ws, requestId, true, {
+          catalog: merged,
+          connectedProviders: [...new Set([...credentialProviders, ...withModels])],
+          ...(selected ? { selectedModel: selected } : {}),
+        } satisfies ProvidersSnapshotResponse)
+        break
+      }
+
+      case 'memory:create': {
+        const created = await saveMemory(req.input)
+        sendResponse(ws, requestId, true, created)
+        break
+      }
+
+      case 'memory:link': {
+        sendResponse(ws, requestId, true, await linkMemories(req.sourceId, req.targetId))
+        break
+      }
+
       case 'memory:doc': {
         const full = await getMemoryFull(req.id)
         if (full) sendResponse(ws, requestId, true, full.document)
@@ -1763,6 +1796,15 @@ export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
     if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'routines:event', event } as CompanionEvent))
+  }
+}
+
+/** Memory changes, for the desktops that show the Memories page of this machine. */
+export function forwardMemoryEvent(event: MemoryEvent): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.kind !== 'desktop' || client.grants?.control !== true) continue
+    if (client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'memory:event', event } as CompanionEvent))
   }
 }
 

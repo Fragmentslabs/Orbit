@@ -2419,6 +2419,7 @@ function RemoteSidebarContent({ peerId }: { peerId: string }) {
         <div className="space-y-1 px-2 pb-2">
           <RoutinesButton />
           {mode === "code" && <PipelineButton />}
+          <MemoriesButton />
           <UsageButton />
         </div>
       )}

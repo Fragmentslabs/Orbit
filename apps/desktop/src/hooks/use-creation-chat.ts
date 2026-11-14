@@ -1,8 +1,10 @@
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { useWorkspace } from "@/lib/workspace-context"
+import { getActivePeer } from "@/src/lib/env-source"
 import { inheritChatSettings } from "@/src/lib/inherit-chat-settings"
 import { useDraftInput } from "@/src/stores/draft-input"
+import { usePeersStore } from "@/src/stores/peers-store"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /** The things that are created by describing them in a chat and confirming a card. */
@@ -19,7 +21,15 @@ export function useStartCreationChat(): (kind: CreationKind) => Promise<void> {
   const { t } = useTranslation()
   const startChat = useStartChatWith()
   return useCallback(
-    (kind) => startChat(t(`creation.${kind}.title`), t(`creation.${kind}.starter`), undefined, kind),
+    (kind) => {
+      // Another desktop's routine is created in a form that names ITS models and folders;
+      // the creation chat would run (and propose the card) on this machine.
+      if (kind === "routine" && getActivePeer()) {
+        usePeersStore.getState().setRoutineDialogOpen(true)
+        return Promise.resolve()
+      }
+      return startChat(t(`creation.${kind}.title`), t(`creation.${kind}.starter`), undefined, kind)
+    },
     [t, startChat],
   )
 }

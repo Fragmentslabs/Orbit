@@ -4676,7 +4676,11 @@
       "stop": "Stop",
       "send": "Send",
       "files": "Files",
-      "sendError": "Couldn't send: {{error}}"
+      "sendError": "Couldn't send: {{error}}",
+      "pickFolder": "Pick a folder on {{name}}",
+      "useFolder": "Use this folder",
+      "noFolder": "Choose a project folder",
+      "newRoutine": "New routine on {{name}}"
     },
     "files": {
       "title": "Files on {{name}}",

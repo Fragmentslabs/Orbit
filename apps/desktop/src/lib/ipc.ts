@@ -1693,7 +1693,7 @@ export const companionApi = {
   },
 }
 
-export const memoryApi = {
+const localMemoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   create: (input: {
     text: string
@@ -1741,7 +1741,8 @@ export const peersApi = {
     window.ipcRenderer.invoke("peers:messages", sessionId, opts) as Promise<ChatMessage[]>,
   sessionState: (sessionId: string) =>
     window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<{ pendingAsks?: unknown[] } | null>,
-  send: (sessionId: string, text: string) => window.ipcRenderer.invoke("peers:send", sessionId, text) as Promise<void>,
+  send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) =>
+    window.ipcRenderer.invoke("peers:send", sessionId, text, opts) as Promise<void>,
   abort: (sessionId: string) => window.ipcRenderer.invoke("peers:abort", sessionId) as Promise<void>,
   /** Any companion request, when the peer granted `control` (folders, session CRUD…). */
   request: <T = unknown>(peerId: string, payload: { type: string; [key: string]: unknown }) =>
@@ -1983,5 +1984,47 @@ export const analyticsApi: typeof localAnalyticsApi = {
   summarize: async (input) => {
     const peerId = getActivePeer()
     return peerId ? peerAsk<UsageSummaryResponse>(peerId, { type: "analytics:summarize", input }) : localAnalyticsApi.summarize(input)
+  },
+}
+
+/** The Memories page of the machine on screen: this one through IPC, another desktop through its companion API. */
+export const memoryApi: typeof localMemoryApi = {
+  ...localMemoryApi,
+  list: async () => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<Memory[]>(peerId, { type: "memory:list" })) ?? []) : localMemoryApi.list()
+  },
+  create: async (input) => {
+    const peerId = getActivePeer()
+    return peerId
+      ? peerAsk<{ id: string; merged: boolean; text: string }>(peerId, { type: "memory:create", input })
+      : localMemoryApi.create(input)
+  },
+  get: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localMemoryApi.get(id)
+    const [document, list] = await Promise.all([
+      peerAsk<string | null>(peerId, { type: "memory:doc", id }).catch(() => null),
+      peerAsk<Memory[]>(peerId, { type: "memory:list" }),
+    ])
+    const memory = (list ?? []).find((m) => m.id === id)
+    return memory ? { memory, document: document ?? null } : null
+  },
+  update: async (id, patch) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Memory | null>(peerId, { type: "memory:update", id, patch }) : localMemoryApi.update(id, patch)
+  },
+  delete: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localMemoryApi.delete(id)
+    await peerAsk(peerId, { type: "memory:delete", id })
+  },
+  promote: async (id) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Memory | null>(peerId, { type: "memory:promote", id }) : localMemoryApi.promote(id)
+  },
+  link: async (sourceId, targetId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<boolean>(peerId, { type: "memory:link", sourceId, targetId }) : localMemoryApi.link(sourceId, targetId)
   },
 }

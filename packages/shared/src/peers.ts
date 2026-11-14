@@ -12,6 +12,7 @@
  */
 
 import type { ChatEvent, FolderInfo, SessionInfo } from './chat'
+import type { MemoryEvent } from './memory'
 import type { PipelineEvent } from './pipeline'
 import type { RoutineEvent } from './routines'
 
@@ -182,6 +183,7 @@ export type PeersEvent =
   /** Routine and pipeline events of the other machine (full-control peers only). */
   | { type: 'routines'; peerId: string; event: RoutineEvent }
   | { type: 'pipeline'; peerId: string; event: PipelineEvent }
+  | { type: 'memory'; peerId: string; event: MemoryEvent }
 
 // ─── Wire protocol (peer server) ─────────────────────────────────────────────
 

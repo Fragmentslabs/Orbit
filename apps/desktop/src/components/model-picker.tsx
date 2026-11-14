@@ -17,6 +17,7 @@ import {
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import type { CatalogModel, CatalogProvider } from "@shared/chat"
 import { useProviderStore, useNoProviderConnected, type SelectedModel } from "@/src/stores/provider-store"
+import { useEnvProviders } from "@/src/hooks/use-env-providers"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useModelRotationStore, ROTATION_DRAFT_KEY } from "@/src/stores/model-rotation-store"
@@ -72,8 +73,8 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const openRotation = useRotationUi((s) => s.openRotation)
   const open = openProp ?? internalOpen
   const onOpenChange = onOpenChangeProp ?? setInternalOpen
-  const catalog = useProviderStore((s) => s.catalog)
-  const connectedProviders = useProviderStore((s) => s.connectedProviders)
+  // The models of the machine on screen: another desktop's own when one is the environment.
+  const { catalog, connectedProviders, remote: remoteEnv, loading: providersLoading } = useEnvProviders()
   const rotations = useModelRotationStore((s) => s.rotations)
   const sessionRotationId = useModelRotationStore((s) => s.sessionOverrides[sessionId ?? ROTATION_DRAFT_KEY])
   const selectRotation = useModelRotationStore((s) => s.selectRotation)
@@ -84,12 +85,12 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
   const clearModel = useSessionModelPrefs((s) => s.clear)
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
-  const loading = useProviderStore((s) => s.loading)
+  const loading = providersLoading
   const error = useProviderStore((s) => s.error)
   // No provider configured (first run): the trigger adopts the same
   // visual language of the ProviderHintCard (Plug icon in primary + background
   // tint) and points to the selector footer ("Configure a provider")
-  const noProvider = useNoProviderConnected()
+  const noProvider = useNoProviderConnected() && !remoteEnv
 
   const controlled = value !== undefined
   const selected = controlled ? value : sessionSelected
@@ -219,7 +220,7 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                 <ModelSelectorName>{nullLabel}</ModelSelectorName>
               </ModelSelectorItem>
             )}
-            {!controlled && !hideRotationOptions && rotations.length > 0 && (
+            {!controlled && !hideRotationOptions && !remoteEnv && rotations.length > 0 && (
               <ModelSelectorGroup heading={t("modelPicker.rotation")}>
                 {rotations.map((rotation) => {
                   const isSelectedRotation = sessionRotationId === rotation.id
@@ -349,7 +350,7 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
               <SettingsIcon className="size-3.5" />
               {groups.length === 0 ? t("preferences.configureProvider") : t("preferences.manageProviders")}
             </Button>
-            {!hideRotationOptions && (
+            {!hideRotationOptions && !remoteEnv && (
               <Button
                 variant="ghost"
                 className="w-full justify-start gap-2 text-xs"

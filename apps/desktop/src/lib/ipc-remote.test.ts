@@ -63,6 +63,20 @@ describe("another desktop as the data source", () => {
     expect(invoke).toHaveBeenCalledWith("peers:request", PEER, { type: "pipeline:list" })
   })
 
+  it("reads and edits the peer's memories, with the document fetched on demand", async () => {
+    setActivePeer(PEER)
+    invoke.mockImplementation(async (_channel: string, _peer: string, payload: { type: string }) => {
+      if (payload.type === "memory:list") return [{ id: "m1", text: "a" }]
+      if (payload.type === "memory:doc") return "# doc"
+      return null
+    })
+    const { memoryApi } = await api()
+    expect(await memoryApi.list()).toEqual([{ id: "m1", text: "a" }])
+    expect(await memoryApi.get("m1")).toEqual({ memory: { id: "m1", text: "a" }, document: "# doc" })
+    await memoryApi.update("m1", { text: "b" })
+    expect(invoke).toHaveBeenCalledWith("peers:request", PEER, { type: "memory:update", id: "m1", patch: { text: "b" } })
+  })
+
   it("never runs local-only actions on the wrong machine", async () => {
     setActivePeer(PEER)
     const { pipelineApi, routinesApi } = await api()

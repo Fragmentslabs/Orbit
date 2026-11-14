@@ -300,7 +300,9 @@ function QuestionBody({ ask, submitted, onReply, sessionId }: {
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="ml-6">
-          <DiscussInPanelButton questions={questions} currentIndex={currentIndex} sessionId={sessionId} />
+          {/* The discussion sub-chat is born on this machine, in the chat the card belongs to:
+              the cards of another desktop's chat come without a session id and skip it. */}
+          {sessionId ? <DiscussInPanelButton questions={questions} currentIndex={currentIndex} sessionId={sessionId} /> : <span />}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -449,11 +451,17 @@ function SubchatBody({ ask, submitted, onReply }: {
   )
 }
 
-export function AskCard({ ask, sessionId }: { ask: PendingAskUI; sessionId?: string }) {
+export function AskCard({ ask, sessionId, onReply }: {
+  ask: PendingAskUI
+  sessionId?: string
+  /** Answers somewhere other than this machine (the chat is another desktop's). */
+  onReply?: (requestId: string, value: unknown) => void | Promise<unknown>
+}) {
   const [submitted, setSubmitted] = useState(false)
   const reply = (value: unknown) => {
     setSubmitted(true)
-    void chatApi.askReply(ask.requestId, value)
+    if (onReply) void onReply(ask.requestId, value)
+    else void chatApi.askReply(ask.requestId, value)
   }
 
   return (

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Folder, Plus, X } from "lucide-react"
+import { getActivePeer } from "@/src/lib/env-source"
+import { requestRemoteFolder } from "@/src/stores/remote-folder-request"
 import { useWorktreeStore } from "@/src/stores/worktree-store"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -20,6 +22,8 @@ export function loadRecentFolders(): string[] {
 }
 
 export async function pickFolder(): Promise<string | null> {
+  // Another desktop on screen: the folder is one of its own.
+  if (getActivePeer()) return requestRemoteFolder()
   try {
     const result = await window.ipcRenderer.invoke("select-folder")
     return result as string | null

@@ -4676,7 +4676,11 @@
       "stop": "Parar",
       "send": "Enviar",
       "files": "Arquivos",
-      "sendError": "Não foi possível enviar: {{error}}"
+      "sendError": "Não foi possível enviar: {{error}}",
+      "pickFolder": "Escolher pasta em {{name}}",
+      "useFolder": "Usar esta pasta",
+      "noFolder": "Escolher pasta do projeto",
+      "newRoutine": "Nova rotina em {{name}}"
     },
     "files": {
       "title": "Arquivos em {{name}}",

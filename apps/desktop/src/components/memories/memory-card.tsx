@@ -15,12 +15,11 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { useWorkspace } from "@/lib/workspace-context"
 import type { Memory } from "@shared/memory"
 import { scopeOf } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
-import { useSessionStore } from "@/src/stores/session-store"
+import { useEnvSessions, useOpenEnvSession } from "@/src/hooks/use-env-sessions"
 import { CATEGORY_LABEL, KIND_BADGE, KIND_COLOR, KIND_LABEL, canPromote } from "./meta"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -334,9 +333,8 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
   const { t, i18n } = useTranslation()
   const remove = useMemoryStore((s) => s.remove)
   const promote = useMemoryStore((s) => s.promote)
-  const sessions = useSessionStore((s) => s.sessions)
-  const selectSession = useSessionStore((s) => s.selectSession)
-  const { mode, setMode, setView } = useWorkspace()
+  const sessions = useEnvSessions()
+  const openSession = useOpenEnvSession()
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -392,9 +390,7 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
                 className="size-6"
 
                 onClick={() => {
-                  if (originSession.mode !== mode) setMode(originSession.mode)
-                  setView("chat")
-                  void selectSession(originSession.mode, originSession.id)
+                  openSession(originSession.id)
                 }}
               >
                 <ExternalLink className="size-3.5" />

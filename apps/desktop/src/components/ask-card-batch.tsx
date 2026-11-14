@@ -63,7 +63,13 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
   )
 }
 
-export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
+export function AskCardBatch({ items, onReply }: {
+  items: PendingAskUI[]
+  /** Answers somewhere other than this machine (the chat is another desktop's). */
+  onReply?: (requestId: string, value: unknown) => void | Promise<unknown>
+}) {
+  const answer = (requestId: string, value: unknown) =>
+    onReply ? void onReply(requestId, value) : void chatApi.askReply(requestId, value)
   const { t } = useTranslation()
   const [submitted, setSubmitted] = useState(false)
   const [permChoices, setPermChoices] = useState<Record<string, PermissionDecision>>({})
@@ -85,9 +91,9 @@ export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
     setSubmitted(true)
     for (const item of items) {
       if (item.kind === "permission") {
-        void chatApi.askReply(item.requestId, dismiss ? "deny" : permChoices[item.requestId] ?? "allow")
+        answer(item.requestId, dismiss ? "deny" : permChoices[item.requestId] ?? "allow")
       } else {
-        void chatApi.askReply(
+        answer(
           item.requestId,
           dismiss
             ? { rejected: true }

@@ -22,6 +22,8 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
+import { usePeersStore } from "@/src/stores/peers-store"
+import { RemoteCreateRoutineDialog } from "./remote-create-routine-dialog"
 import { AgentsEditor } from "./agents-editor"
 import { ReviewerRow, TeamReview } from "./team-review"
 import { AbilitiesField, Field, FoldersField } from "./form-parts"
@@ -40,7 +42,23 @@ type WhenKind = "schedule" | "event"
  * details" on the card the chat proposed, which opens it already filled in. A trigger that is a
  * script (a price, a deploy, a page that changed) needs questions and code, so it goes to the chat.
  */
-export function CreateRoutineDialog({
+export function CreateRoutineDialog(props: CreateRoutineDialogProps) {
+  const remote = usePeersStore((s) => s.env !== "local")
+  return remote ? (
+    <RemoteCreateRoutineDialog open={props.open} onOpenChange={props.onOpenChange} onCreated={props.onCreated} />
+  ) : (
+    <LocalCreateRoutineDialog {...props} />
+  )
+}
+
+interface CreateRoutineDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated?: (routineId: string) => void
+  proposal?: PendingRoutine
+}
+
+function LocalCreateRoutineDialog({
   open,
   onOpenChange,
   onCreated,

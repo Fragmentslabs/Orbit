@@ -2,6 +2,7 @@ import type { PipelineEvent } from "@shared/pipeline"
 import type { RoutineEvent } from "@shared/routines"
 import { getActivePeer, namespaced, setActivePeer } from "@/src/lib/env-source"
 import { peersApi } from "@/src/lib/ipc"
+import { useMemoryStore } from "@/src/stores/memory-store"
 import { usePeersStore } from "@/src/stores/peers-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
@@ -31,6 +32,7 @@ function resetWorkStores(): void {
     detailsOpen: false,
     detailsTab: "runs",
   })
+  useMemoryStore.getState().reset()
   usePipelineStore.setState({
     projects: [],
     pipelines: [],
@@ -67,6 +69,8 @@ export function startEnvSync(): void {
   peersApi.onEvent((event) => {
     if (event.type === "routines") {
       if (event.peerId === getActivePeer()) useRoutinesStore.getState().applyEvent(remoteRoutineEvent(event.peerId, event.event))
+    } else if (event.type === "memory") {
+      if (event.peerId === getActivePeer()) useMemoryStore.getState().applyEvent(event.event)
     } else if (event.type === "pipeline") {
       if (event.peerId === getActivePeer()) usePipelineStore.getState().applyEvent(event.event as PipelineEvent)
     }

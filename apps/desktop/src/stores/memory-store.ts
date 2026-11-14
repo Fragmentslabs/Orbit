@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { Memory, MemoryEvent } from "@shared/memory"
+import { getActivePeer } from "@/src/lib/env-source"
 import { memoryApi } from "@/src/lib/ipc"
 
 /**
@@ -17,6 +18,9 @@ interface MemoryState {
   docs: Record<string, string>
 
   initialize: () => Promise<void>
+  applyEvent: (event: MemoryEvent) => void
+  /** The environment changed: forget what was loaded and read it again if the page was ever opened. */
+  reset: () => void
   refresh: () => Promise<void>
   openDoc: (id: string) => Promise<string | null>
   update: (id: string, patch: Partial<Pick<Memory, "text" | "tags" | "weight" | "proposed">>) => Promise<void>
@@ -42,25 +46,38 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     if (get().initialized) return
     set({ initialized: true })
     memoryApi.onEvent((event) => {
-      set((state) => {
-        // Invalidates the cached doc — it may have been updated/removed along with
-        const docs = { ...state.docs }
-        delete docs[event.memory.id]
-        return { index: applyEvent(event, state.index), docs }
-      })
+      // This machine's own changes are not the page on screen while another desktop is shown.
+      if (getActivePeer()) return
+      get().applyEvent(event)
     })
     await get().refresh()
   },
 
+  applyEvent: (event) => {
+    set((state) => {
+      // Invalidates the cached doc — it may have been updated/removed along with
+      const docs = { ...state.docs }
+      delete docs[event.memory.id]
+      return { index: applyEvent(event, state.index), docs }
+    })
+  },
+
   refresh: async () => {
+    const peer = getActivePeer()
     try {
       const index = await memoryApi.list()
+      if (getActivePeer() !== peer) return
       set({ index })
     } finally {
       // Leaves the skeleton even if the list fails, otherwise the screen stays loading
       // forever instead of showing the empty state.
       set({ loading: false })
     }
+  },
+
+  reset: () => {
+    set({ index: [], docs: {}, loading: true })
+    if (get().initialized) void get().refresh()
   },
 
   openDoc: async (id) => {

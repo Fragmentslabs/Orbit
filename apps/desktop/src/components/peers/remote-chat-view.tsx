@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { FolderOpen, Loader2, Lock, Send, Square, WifiOff } from "lucide-react"
+import { Folder, FolderOpen, Loader2, Lock, Send, Square, WifiOff } from "lucide-react"
 import type { ChatMessage, FilePart, SessionInfo } from "@shared/chat"
 import { showsPersonaOnWelcome } from "@shared/appearance"
 import { remoteSessionId } from "@shared/peers"
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useWorkspaceMode } from "@/lib/workspace-context"
 import { Persona } from "@/src/components/ai/persona"
+import { AskCard } from "@/src/components/ask-card"
+import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { Message, MessageContent } from "@/src/components/ai/message"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
@@ -19,6 +21,7 @@ import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { isRemoteRunning, useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { RemoteFiles } from "./remote-files"
+import { RemoteFolderPicker } from "./remote-folder-picker"
 
 /**
  * A chat of another desktop, read live over the pinned connection.
@@ -53,6 +56,8 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
   const status = usePeersStore((s) => (sessionId ? s.statuses[sessionId] : undefined))
   const sending = usePeersStore((s) => (sessionId ? !!s.sending[sessionId] : false))
   const waiting = usePeersStore((s) => !!s.snapshot?.running.find((r) => r.sessionId === sessionId)?.waiting)
+  const asks = usePeersStore((s) => (sessionId ? s.pendingAsks[sessionId] : undefined))
+  const replyAsk = usePeersStore((s) => s.replyAsk)
   const loadMessages = usePeersStore((s) => s.loadMessages)
   const send = usePeersStore((s) => s.send)
   const abort = usePeersStore((s) => s.abort)
@@ -160,7 +165,25 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
             {t("peers.env.offline", { name })}
           </div>
         ) : null}
-        {waiting ? <p className="mb-1.5 text-xs text-amber-600 dark:text-amber-400">{t("peers.remote.approvalNote", { name })}</p> : null}
+        {asks?.length ? (
+          <div className="mb-2 flex flex-col gap-2">
+            {asks
+              .filter((a) => !a.batchId && a.kind !== "subchat")
+              .map((ask) => (
+                <AskCard key={ask.requestId} ask={ask} onReply={(requestId, value) => replyAsk(env, requestId, value)} />
+              ))}
+            {[...new Set(asks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
+              <AskCardBatch
+                key={batchId}
+                items={asks.filter((a) => a.batchId === batchId)}
+                onReply={(requestId, value) => replyAsk(env, requestId, value)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {waiting && (!asks?.length || asks.some((a) => a.kind === "subchat")) ? (
+          <p className="mb-1.5 text-xs text-amber-600 dark:text-amber-400">{t("peers.remote.approvalNote", { name })}</p>
+        ) : null}
         {!canSend && peer?.online ? (
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
             <Lock className="size-3.5" />
@@ -197,6 +220,20 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
   const send = usePeersStore((s) => s.send)
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  const [pickingFolder, setPickingFolder] = useState(false)
+  // Code chats work in a folder of THAT machine: the "+" of a project folder carries its own,
+  // otherwise the newest code chat's folder is the starting point (as at home).
+  const suggested = usePeersStore((s) => {
+    const folder = homeFolderId ? s.foldersByPeer[peerId]?.find((f) => f.id === homeFolderId) : undefined
+    if (folder?.workspace?.[0]) return folder.workspace[0]
+    const last = [...(s.sessionsByPeer[peerId] ?? [])]
+      .filter((x) => x.mode === "code" && !x.archived && !x.parentId && !!x.directory)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    return last?.directory
+  })
+  const [chosenFolder, setChosenFolder] = useState<string | undefined>(undefined)
+  const directory = chosenFolder ?? suggested
+  const control = usePeersStore((s) => s.snapshot?.peers.find((p) => p.peerId === peerId)?.grants.control === true)
 
   const title = t(pickWelcomeTitle({ mode, userName }), { name: userName ?? "" })
   const subtitle = mode === "chat" ? t("chat.empty.chatSubtitle") : t("chat.empty.codeSubtitle")
@@ -214,7 +251,7 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
       // Ready before the first event of the new chat arrives, so none is dropped.
       usePeersStore.setState((s) => ({ messages: { ...s.messages, [id]: s.messages[id] ?? [] } }))
       openSession(id)
-      await send(id, text)
+      await send(id, text, mode === "code" && directory ? { directory } : undefined)
     } catch (err) {
       setError((err as Error).message)
       throw err
@@ -243,6 +280,22 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
           <div className="mb-1.5 flex items-center gap-2 text-xs text-destructive">
             <WifiOff className="size-3.5" />
             {t("peers.env.offline", { name })}
+          </div>
+        ) : null}
+        {canSend && mode === "code" && control ? (
+          <div className="mb-1.5 flex items-center">
+            <Button variant="ghost" size="sm" className="h-7 max-w-full gap-1.5 text-xs text-muted-foreground" onClick={() => setPickingFolder(true)}>
+              <Folder className="size-3.5 shrink-0" />
+              <span className="truncate">{directory ?? t("peers.remote.noFolder")}</span>
+            </Button>
+            <RemoteFolderPicker
+              peerId={peerId}
+              peerName={name}
+              initial={directory}
+              open={pickingFolder}
+              onOpenChange={setPickingFolder}
+              onPick={setChosenFolder}
+            />
           </div>
         ) : null}
         {canSend ? (

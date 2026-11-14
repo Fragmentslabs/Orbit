@@ -19,6 +19,8 @@ import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { RemoteChatView } from "@/src/components/peers/remote-chat-view"
 import { RemoteOffline } from "@/src/components/peers/remote-offline"
+import { RemoteFolderPickerHost } from "@/src/components/peers/remote-folder-picker-host"
+import { RemoteCreateRoutineDialog } from "@/src/components/routines/remote-create-routine-dialog"
 import { PairRequestCards } from "@/src/components/peers/pair-request-cards"
 import { useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
@@ -109,6 +111,12 @@ function retargetToVisibleChat(event: PanelEvent, mode: SessionMode): PanelEvent
   const parents = new Map(sessions.map((s) => [s.id, s.parentId]))
   const sessionId = resolvePanelSession(event.sessionId, activeIds[mode] ?? null, (id) => parents.get(id))
   return sessionId === event.sessionId ? event : { ...event, sessionId }
+}
+
+function RemoteRoutineDialogHost() {
+  const open = usePeersStore((s) => s.routineDialogOpen)
+  const setOpen = usePeersStore((s) => s.setRoutineDialogOpen)
+  return <RemoteCreateRoutineDialog open={open} onOpenChange={setOpen} onCreated={(id) => useRoutinesStore.getState().open(id)} />
 }
 
 function Layout() {
@@ -263,10 +271,10 @@ function Layout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Memories, tools and fragments belong to the machine you are sitting at; another
-  // desktop only offers chats, routines, the pipeline and usage.
+  // Tools and fragments belong to the machine you are sitting at; another desktop
+  // offers chats, memories, routines, the pipeline and usage.
   useEffect(() => {
-    if (remoteEnv && (view === "memories" || view === "tools" || view === "fragments")) setView("chat")
+    if (remoteEnv && (view === "tools" || view === "fragments")) setView("chat")
   }, [remoteEnv, view, setView])
 
   useEffect(() => {
@@ -487,6 +495,8 @@ function Layout() {
                     <RoutinesView />
                   ) : remoteEnv && view === "pipeline" ? (
                     <PipelineBoard />
+                  ) : remoteEnv && view === "memories" ? (
+                    <MemoriesView />
                   ) : remoteEnv && view === "analytics" ? (
                     <UsageView />
                   ) : remoteEnv ? (
@@ -528,6 +538,8 @@ function Layout() {
         {!rightPanelOpen && <RightPanelDropZone />}
       </div>
       <PairRequestCards />
+      {remoteEnv && <RemoteRoutineDialogHost />}
+      {remoteEnv && <RemoteFolderPickerHost />}
       </DndContext>
     </VoiceCallProvider>
   )

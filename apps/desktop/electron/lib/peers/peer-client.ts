@@ -5,6 +5,7 @@ import { WebSocket } from 'ws'
 import { CompanionHttp } from '@orbit/companion-client'
 import type { ChatEvent, FolderInfo, SessionInfo } from '@shared/chat'
 import type { MediaEntry, MediaUsage } from '@shared/media'
+import type { MemoryEvent } from '@shared/memory'
 import type { PipelineEvent } from '@shared/pipeline'
 import type { RoutineEvent } from '@shared/routines'
 import {
@@ -273,6 +274,7 @@ class PeerConnection {
     // Only a full-control peer is sent these; the renderer applies them to the
     // routines/pipeline screens while this machine is the active environment.
     else if (payload.type === 'routines:event') hooks?.emit({ type: 'routines', peerId: this.peer.peerId, event: payload.event as RoutineEvent })
+    else if (payload.type === 'memory:event') hooks?.emit({ type: 'memory', peerId: this.peer.peerId, event: payload.event as MemoryEvent })
     else if (payload.type === 'pipeline:event') hooks?.emit({ type: 'pipeline', peerId: this.peer.peerId, event: payload.event as PipelineEvent })
   }
 
