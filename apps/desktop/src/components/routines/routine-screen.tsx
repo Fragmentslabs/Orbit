@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
-import type { Routine } from "@shared/routines"
+import { routineChatSessionId, type Routine } from "@shared/routines"
+import { remoteSessionId } from "@shared/peers"
+import { RemoteChatView } from "@/src/components/peers/remote-chat-view"
+import { usePeersStore } from "@/src/stores/peers-store"
 import { ChatView } from "@/src/components/chat-view"
 import { useStacked } from "@/src/hooks/use-stacked"
 import { routinesApi } from "@/src/lib/ipc"
@@ -24,6 +27,38 @@ const PANEL_COLUMN_PX = 880
  * panel only points at them (and at the day of each one).
  */
 export function RoutineScreen({ routine }: { routine: Routine }) {
+  const remote = usePeersStore((s) => s.env !== "local")
+  return remote ? <RemoteRoutineScreen routine={routine} /> : <LocalRoutineScreen routine={routine} />
+}
+
+/**
+ * The same screen for a routine of another desktop: its own chat (when it already has one
+ * there) takes the page and the details panel sits beside it. The chat's model and unread
+ * bookkeeping are that machine's business, so none of the local effects run here.
+ */
+function RemoteRoutineScreen({ routine }: { routine: Routine }) {
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const detailsOpen = useRoutinesStore((s) => s.detailsOpen)
+  const stacked = useStacked(root, PANEL_COLUMN_PX)
+  const peerId = usePeersStore((s) => s.env)
+  const chatId = remoteSessionId(peerId, routineChatSessionId(routine.id))
+  const exists = usePeersStore((s) => !!s.sessionsByPeer[s.env]?.some((x) => x.id === chatId))
+  const startScreen = <RoutineEmptyState routine={routine} />
+  return (
+    <div ref={setRoot} className="relative flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {exists ? (
+          <RemoteChatView sessionId={chatId} startScreen={startScreen} />
+        ) : (
+          <div className="flex w-full flex-col items-center pt-24">{startScreen}</div>
+        )}
+      </div>
+      {detailsOpen && <RoutineDetailsPanel routine={routine} overlaid={stacked} />}
+    </div>
+  )
+}
+
+function LocalRoutineScreen({ routine }: { routine: Routine }) {
   const { t } = useTranslation()
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const [chatId, setChatId] = useState<string | null>(null)

@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils"
 import { useStacked } from "@/src/hooks/use-stacked"
 import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { useSessionStore } from "@/src/stores/session-store"
 import { RoutineList, routineMatches } from "./my-routines"
 import { RoutineScreen } from "./routine-screen"
 import { RoutinesAgenda } from "./routines-agenda"
 import { RoutinesSummary } from "./routines-summary"
 
+import { useEnvSessions, useEnvSessionsReady } from "@/src/hooks/use-env-sessions"
 type RoutinesLayout = "list" | "agenda"
 /**
  * The summary column is fixed (372px, as the design); only when there is no room for it beside
@@ -45,8 +45,8 @@ export function RoutinesView() {
   const routines = useRoutinesStore((s) => s.routines)
   const runs = useRoutinesStore((s) => s.runs)
   const prune = useRoutinesStore((s) => s.prune)
-  const sessions = useSessionStore((s) => s.sessions)
-  const sessionsLoaded = useSessionStore((s) => s.initialized)
+  const sessions = useEnvSessions()
+  const sessionsLoaded = useEnvSessionsReady()
   const startCreation = useStartCreationChat()
 
   const [query, setQuery] = useState("")

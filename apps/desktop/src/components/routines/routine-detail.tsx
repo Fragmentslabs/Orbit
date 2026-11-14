@@ -36,7 +36,6 @@ import { routineStats } from "@/src/lib/routine-stats"
 import { useAgents } from "@/src/stores/agents-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { useSessionStore } from "@/src/stores/session-store"
 import { LastResult } from "./last-result"
 import { ScriptActivityCard } from "./script-activity"
 import { WebhookCard } from "./webhook-card"
@@ -46,6 +45,7 @@ import { describeWhen } from "./schedule"
 import { ModeBadges } from "./schedule-editor"
 import { useOpenRun } from "./use-open-run"
 
+import { useEnvSessionStatus, useEnvSessions } from "@/src/hooks/use-env-sessions"
 /**
  * Routine detail, in the side panel: a header with the actions and three tabs. The overview is
  * what the person comes for (the last answer, the numbers, the latest runs); the runs tab is the
@@ -74,7 +74,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
   const removeScript = useRoutinesStore((s) => s.removeScript)
   const startChat = useStartChatWith()
   const activity = useRoutinesStore((s) => s.activity[routine.id])
-  const sessions = useSessionStore((s) => s.sessions)
+  const sessions = useEnvSessions()
   const modelName = useProviderStore(
     (s) => s.catalog[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId,
   )
@@ -414,7 +414,7 @@ function RunRow({ session, run, steps }: { session: SessionInfo; run?: RoutineRu
   const { t, i18n } = useTranslation()
   // The live status comes from the session store — it is the same source as the
   // sidebar's spinner. `run` only has the final snapshot (tokens, cost, duration).
-  const sessionStatus = useSessionStore((s) => s.status[session.id])
+  const sessionStatus = useEnvSessionStatus(session.id)
   const running =
     sessionStatus === "submitted" ||
     sessionStatus === "streaming" ||
@@ -477,7 +477,7 @@ function RunRow({ session, run, steps }: { session: SessionInfo; run?: RoutineRu
 /** A step of a run (a worker's chat), nested under the run; it opens as a chat of its own. */
 function StepRow({ step, onOpen }: { step: SessionInfo; onOpen: (sessionId: string) => void }) {
   const { t } = useTranslation()
-  const status = useSessionStore((s) => s.status[step.id])
+  const status = useEnvSessionStatus(step.id)
   const busy = status === "submitted" || status === "streaming" || status === "fallback"
   return (
     <button

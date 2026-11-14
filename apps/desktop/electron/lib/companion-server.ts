@@ -72,6 +72,7 @@ import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
 import { computeAnalytics } from './analytics'
+import { summarizeWork } from './usage-summary'
 import {
   list as listMemories,
   update as updateMemory,
@@ -963,8 +964,19 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
       case 'analytics:summary': {
         const range = req.range ?? '7d'
-        const analytics = await computeAnalytics(range)
+        // The phone gets the compact summary. A desktop shows the same Usage page
+        // as the app, so it asks for the detailed one (and may filter by mode).
+        const analytics = await computeAnalytics(
+          range,
+          client.kind === 'desktop' ? { detailed: true, mode: req.mode } : undefined,
+        )
         sendResponse(ws, requestId, true, analytics)
+        break
+      }
+
+      case 'analytics:summarize': {
+        // The usage page's "what was done": runs on THIS machine's aux model.
+        sendResponse(ws, requestId, true, await summarizeWork(req.input))
         break
       }
 
@@ -1736,10 +1748,20 @@ export function forwardChatEvent(event: ChatEvent): void {
   }
 }
 
+/**
+ * Routines and the pipeline are part of what a phone controls — and of what a
+ * desktop paired with full control sees, since it shows the same screens. A
+ * view-only desktop never asks for them (its requests are refused), so it gets
+ * no events either.
+ */
+function receivesWorkEvents(client: { kind: string; grants?: PeerGrants }): boolean {
+  return client.kind === 'phone' || (client.kind === 'desktop' && client.grants?.control === true)
+}
+
 /** Relays a RoutineEvent to every authenticated companion. */
 export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'routines:event', event } as CompanionEvent))
   }
 }
@@ -1747,7 +1769,7 @@ export function forwardRoutineEvent(event: RoutineEvent): void {
 /** Relays a PipelineEvent to every authenticated companion. */
 export function forwardPipelineEvent(event: PipelineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'pipeline:event', event } as CompanionEvent))
   }
 }

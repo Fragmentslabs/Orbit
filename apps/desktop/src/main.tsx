@@ -6,6 +6,8 @@ import { AppCrash } from './components/app-crash'
 import './i18n'
 import './index.css'
 import { pipelineApi, routinesApi } from './lib/ipc'
+import { getActivePeer } from './lib/env-source'
+import { startEnvSync } from './stores/env-sync'
 import { usePipelineStore } from './stores/pipeline-store'
 import { useRoutinesStore } from './stores/routines-store'
 // Import effect: wires the per-chat mode sync with the mobile.
@@ -41,6 +43,14 @@ if (window.ipcRenderer) {
   // renderer mirrors the engine, so events must be applied to the store even
   // with the view closed — otherwise changes coming from another window or from
   // the mobile app are lost and the board opens with stale data forever.
-  pipelineApi.onEvent((event) => usePipelineStore.getState().applyEvent(event))
-  routinesApi.onEvent((event) => useRoutinesStore.getState().applyEvent(event))
+  // While another desktop is on screen these stores hold ITS data: this machine's own
+  // events are dropped (they would paint local routines over the remote list) and the
+  // remote machine's come from env-sync. Going back reloads the local data.
+  pipelineApi.onEvent((event) => {
+    if (!getActivePeer()) usePipelineStore.getState().applyEvent(event)
+  })
+  routinesApi.onEvent((event) => {
+    if (!getActivePeer()) useRoutinesStore.getState().applyEvent(event)
+  })
+  startEnvSync()
 }

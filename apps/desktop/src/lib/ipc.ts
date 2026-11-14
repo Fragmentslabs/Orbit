@@ -1,4 +1,5 @@
 import type { MotionPropsInfo } from "./motion-props-form"
+import { getActivePeer, namespaced } from "./env-source"
 import type {
   Catalog,
   CatalogProvider,
@@ -633,7 +634,7 @@ export const mcpApi = {
     }>,
 }
 
-export const analyticsApi = {
+const localAnalyticsApi = {
   summary: (range: AnalyticsRange, mode?: "chat" | "code") =>
     window.ipcRenderer.invoke("analytics:summary", range, mode) as Promise<AnalyticsSummary>,
   /** The auxiliary model summarizes what was done in a project (or all), on a day or in the period. */
@@ -672,7 +673,7 @@ export const worktreeApi = {
 }
 
 /** Pipeline mode — project/pipeline/task board (orbit-data/pipeline). */
-export const pipelineApi = {
+const localPipelineApi = {
   load: () =>
     window.ipcRenderer.invoke("pipeline:load") as Promise<{
       projects: Project[]
@@ -787,7 +788,7 @@ export interface NewPipelineInput {
 }
 
 /** Routines — scheduled chats of the chat and code modes (orbit-data/routines). */
-export const routinesApi = {
+const localRoutinesApi = {
   load: () =>
     window.ipcRenderer.invoke("routines:load") as Promise<{ routines: Routine[]; runs: RoutineRun[]; activities: ScriptActivity[] }>,
   /** Runs a script once for the screen; nothing is kept or fired. */
@@ -1758,5 +1759,229 @@ export const peersApi = {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("peers:event", (event) => listener(event as PeersEvent))
     return () => window.ipcRenderer.off("peers:event", wrapper)
+  },
+}
+
+
+// ─── Another desktop as the data source ─────────────────────────────────────
+//
+// Routines, the pipeline and Usage are the SAME screens on every machine: when
+// the environment selector points at a paired desktop, these three APIs answer
+// from that machine (over the pinned connection) instead of from this one.
+// Whatever the other machine does not offer to a desktop is refused there; the
+// calls with no remote counterpart simply stay local-only and say so.
+
+function peerAsk<T>(peerId: string, payload: { type: string; [key: string]: unknown }): Promise<T> {
+  return peersApi.request<T>(peerId, payload)
+}
+
+const unsupportedRemote = (what: string) => Promise.reject(new Error(`remote_unsupported:${what}`))
+
+/** Run sessions of a peer arrive with the peer's own ids: namespace them like every other remote chat. */
+function remoteRun(peerId: string, run: RoutineRun): RoutineRun {
+  return { ...run, sessionId: namespaced(peerId, run.sessionId) }
+}
+
+export const routinesApi: typeof localRoutinesApi = {
+  ...localRoutinesApi,
+  load: async () => {
+    const peerId = getActivePeer()
+    if (!peerId) return localRoutinesApi.load()
+    const data = await peerAsk<{ routines?: Routine[]; runs?: RoutineRun[]; activities?: ScriptActivity[] }>(peerId, { type: "routines:list" })
+    return {
+      routines: data?.routines ?? [],
+      runs: (data?.runs ?? []).map((run) => remoteRun(peerId, run)),
+      activities: data?.activities ?? [],
+    }
+  },
+  create: async (input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Routine>(peerId, { type: "routines:create", input }) : localRoutinesApi.create(input)
+  },
+  update: async (id, patch) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Routine | null>(peerId, { type: "routines:update", id, patch }) : localRoutinesApi.update(id, patch)
+  },
+  remove: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localRoutinesApi.remove(id)
+    await peerAsk(peerId, { type: "routines:delete", id })
+  },
+  runNow: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localRoutinesApi.runNow(id)
+    const result = await peerAsk<string | { sessionId?: string } | null>(peerId, { type: "routines:run", id })
+    const sessionId = typeof result === "string" ? result : (result?.sessionId ?? null)
+    return sessionId ? namespaced(peerId, sessionId) : null
+  },
+  pruneRuns: async (sessionIds) => {
+    // The other machine prunes its own metrics; nothing local to clean.
+    return getActivePeer() ? 0 : localRoutinesApi.pruneRuns(sessionIds)
+  },
+  pending: async () => (getActivePeer() ? [] : localRoutinesApi.pending()),
+  listSecrets: async () => (getActivePeer() ? [] : localRoutinesApi.listSecrets()),
+  webhook: async (id) => (getActivePeer() ? null : localRoutinesApi.webhook(id)),
+  chatSession: async (id) => (getActivePeer() ? null : localRoutinesApi.chatSession(id)),
+  folder: async (id) => (getActivePeer() ? null : localRoutinesApi.folder(id)),
+  openFolder: async (id) => (getActivePeer() ? null : localRoutinesApi.openFolder(id)),
+  approveScript: (routineId, scriptId) => (getActivePeer() ? unsupportedRemote("routines:approveScript") : localRoutinesApi.approveScript(routineId, scriptId)),
+  removeScript: (routineId, scriptId) => (getActivePeer() ? unsupportedRemote("routines:removeScript") : localRoutinesApi.removeScript(routineId, scriptId)),
+}
+
+type PipelineLoad = Awaited<ReturnType<typeof localPipelineApi.load>>
+
+export const pipelineApi: typeof localPipelineApi = {
+  ...localPipelineApi,
+  load: async () => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.load()
+    const data = await peerAsk<PipelineLoad>(peerId, { type: "pipeline:list" })
+    return { projects: data?.projects ?? [], pipelines: data?.pipelines ?? [], tasksPerPipeline: data?.tasksPerPipeline ?? {} }
+  },
+  templates: async () => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.templates()
+    const data = await peerAsk<{ templates?: PhaseTemplate[] }>(peerId, { type: "pipeline:list" })
+    return data?.templates ?? []
+  },
+  saveTemplate: async (template) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.saveTemplate(template)
+    return (await peerAsk<PhaseTemplate[]>(peerId, { type: "pipeline:save-template", template })) ?? []
+  },
+  removeTemplate: (id) => (getActivePeer() ? unsupportedRemote("pipeline:removeTemplate") : localPipelineApi.removeTemplate(id)),
+  createProject: async (name, folders) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Project>(peerId, { type: "pipeline:create-project", name, folders }) : localPipelineApi.createProject(name, folders)
+  },
+  updateProject: async (id, patch) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Project | null>(peerId, { type: "pipeline:update-project", id, patch }) : localPipelineApi.updateProject(id, patch)
+  },
+  removeProject: (id) => (getActivePeer() ? unsupportedRemote("pipeline:removeProject") : localPipelineApi.removeProject(id)),
+  create: async (input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Pipeline>(peerId, { type: "pipeline:create", input }) : localPipelineApi.create(input)
+  },
+  update: async (id, patch) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Pipeline | null>(peerId, { type: "pipeline:update", id, patch }) : localPipelineApi.update(id, patch)
+  },
+  remove: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.remove(id)
+    await peerAsk(peerId, { type: "pipeline:delete", id })
+  },
+  createTask: async (input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Task>(peerId, { type: "pipeline:create-task", input }) : localPipelineApi.createTask(input)
+  },
+  updateTask: async (pipelineId, taskId, patch) => {
+    const peerId = getActivePeer()
+    return peerId
+      ? peerAsk<Task | null>(peerId, { type: "pipeline:update-task", pipelineId, taskId, patch })
+      : localPipelineApi.updateTask(pipelineId, taskId, patch)
+  },
+  removeTask: async (pipelineId, taskId) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.removeTask(pipelineId, taskId)
+    await peerAsk(peerId, { type: "pipeline:delete-task", pipelineId, taskId })
+  },
+  startTask: async (pipelineId, taskId, phase) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.startTask(pipelineId, taskId, phase)
+    await peerAsk(peerId, { type: "pipeline:start-task", pipelineId, taskId, phase })
+  },
+  pauseTask: async (pipelineId, taskId) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.pauseTask(pipelineId, taskId)
+    await peerAsk(peerId, { type: "pipeline:pause-task", pipelineId, taskId })
+  },
+  resumeTask: async (pipelineId, taskId, instruction) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.resumeTask(pipelineId, taskId, instruction)
+    await peerAsk(peerId, { type: "pipeline:resume-task", pipelineId, taskId })
+  },
+  returnTask: (pipelineId, taskId, text, phase) =>
+    getActivePeer() ? unsupportedRemote("pipeline:returnTask") : localPipelineApi.returnTask(pipelineId, taskId, text, phase),
+  toggleQueue: async (pipelineId, enabled) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.toggleQueue(pipelineId, enabled)
+    return (await peerAsk<boolean | undefined>(peerId, { type: "pipeline:toggle-queue", pipelineId, enabled })) ?? enabled
+  },
+  report: (pipelineId) => (getActivePeer() ? unsupportedRemote("pipeline:report") : localPipelineApi.report(pipelineId)),
+  hasGit: async (folder) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<boolean>(peerId, { type: "pipeline:has-git", folder }) : localPipelineApi.hasGit(folder)
+  },
+  planTasks: async (pipelineId, request) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<PlannedTask[]>(peerId, { type: "pipeline:plan-tasks", pipelineId, request }) : localPipelineApi.planTasks(pipelineId, request)
+  },
+  createPlanned: async (pipelineId, tasks) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Task[]>(peerId, { type: "pipeline:create-planned", pipelineId, tasks }) : localPipelineApi.createPlanned(pipelineId, tasks)
+  },
+  deliveries: async (pipelineId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Delivery[]>(peerId, { type: "pipeline:deliveries", pipelineId }) : localPipelineApi.deliveries(pipelineId)
+  },
+  integration: async (pipelineId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<PipelineIntegrationStatus | null>(peerId, { type: "pipeline:integration", pipelineId }) : localPipelineApi.integration(pipelineId)
+  },
+  destinations: async (pipelineId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<{ branches: string[]; default?: string }>(peerId, { type: "pipeline:destinations", pipelineId }) : localPipelineApi.destinations(pipelineId)
+  },
+  merge: async (pipelineId, destination) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<MergeOutcome>(peerId, { type: "pipeline:merge", pipelineId, destination }) : localPipelineApi.merge(pipelineId, destination)
+  },
+  commitIntegration: async (pipelineId) => {
+    const peerId = getActivePeer()
+    return peerId
+      ? peerAsk<{ ok: boolean; hash?: string; error?: string }>(peerId, { type: "pipeline:commit-integration", pipelineId })
+      : localPipelineApi.commitIntegration(pipelineId)
+  },
+  retryIntegration: async (pipelineId, taskId) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.retryIntegration(pipelineId, taskId)
+    await peerAsk(peerId, { type: "pipeline:retry-integration", pipelineId, taskId })
+  },
+  archiveCompleted: async (pipelineId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Delivery | null>(peerId, { type: "pipeline:archive-completed", pipelineId }) : localPipelineApi.archiveCompleted(pipelineId)
+  },
+  deleteDelivery: async (pipelineId, deliveryId) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localPipelineApi.deleteDelivery(pipelineId, deliveryId)
+    await peerAsk(peerId, { type: "pipeline:delete-delivery", pipelineId, deliveryId })
+  },
+  reopenTask: async (pipelineId, taskId) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Task>(peerId, { type: "pipeline:reopen-task", pipelineId, taskId }) : localPipelineApi.reopenTask(pipelineId, taskId)
+  },
+  taskDiff: async (pipelineId, taskId) => {
+    const peerId = getActivePeer()
+    return peerId
+      ? peerAsk<{ files: string[]; patch: string } | null>(peerId, { type: "pipeline:task-diff", pipelineId, taskId })
+      : localPipelineApi.taskDiff(pipelineId, taskId)
+  },
+  removeTaskImage: async (pipelineId, taskId, url) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Task | null>(peerId, { type: "pipeline:remove-task-image", pipelineId, taskId, url }) : localPipelineApi.removeTaskImage(pipelineId, taskId, url)
+  },
+}
+
+export const analyticsApi: typeof localAnalyticsApi = {
+  ...localAnalyticsApi,
+  summary: async (range, mode) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<AnalyticsSummary>(peerId, { type: "analytics:summary", range, mode }) : localAnalyticsApi.summary(range, mode)
+  },
+  summarize: async (input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<UsageSummaryResponse>(peerId, { type: "analytics:summarize", input }) : localAnalyticsApi.summarize(input)
   },
 }

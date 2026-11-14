@@ -1,6 +1,22 @@
 # Remote desktop control
 
-**Status:** plan, not implemented.
+**Status:** partly implemented. Phase 0 (full control), the generic `peers:request` bridge and the sidebar,
+new-chat screen, routines, pipeline and usage in a remote environment are in. Still open: the media gallery
+as a source, the footer indicator, the audit log and the confirmation gate.
+
+What a remote environment does today (`apps/desktop/src/lib/env-source.ts`, `src/stores/env-sync.ts`):
+
+- `ipc.ts` answers `routinesApi`, `pipelineApi` and `analyticsApi` from the active desktop when one is picked
+  (otherwise from this machine); `RoutinesView`, `PipelineBoard` and `UsageView` are the same components.
+- Switching environment empties the routines/pipeline stores and the screens load again; events follow the
+  same rule (the peer's `routines:event`/`pipeline:event` reach a full-control desktop, this machine's own
+  are dropped while another is on screen).
+- The sidebar mirrors the local one (folders with nested chats, pinned, recent, archived, sub-chats,
+  nav buttons); the new-chat screen follows the mode picked in the sidebar and creates the chat on the
+  other machine with the first message. There is no "remote environment" banner.
+- Not offered remotely: memories, tools, fragments, creating a routine or a pipeline (they need the other
+  machine's models and folders), scripts/secrets of a routine, task "return with comment", the pipeline
+  report, and choosing the project folder of a new code chat (a message from a desktop keeps only the text).
 **Supersedes:** the read-only model described in `multi-desktop-peers.md`.
 **Premise:** connecting to another Orbit is remote access, not a viewer. The data stays on the machine that owns it and the paired client controls it — exactly the model the mobile app already uses.
 

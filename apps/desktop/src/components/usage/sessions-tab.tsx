@@ -10,19 +10,24 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { Card, EmptyNote } from "./usage-ui"
 import { formatDayLabel, formatDuration, projectName } from "./usage-utils"
 
+import { useEnvSessions } from "@/src/hooks/use-env-sessions"
+import { usePeersStore } from "@/src/stores/peers-store"
 const PAGE = 40
 
 /** Opens the conversation of a history entry — in the mode it was born in. */
 export function useOpenSession() {
   const { mode, setMode, setView } = useWorkspace()
-  const sessions = useSessionStore((s) => s.sessions)
+  const sessions = useEnvSessions()
   const selectSession = useSessionStore((s) => s.selectSession)
+  const remote = usePeersStore((s) => s.env !== "local")
+  const openRemote = usePeersStore((s) => s.openSession)
   return (id: string): boolean => {
     const session = sessions.find((s) => s.id === id)
     if (!session) return false
     if (session.mode !== mode) setMode(session.mode)
     setView("chat")
-    void selectSession(session.mode, session.id)
+    if (remote) openRemote(session.id)
+    else void selectSession(session.mode, session.id)
     return true
   }
 }
@@ -42,7 +47,7 @@ export function SessionList({ sessions, data, compact, showDay }: {
   const { t, i18n } = useTranslation()
   const locale = i18n.language
   const open = useOpenSession()
-  const existing = useSessionStore((s) => s.sessions)
+  const existing = useEnvSessions()
   const alive = useMemo(() => new Set(existing.map((s) => s.id)), [existing])
 
   if (sessions.length === 0) return <p className="px-4 pb-4 text-xs text-muted-foreground">{t("usage.noData")}</p>

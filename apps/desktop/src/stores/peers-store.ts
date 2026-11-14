@@ -45,6 +45,10 @@ interface PeersState {
   setConnectOpen: (open: boolean) => void
   setEnv: (env: EnvId) => void
   openSession: (sessionId: string) => void
+  /** Folder (of the active desktop) where the next new chat is born — the "+" of a folder row. */
+  homeFolderId: string | null
+  /** Back to the "new chat" screen of a desktop (no chat open), optionally inside a folder. */
+  goHome: (peerId: string, folderId?: string | null) => void
   loadMessages: (sessionId: string, force?: boolean) => Promise<void>
   send: (sessionId: string, text: string) => Promise<void>
   abort: (sessionId: string) => Promise<void>
@@ -66,6 +70,7 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   loading: {},
   errors: {},
   sending: {},
+  homeFolderId: null,
   connectOpen: false,
   connectTab: "phone",
   openConnect: (tab) => set((s) => ({ connectOpen: true, connectTab: tab ?? s.connectTab })),
@@ -84,9 +89,16 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   openSession: (sessionId) => {
     const parsed = parseRemoteSessionId(sessionId)
     if (!parsed) return
-    set((s) => ({ env: parsed.peerId, activeByPeer: { ...s.activeByPeer, [parsed.peerId]: sessionId } }))
+    set((s) => ({
+      env: parsed.peerId,
+      homeFolderId: null,
+      activeByPeer: { ...s.activeByPeer, [parsed.peerId]: sessionId },
+    }))
     void get().loadMessages(sessionId)
   },
+
+  goHome: (peerId, folderId = null) =>
+    set((s) => ({ env: peerId, homeFolderId: folderId, activeByPeer: { ...s.activeByPeer, [peerId]: null } })),
 
   loadMessages: async (sessionId, force = false) => {
     if (!force && (get().messages[sessionId] || get().loading[sessionId])) return

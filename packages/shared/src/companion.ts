@@ -6,7 +6,7 @@
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage, OrchestrationSettings } from './chat'
 import type { VoiceEngineId, VoiceEngineStatus } from './voice'
-import type { AnalyticsRange } from './analytics'
+import type { AnalyticsRange, UsageSummaryRequest } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type {
   NewPipelineInput,
@@ -395,6 +395,14 @@ export interface GetAnalyticsRequest {
   type: 'analytics:summary'
   /** Presets or a custom interval (type: 'custom', from/to in ms). */
   range?: AnalyticsRange
+  /** Desktops only: restrict the usage to one workspace mode. */
+  mode?: 'chat' | 'code'
+}
+
+/** Desktops only: "what was done" of a project/day, written by the aux model on THIS machine. */
+export interface SummarizeAnalyticsRequest {
+  type: 'analytics:summarize'
+  input: UsageSummaryRequest
 }
 
 export interface GetStatusRequest {
@@ -850,6 +858,7 @@ export type CompanionRequest =
   | SetWorkerConfigRequest
   | GetCatalogRequest
   | GetAnalyticsRequest
+  | SummarizeAnalyticsRequest
   | GetStatusRequest
   | RenameSessionRequest
   | PinSessionRequest
