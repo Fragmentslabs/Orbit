@@ -36,6 +36,11 @@ const useRemoteProviders = create<RemoteProvidersState>((set, get) => ({
   },
 }))
 
+/** Reads that machine's providers again (it came back online; its models may have changed). */
+export function refreshRemoteProviders(peerId: string): Promise<void> {
+  return useRemoteProviders.getState().load(peerId, true)
+}
+
 const NO_PROVIDERS: string[] = []
 const NO_CATALOG: Catalog = {}
 

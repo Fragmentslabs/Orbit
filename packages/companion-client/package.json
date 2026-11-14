@@ -10,15 +10,18 @@
     ".": "./src/index.ts",
     "./websocket": "./src/websocket-client.ts",
     "./http": "./src/http-client.ts",
-    "./qr": "./src/qr-code.ts"
+    "./qr": "./src/qr-code.ts",
+    "./core": "./src/connection-core.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@orbit/shared": "0.1.4"
   },
   "devDependencies": {
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "vitest": "^2.1.9"
   }
 }

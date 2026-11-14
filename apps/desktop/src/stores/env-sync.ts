@@ -2,6 +2,7 @@ import type { PipelineEvent } from "@shared/pipeline"
 import type { RoutineEvent } from "@shared/routines"
 import { getActivePeer, namespaced, setActivePeer } from "@/src/lib/env-source"
 import { peersApi } from "@/src/lib/ipc"
+import { refreshRemoteProviders } from "@/src/hooks/use-env-providers"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { usePeersStore } from "@/src/stores/peers-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
@@ -55,6 +56,22 @@ function applyEnv(env: string): void {
   resetWorkStores()
 }
 
+function peerOnline(state: ReturnType<typeof usePeersStore.getState>, peerId: string): boolean {
+  return state.snapshot?.peers.find((p) => p.peerId === peerId)?.online === true
+}
+
+/**
+ * The machine on screen came back after being unreachable: what it changed meanwhile
+ * (events are not replayed) is read again, in place — the screens keep showing the old
+ * data until the new arrives. A store nobody opened yet has nothing stale to refresh.
+ */
+function refreshAfterReconnect(peerId: string): void {
+  if (useRoutinesStore.getState().loaded) void useRoutinesStore.getState().load().catch(() => {})
+  if (usePipelineStore.getState().loaded) void usePipelineStore.getState().load().catch(() => {})
+  if (useMemoryStore.getState().initialized) void useMemoryStore.getState().refresh().catch(() => {})
+  void refreshRemoteProviders(peerId)
+}
+
 function remoteRoutineEvent(peerId: string, event: RoutineEvent): RoutineEvent {
   return event.type === "run" ? { ...event, run: { ...event.run, sessionId: namespaced(peerId, event.run.sessionId) } } : event
 }
@@ -64,7 +81,12 @@ export function startEnvSync(): void {
   started = true
   applyEnv(usePeersStore.getState().env)
   usePeersStore.subscribe((state, prev) => {
-    if (state.env !== prev.env) applyEnv(state.env)
+    if (state.env !== prev.env) {
+      applyEnv(state.env)
+      return
+    }
+    // Same machine, offline → online: reload what went stale.
+    if (state.env !== "local" && !peerOnline(prev, state.env) && peerOnline(state, state.env)) refreshAfterReconnect(state.env)
   })
   peersApi.onEvent((event) => {
     if (event.type === "routines") {
