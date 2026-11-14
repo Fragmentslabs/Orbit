@@ -12,6 +12,7 @@ import {
   type PeersSnapshot,
   type RemoteFileContent,
   type RemoteFileTree,
+  type RemoteSendExtras,
   type RemotePieceKind,
   type RemotePieceRef,
   type RemotePieceResolved,
@@ -49,6 +50,7 @@ import { seenPeers, setDiscoverySelf, startAdvertising, startBrowsing, stopAdver
 import { indexRemoteIds, peerForAsset, rememberRemoteId } from './remote-index'
 import { isRemoteAsset, remoteMotionProps } from './remote-assets'
 import { sanitizePeerName } from './pairing'
+import { cleanControlSend } from './send-options'
 import { watchWake } from './peer-wake'
 
 /**
@@ -204,16 +206,17 @@ export function registerPeersIpc(): void {
     const r = remote(sessionId)
     return peerRequest(r.peerId, { type: 'session:state', sessionId: r.sessionId })
   })
-  ipcMain.handle('peers:send', async (_e, sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) => {
+  ipcMain.handle('peers:send', async (_e, sessionId: string, text: string, opts?: RemoteSendExtras) => {
     const r = remote(sessionId)
     const grants = peerGrants(r.peerId)
     if (!grants.control && !grants.send) throw new Error('forbidden')
-    // The working folders of a code chat belong to a peer with full control; the other
-    // machine checks the same thing again before honoring them.
-    const folders = grants.control && typeof opts?.directory === 'string' && opts.directory
-      ? { directory: opts.directory, ...(Array.isArray(opts.extraDirectories) ? { extraDirectories: opts.extraDirectories.filter((d) => typeof d === 'string') } : {}) }
-      : {}
-    return peerRequest(r.peerId, { type: 'messages:send', sessionId: r.sessionId, text: String(text ?? ''), ...folders })
+    // Folders, model, modes, attachments… belong to a peer with full control; the other
+    // machine runs the same cleaning again before honoring any of it.
+    const base = { type: 'messages:send' as const, sessionId: r.sessionId, text: String(text ?? '') }
+    if (!grants.control) return peerRequest(r.peerId, base)
+    const clean = cleanControlSend({ ...base, ...(opts ?? {}) })
+    if (!clean) throw new Error('invalid')
+    return peerRequest(r.peerId, { ...clean })
   })
   ipcMain.handle('peers:abort', async (_e, sessionId: string) => {
     const r = remote(sessionId)

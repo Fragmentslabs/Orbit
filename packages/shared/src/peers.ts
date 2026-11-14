@@ -11,7 +11,7 @@
  * certificates, and after pairing each side pins the other's certificate.
  */
 
-import type { CompanionEvent } from './companion'
+import type { CompanionEvent, SendMessageRequest } from './companion'
 import type { ChatEvent, FolderInfo, SessionInfo } from './chat'
 import type { MemoryEvent } from './memory'
 import type { PipelineEvent } from './pipeline'
@@ -212,6 +212,12 @@ export const PEER_SYNC_TYPES: ReadonlySet<string> = new Set<PeerSyncEvent['type'
   'notify:pending-ask',
   'notify:new-message',
 ])
+
+/** What a send to another desktop may carry besides the text (full control only). */
+export type RemoteSendExtras = Pick<
+  SendMessageRequest,
+  'directory' | 'extraDirectories' | 'providerId' | 'modelId' | 'options' | 'files' | 'workerModel' | 'visionModel' | 'loopConfig'
+>
 
 /** main → renderer. Session ids inside are already namespaced. */
 export type PeersEvent =

@@ -11,7 +11,7 @@ import { getSlides, slidesIdForName, slidesIdForPath } from '../slides/slides-st
 import { documentInfo, readArtifact, readDocumentSource } from '../media'
 import { getSessionModelsCache } from '../companion-http'
 import { listDirectory, readProjectFile } from './fs-access'
-import { cleanDirectories } from './send-folders'
+import { cleanControlSend } from './send-options'
 
 /**
  * The requests only a desktop peer makes (the allowlist in permissions.ts already
@@ -120,28 +120,34 @@ export async function handleDesktopOnlyRequest(req: Req): Promise<unknown> {
 const MAX_TEXT = 100_000
 
 /**
- * A message from another desktop keeps the text. Permission mode, models, loop,
- * orchestration and attachments are this machine's decisions: the turn runs with the
- * model the chat already uses here and under this machine's own permission mode.
- * The working folders of a code chat are the exception, and only for a desktop paired
- * with full control — it picks them from this machine's own folders, as the phone does.
+ * A message from another desktop. Paired with full control it carries what the phone's does
+ * (model, input modes, thinking, permission mode, attachments — see send-options.ts), and the
+ * chat's own model fills in when none came. Without `control` it keeps only the text: the
+ * turn runs with the model the chat already uses here and under this machine's own
+ * permission mode.
  */
 export async function sanitizeDesktopSend(
   req: SendMessageRequest,
   grants?: { control?: boolean },
 ): Promise<SendMessageRequest | null> {
+  if (grants?.control) {
+    const clean = cleanControlSend(req)
+    if (!clean) return null
+    if (clean.providerId && clean.modelId) return clean
+    const fallback = await chatModel(clean.sessionId)
+    return fallback ? { ...clean, ...fallback } : clean
+  }
   const sessionId = str(req.sessionId, 200)
   const text = typeof req.text === 'string' ? req.text.slice(0, MAX_TEXT) : ''
   if (!sessionId || !text.trim()) return null
-  const model =
+  const model = await chatModel(sessionId)
+  return { type: 'messages:send', sessionId, text, ...(model ?? {}) }
+}
+
+async function chatModel(sessionId: string): Promise<{ providerId: string; modelId: string } | undefined> {
+  return (
     getSessionModelsCache()[sessionId] ??
     (await readJson<{ providerId: string; modelId: string }>(StorageKeys.selectedModel)) ??
     undefined
-  return {
-    type: 'messages:send',
-    sessionId,
-    text,
-    ...(grants?.control ? cleanDirectories(req) : {}),
-    ...(model ? { providerId: model.providerId, modelId: model.modelId } : {}),
-  }
+  )
 }
