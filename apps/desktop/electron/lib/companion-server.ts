@@ -105,6 +105,7 @@ import { tNow } from './i18n'
 import { normalizeGrants, type GrantedDevice, type PeerGrants } from '@shared/peers'
 import { normalizeFingerprint } from './peers/pairing'
 import { desktopMayRequest, isDesktopOnlyRequest } from './peers/permissions'
+import { receivesMemoryEvents, receivesNotifications, receivesSyncEvents, receivesWorkEvents } from './client-capabilities'
 import { handleDesktopOnlyRequest, sanitizeDesktopSend } from './peers/desktop-requests'
 
 const execFileAsync = promisify(execFile)
@@ -1781,16 +1782,6 @@ export function forwardChatEvent(event: ChatEvent): void {
   }
 }
 
-/**
- * Routines and the pipeline are part of what a phone controls — and of what a
- * desktop paired with full control sees, since it shows the same screens. A
- * view-only desktop never asks for them (its requests are refused), so it gets
- * no events either.
- */
-function receivesWorkEvents(client: { kind: string; grants?: PeerGrants }): boolean {
-  return client.kind === 'phone' || (client.kind === 'desktop' && client.grants?.control === true)
-}
-
 /** Relays a RoutineEvent to every authenticated companion. */
 export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
@@ -1802,7 +1793,7 @@ export function forwardRoutineEvent(event: RoutineEvent): void {
 /** Memory changes, for the desktops that show the Memories page of this machine. */
 export function forwardMemoryEvent(event: MemoryEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'desktop' || client.grants?.control !== true) continue
+    if (!client.authenticated || !receivesMemoryEvents(client)) continue
     if (client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'memory:event', event } as CompanionEvent))
   }
@@ -1822,7 +1813,7 @@ export function broadcastSessionModels(
   overrides: Record<string, { providerId: string; modelId: string }>,
 ): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:model-change', overrides } as unknown as CompanionEvent))
   }
 }
@@ -1831,7 +1822,7 @@ export function broadcastSessionModels(
  *  without it the phone would open without the rotations created on the desktop. */
 export function broadcastRotationConfig(config: RotationConfig): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'rotation:change', config } satisfies RotationChangeEvent))
   }
 }
@@ -1841,7 +1832,7 @@ export function broadcastRotationConfig(config: RotationConfig): void {
  *  brain) — without this the phone opens every chat on its own defaults. */
 export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
   }
 }
@@ -1850,7 +1841,7 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
  *  it keeps the same selection open on the phone as on the desktop. */
 export function broadcastSessionTools(overrides: SessionToolsOverrides): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:tools-change', overrides } satisfies SessionToolsChangeEvent))
   }
 }
@@ -1859,7 +1850,7 @@ export function broadcastSessionTools(overrides: SessionToolsOverrides): void {
  *  companions — without it the phone would open every chat on the device defaults. */
 export function broadcastSessionPrefs(prefs: SessionPrefsSnapshot): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:prefs-change', prefs } satisfies SessionPrefsChangeEvent))
   }
 }
@@ -1879,7 +1870,7 @@ export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
   }
   messageQueueCache = leve
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'queue:change', queues: leve } satisfies MessageQueueChangeEvent))
   }
 }
@@ -1888,7 +1879,7 @@ export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
  *  the mobile opens every chat with its own default thinking. */
 export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'reasoning:change', prefs } satisfies ReasoningPrefsChangeEvent))
   }
 }
@@ -1897,7 +1888,7 @@ export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
  *  vision) — global, not per chat. */
 export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'worker-config:change', config } satisfies WorkerConfigChangeEvent))
   }
 }
@@ -1917,7 +1908,7 @@ export function broadcastAppPreferences(prefs: AppPreferences): void {
   setGlobalMode(prefs.permissionMode)
   const payload = wrap({ type: 'prefs:change', prefs } satisfies AppPreferencesChangeEvent)
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(payload)
   }
 }
@@ -1942,7 +1933,7 @@ export function notifyCompanionAsk(
   }
   const payload = wrap(notification)
   for (const client of clients) {
-    if (client.authenticated && client.kind === 'phone' && client.ws.readyState === WebSocket.OPEN) {
+    if (client.authenticated && receivesNotifications(client) && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload)
     }
   }
@@ -1964,7 +1955,7 @@ export function notifyCompanionMessage(
   }
   const payload = wrap(notification)
   for (const client of clients) {
-    if (client.authenticated && client.kind === 'phone' && client.ws.readyState === WebSocket.OPEN) {
+    if (client.authenticated && receivesNotifications(client) && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload)
     }
   }

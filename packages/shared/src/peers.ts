@@ -11,6 +11,7 @@
  * certificates, and after pairing each side pins the other's certificate.
  */
 
+import type { CompanionEvent } from './companion'
 import type { ChatEvent, FolderInfo, SessionInfo } from './chat'
 import type { MemoryEvent } from './memory'
 import type { PipelineEvent } from './pipeline'
@@ -173,6 +174,45 @@ export interface PeersSnapshot {
   serverError: string | null
 }
 
+/**
+ * Settings mirrors and notifications a full-control peer pushes (the same ones the
+ * phone gets): models, modes, tools, prefs, rotation, reasoning, workers, queue,
+ * app preferences and pending-ask / new-message notices. Session ids inside are
+ * the other machine's own — the renderer namespaces them when it applies them.
+ */
+export type PeerSyncEvent = Extract<
+  CompanionEvent,
+  {
+    type:
+      | 'session:model-change'
+      | 'session:mode-change'
+      | 'session:tools-change'
+      | 'session:prefs-change'
+      | 'rotation:change'
+      | 'reasoning:change'
+      | 'worker-config:change'
+      | 'queue:change'
+      | 'prefs:change'
+      | 'notify:pending-ask'
+      | 'notify:new-message'
+  }
+>
+
+/** Wire types of {@link PeerSyncEvent}, for the connection to recognise them. */
+export const PEER_SYNC_TYPES: ReadonlySet<string> = new Set<PeerSyncEvent['type']>([
+  'session:model-change',
+  'session:mode-change',
+  'session:tools-change',
+  'session:prefs-change',
+  'rotation:change',
+  'reasoning:change',
+  'worker-config:change',
+  'queue:change',
+  'prefs:change',
+  'notify:pending-ask',
+  'notify:new-message',
+])
+
 /** main → renderer. Session ids inside are already namespaced. */
 export type PeersEvent =
   | { type: 'snapshot'; snapshot: PeersSnapshot }
@@ -184,6 +224,7 @@ export type PeersEvent =
   | { type: 'routines'; peerId: string; event: RoutineEvent }
   | { type: 'pipeline'; peerId: string; event: PipelineEvent }
   | { type: 'memory'; peerId: string; event: MemoryEvent }
+  | { type: 'sync'; peerId: string; event: PeerSyncEvent }
 
 // ─── Wire protocol (peer server) ─────────────────────────────────────────────
 

@@ -3,7 +3,7 @@ import type { ChatEvent, FolderInfo, SessionInfo } from '@shared/chat'
 import type { MemoryEvent } from '@shared/memory'
 import type { PipelineEvent } from '@shared/pipeline'
 import type { RoutineEvent } from '@shared/routines'
-import { normalizeGrants, remoteSessionId, type PeerRunningItem } from '@shared/peers'
+import { normalizeGrants, PEER_SYNC_TYPES, remoteSessionId, type PeerRunningItem, type PeerSyncEvent } from '@shared/peers'
 import { sanitizePeerName } from './pairing'
 import { indexRemoteIds } from './remote-index'
 import { openPeerSocket } from './peer-socket'
@@ -194,6 +194,8 @@ export class PeerConnection {
     else if (payload.type === 'routines:event') ctx.hooks?.emit({ type: 'routines', peerId: this.peer.peerId, event: payload.event as RoutineEvent })
     else if (payload.type === 'memory:event') ctx.hooks?.emit({ type: 'memory', peerId: this.peer.peerId, event: payload.event as MemoryEvent })
     else if (payload.type === 'pipeline:event') ctx.hooks?.emit({ type: 'pipeline', peerId: this.peer.peerId, event: payload.event as PipelineEvent })
+    // Settings mirrors and notices: sent by the server under the same policy as the phone's.
+    else if (PEER_SYNC_TYPES.has(payload.type)) ctx.hooks?.emit({ type: 'sync', peerId: this.peer.peerId, event: payload as unknown as PeerSyncEvent })
   }
   private onChatEvent(event: ChatEvent): void {
     if (!event || typeof event !== 'object') return
