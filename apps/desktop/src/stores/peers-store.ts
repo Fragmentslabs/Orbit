@@ -1,10 +1,12 @@
 import { create } from "zustand"
-import type { ChatEvent, ChatMessage, ChatStatus, FolderInfo, SessionInfo } from "@shared/chat"
+import type { ChatEvent, ChatMessage, ChatStatus, FolderInfo, OrchestrationPlan, PlanReview, RotationFallbackInfo, SessionInfo } from "@shared/chat"
 import { parseRemoteSessionId, type PeersEvent, type PeersSnapshot } from "@shared/peers"
 import { peersApi } from "@/src/lib/ipc"
-import type { PendingAskUI } from "@/src/stores/session-store"
+import type { CompactionSuggestion, LiveContext, PendingAskUI } from "@/src/stores/session-store"
 
 const ENV_KEY = "orbit:environment"
+/** The most the other machine hands over per page of history (see `peers:messages`). */
+const PAGE_SIZE = 100
 
 /**
  * Other desktops, as the renderer sees them (electron/lib/peers).
@@ -35,8 +37,21 @@ interface PeersState {
   activeByPeer: Record<string, string | null>
   messages: Record<string, ChatMessage[]>
   statuses: Record<string, ChatStatus>
+  /** The provider rotation in progress ("trying fallback 2/3"), while the status is `fallback`. */
+  fallback: Record<string, RotationFallbackInfo | undefined>
   /** Questions and permissions the other machine's agent is waiting on, by namespaced chat id. */
   pendingAsks: Record<string, PendingAskUI[]>
+  /** Plan awaiting the person's decision, and the orchestration plan, by namespaced chat id. */
+  planReviews: Record<string, PlanReview | undefined>
+  orchestration: Record<string, OrchestrationPlan | undefined>
+  /** Size of the context during the turn, the greyed-out next message and the compaction offer —
+   *  same shapes as session-store, read by the composer. */
+  liveContext: Record<string, LiveContext | undefined>
+  suggestions: Record<string, string | undefined>
+  compactionSuggestion: Record<string, CompactionSuggestion | undefined>
+  /** History pages: the first page is the last 100 messages; the rest is fetched on demand. */
+  historyExhausted: Record<string, boolean>
+  olderLoading: Record<string, boolean>
   loading: Record<string, boolean>
   errors: Record<string, string | undefined>
   /** Message being sent from here (the input shows the spinner). */
@@ -56,6 +71,10 @@ interface PeersState {
   /** Back to the "new chat" screen of a desktop (no chat open), optionally inside a folder. */
   goHome: (peerId: string, folderId?: string | null) => void
   loadMessages: (sessionId: string, force?: boolean) => Promise<void>
+  /** The page of history before the ones already loaded. */
+  loadOlder: (sessionId: string) => Promise<void>
+  /** Takes a plan card off the screen on this machine only (the other one keeps its own state). */
+  dismissPlanReview: (sessionId: string) => void
   send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) => Promise<void>
   abort: (sessionId: string) => Promise<void>
   /** Answers a question/permission on the machine that runs the agent. */
@@ -75,7 +94,15 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   activeByPeer: {},
   messages: {},
   statuses: {},
+  fallback: {},
   pendingAsks: {},
+  planReviews: {},
+  orchestration: {},
+  liveContext: {},
+  suggestions: {},
+  compactionSuggestion: {},
+  historyExhausted: {},
+  olderLoading: {},
   loading: {},
   errors: {},
   sending: {},
@@ -122,7 +149,10 @@ export const usePeersStore = create<PeersState>((set, get) => ({
       ])
       set((s) => ({
         messages: { ...s.messages, [sessionId]: list },
+        historyExhausted: { ...s.historyExhausted, [sessionId]: list.length < PAGE_SIZE },
         pendingAsks: { ...s.pendingAsks, [sessionId]: (state?.pendingAsks ?? []) as PendingAskUI[] },
+        planReviews: { ...s.planReviews, [sessionId]: state?.planReview },
+        orchestration: { ...s.orchestration, [sessionId]: state?.plan },
       }))
     } catch (err) {
       set((s) => ({ errors: { ...s.errors, [sessionId]: (err as Error).message } }))
@@ -130,6 +160,31 @@ export const usePeersStore = create<PeersState>((set, get) => ({
       set((s) => ({ loading: { ...s.loading, [sessionId]: false } }))
     }
   },
+
+  loadOlder: async (sessionId) => {
+    const s = get()
+    const loaded = s.messages[sessionId]
+    if (!loaded || s.historyExhausted[sessionId] || s.olderLoading[sessionId]) return
+    set((st) => ({ olderLoading: { ...st.olderLoading, [sessionId]: true } }))
+    try {
+      const page = await peersApi.messages(sessionId, { limit: PAGE_SIZE, offset: loaded.length })
+      set((st) => {
+        const current = st.messages[sessionId] ?? []
+        const known = new Set(current.map((m) => m.id))
+        const fresh = page.filter((m) => !known.has(m.id))
+        return {
+          messages: fresh.length ? { ...st.messages, [sessionId]: [...fresh, ...current] } : st.messages,
+          historyExhausted: { ...st.historyExhausted, [sessionId]: page.length < PAGE_SIZE || fresh.length === 0 },
+        }
+      })
+    } catch (err) {
+      set((st) => ({ errors: { ...st.errors, [sessionId]: (err as Error).message } }))
+    } finally {
+      set((st) => ({ olderLoading: { ...st.olderLoading, [sessionId]: false } }))
+    }
+  },
+
+  dismissPlanReview: (sessionId) => set((s) => ({ planReviews: { ...s.planReviews, [sessionId]: undefined } })),
 
   send: async (sessionId, text, opts) => {
     set((s) => ({ sending: { ...s.sending, [sessionId]: true }, errors: { ...s.errors, [sessionId]: undefined } }))
@@ -186,7 +241,10 @@ function applyChat(event: ChatEvent) {
   if (event.type === "message" || event.type === "messages" || event.type === "part" || event.type === "status") flushDeltas()
   switch (event.type) {
     case "status":
-      usePeersStore.setState((s) => ({ statuses: { ...s.statuses, [sessionId]: event.status } }))
+      usePeersStore.setState((s) => ({
+        statuses: { ...s.statuses, [sessionId]: event.status },
+        fallback: { ...s.fallback, [sessionId]: event.status === "fallback" ? event.fallback : undefined },
+      }))
       break
     case "message":
       usePeersStore.setState((s) => {
@@ -258,6 +316,38 @@ function applyChat(event: ChatEvent) {
         if (!current?.some((a) => a.requestId === event.requestId)) return {}
         return { pendingAsks: { ...s.pendingAsks, [sessionId]: current.filter((a) => a.requestId !== event.requestId) } }
       })
+      break
+    case "context":
+      usePeersStore.setState((s) => ({
+        liveContext: {
+          ...s.liveContext,
+          [sessionId]: {
+            input: event.input,
+            output: event.output,
+            estimated: event.estimated === true,
+            cacheRead: event.cacheRead,
+            cacheWrite: event.cacheWrite,
+          },
+        },
+      }))
+      break
+    case "suggestion":
+      usePeersStore.setState((s) => ({ suggestions: { ...s.suggestions, [sessionId]: event.text } }))
+      break
+    case "compaction:suggest":
+      usePeersStore.setState((s) => {
+        const previous = s.compactionSuggestion[sessionId]
+        // Re-emitted at the end of every turn while the condition holds: a dismissal sticks
+        // for this count, and only a compaction (which changes it) frees the offer again.
+        if (previous && previous.summaries === event.summaries && previous.dismissed) return {}
+        return { compactionSuggestion: { ...s.compactionSuggestion, [sessionId]: { summaries: event.summaries, dismissed: false } } }
+      })
+      break
+    case "orchestration:plan":
+      usePeersStore.setState((s) => ({ orchestration: { ...s.orchestration, [sessionId]: event.plan } }))
+      break
+    case "plan:review":
+      usePeersStore.setState((s) => ({ planReviews: { ...s.planReviews, [sessionId]: event.review } }))
       break
     default:
       break

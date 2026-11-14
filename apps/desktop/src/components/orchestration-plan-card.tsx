@@ -64,13 +64,22 @@ function TaskStatusIcon({ status }: { status: OrchestrationTask["status"] }) {
   }
 }
 
-export function OrchestrationPlanCard({ sessionId, plan }: {
+/** What the buttons do; a chat on another desktop asks the machine that runs the workers. */
+export interface OrchestrationPlanActions {
+  approve: (planId: string, taskIds: string[]) => void
+  reject: () => void
+}
+
+export function OrchestrationPlanCard({ sessionId, plan, actions }: {
   sessionId: string
   plan: OrchestrationPlan
+  actions?: OrchestrationPlanActions
 }) {
   const { t } = useTranslation()
-  const approvePlan = useSessionStore((s) => s.approvePlan)
-  const rejectPlan = useSessionStore((s) => s.rejectPlan)
+  const localApprove = useSessionStore((s) => s.approvePlan)
+  const localReject = useSessionStore((s) => s.rejectPlan)
+  const approvePlan = actions ? (_sid: string, planId: string, taskIds: string[]) => actions.approve(planId, taskIds) : localApprove
+  const rejectPlan = actions ? () => actions.reject() : localReject
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
 
   const proposed = plan.status === "proposed"

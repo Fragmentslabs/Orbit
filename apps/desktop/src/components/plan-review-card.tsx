@@ -28,15 +28,33 @@ const MODE_LABEL: Record<PermissionMode, string> = {
   full: "planReview.modeFull",
 }
 
-export function PlanReviewCard({ sessionId, review }: { sessionId: string; review: PlanReview }) {
+/**
+ * What the card's buttons do. At home they are the session-store's; a chat on another
+ * desktop passes its own, which ask the machine that runs the agent.
+ */
+export interface PlanReviewActions {
+  accept: (mode: PermissionMode, orchestrate?: boolean) => void
+  reject: () => void
+  review: (feedback: string) => void
+  dismiss: () => void
+}
+
+export function localPlanActions(sessionId: string): PlanReviewActions {
+  const s = () => useSessionStore.getState()
+  return {
+    accept: (mode, orchestrate) => s().acceptPlanReview(sessionId, mode, orchestrate),
+    reject: () => s().rejectPlanReview(sessionId),
+    review: (feedback) => s().reviewPlanReview(sessionId, feedback),
+    dismiss: () => s().dismissPlanReview(sessionId),
+  }
+}
+
+export function PlanReviewCard({ sessionId, review, actions }: { sessionId: string; review: PlanReview; actions?: PlanReviewActions }) {
   const { t } = useTranslation()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewText, setReviewText] = useState("")
-  const acceptPlanReview = useSessionStore((s) => s.acceptPlanReview)
-  const rejectPlanReview = useSessionStore((s) => s.rejectPlanReview)
-  const reviewPlanReview = useSessionStore((s) => s.reviewPlanReview)
-  const dismissPlanReview = useSessionStore((s) => s.dismissPlanReview)
+  const { accept, reject, review: sendReview, dismiss } = actions ?? localPlanActions(sessionId)
   const currentMode = usePermissionMode(sessionId)
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
   const content = review.content ?? null
@@ -54,7 +72,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
   function handleSubmitReview() {
     const text = reviewText.trim()
     if (!text) return
-    reviewPlanReview(sessionId, text)
+    sendReview(text)
     setReviewOpen(false)
     setReviewText("")
   }
@@ -84,14 +102,14 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                   <MessageSquareText className="size-3.5 mr-1" />
                   {t("planReview.review")}
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => rejectPlanReview(sessionId)}>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => reject()}>
                   {t("planReview.reject")}
                 </Button>
                 <div className="flex">
                   <Button
                     size="sm"
                     className="h-7 rounded-r-none text-xs"
-                    onClick={() => acceptPlanReview(sessionId, currentMode)}
+                    onClick={() => accept(currentMode)}
                   >
                     {t("planReview.accept", { mode: t(MODE_LABEL[currentMode]) })}
                   </Button>
@@ -107,11 +125,11 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" side="top">
                       {otherModes.map((m) => (
-                        <DropdownMenuItem key={m.id} onClick={() => acceptPlanReview(sessionId, m.id)}>
+                        <DropdownMenuItem key={m.id} onClick={() => accept(m.id)}>
                           {t("planReview.acceptWith", { mode: t(m.labelKey) })}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuItem onClick={() => acceptPlanReview(sessionId, currentMode, true)}>
+                      <DropdownMenuItem onClick={() => accept(currentMode, true)}>
                         {t("planReview.acceptOrchestration")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -123,7 +141,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                 <Hint label={t("common.dismiss")}>
                   <button
                     type="button"
-                    onClick={() => dismissPlanReview(sessionId)}
+                    onClick={() => dismiss()}
                     className="ml-0.5 flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
                   >
                     <X className="size-3" />

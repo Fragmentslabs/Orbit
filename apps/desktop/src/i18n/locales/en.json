@@ -978,6 +978,7 @@
     "brokenMessage": "This message could not be displayed.",
     "earlierMessages_one": "Show {{count}} earlier message",
     "earlierMessages_other": "Show {{count}} earlier messages",
+    "earlierMessagesMore": "Load earlier messages",
     "pendingAsk_one": "{{count}} pending question",
     "pendingAsk_other": "{{count}} pending questions",
     "noModelSelected": "No model selected. Set up a provider in Settings.",
