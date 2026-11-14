@@ -19,10 +19,17 @@ const MODE_ICON: Record<PermissionMode, typeof Shield> = {
 
 /** Autonomy of the open chat (`sessionId` absent = new chat, which becomes the
  *  default when choosing). Changing it here does not affect the other chats. */
-export function PermissionModePicker({ sessionId }: { sessionId?: string }) {
+export function PermissionModePicker({ sessionId, value, onValueChange }: {
+  sessionId?: string
+  /** Controlled: another machine's choice (the chat of another desktop), written through `onValueChange`. */
+  value?: PermissionMode
+  onValueChange?: (mode: PermissionMode) => void
+}) {
   const { t } = useTranslation()
-  const mode = usePermissionMode(sessionId)
-  const setMode = usePermissionPrefs((s) => s.setMode)
+  const localMode = usePermissionMode(sessionId)
+  const localSet = usePermissionPrefs((s) => s.setMode)
+  const mode = value ?? localMode
+  const setMode = (id: string | undefined, next: PermissionMode) => (onValueChange ? onValueChange(next) : localSet(id, next))
   const Icon = MODE_ICON[mode]
 
   const modes = useMemo(() => [

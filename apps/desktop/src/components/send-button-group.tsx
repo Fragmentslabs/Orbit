@@ -32,8 +32,9 @@ interface SendButtonGroupProps {
   cancelling?: boolean;
   onQueue: (text: string, files?: QueueAttachment[]) => void;
   onStopAndSend: (text: string, files?: QueueAttachment[]) => void;
-  onSchedule: (text: string, timestamp: number, files?: QueueAttachment[]) => void;
-  onSendToSidePanel: (text: string, files?: QueueAttachment[]) => void;
+  /** Absent = the item is not offered (the chat of another desktop has no side panel). */
+  onSchedule?: (text: string, timestamp: number, files?: QueueAttachment[]) => void;
+  onSendToSidePanel?: (text: string, files?: QueueAttachment[]) => void;
   onStop: () => void;
   disabled?: boolean;
   /**
@@ -116,7 +117,7 @@ export function SendButtonGroup({
     (timestamp: number) => {
       // null = there is nothing pending; "" is a message with only an attachment.
       if (pendingText === null) return;
-      onSchedule(pendingText, timestamp, pendingFiles ?? undefined);
+      onSchedule?.(pendingText, timestamp, pendingFiles ?? undefined);
       // The conversion already happened in open — safe to revoke the blob URLs now
       if (pendingFiles && pendingFiles.length > 0) attachments.clear();
       setPendingText(null);
@@ -180,9 +181,9 @@ export function SendButtonGroup({
             open={optionsOpen}
             onOpenChange={handleOptionsOpenChange}
             onValueChange={(value) => {
-              if (value === "side-panel") void withAttachments(onSendToSidePanel);
+              if (value === "side-panel" && onSendToSidePanel) void withAttachments(onSendToSidePanel);
               else if (value === "stop-send") void withAttachments(onStopAndSend);
-              else if (value === "schedule") void handleScheduleOpen();
+              else if (value === "schedule" && onSchedule) void handleScheduleOpen();
             }}
           >
             <SelectTrigger
@@ -199,9 +200,9 @@ export function SendButtonGroup({
               alignItemWithTrigger={false}
               className="min-w-44 p-1"
             >
-              <SelectItem value="side-panel">{t("send.openInSidePanel")}</SelectItem>
+              {onSendToSidePanel && <SelectItem value="side-panel">{t("send.openInSidePanel")}</SelectItem>}
               <SelectItem value="stop-send">{t("send.stopAndSend")}</SelectItem>
-              <SelectItem value="schedule">{t("send.schedule")}</SelectItem>
+              {onSchedule && <SelectItem value="schedule">{t("send.schedule")}</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -234,8 +235,8 @@ export function SendButtonGroup({
           open={optionsOpen}
           onOpenChange={handleOptionsOpenChange}
           onValueChange={(value) => {
-            if (value === "schedule") void handleScheduleOpen();
-            else if (value === "side-panel") void withAttachments(onSendToSidePanel);
+            if (value === "schedule" && onSchedule) void handleScheduleOpen();
+            else if (value === "side-panel" && onSendToSidePanel) void withAttachments(onSendToSidePanel);
           }}
         >
           <SelectTrigger
@@ -253,8 +254,8 @@ export function SendButtonGroup({
             alignItemWithTrigger={false}
             className="min-w-44 p-1"
           >
-            <SelectItem value="schedule">{t("send.scheduleMessage")}</SelectItem>
-            <SelectItem value="side-panel">{t("send.sendToSidePanel")}</SelectItem>
+            {onSchedule && <SelectItem value="schedule">{t("send.scheduleMessage")}</SelectItem>}
+            {onSendToSidePanel && <SelectItem value="side-panel">{t("send.sendToSidePanel")}</SelectItem>}
           </SelectContent>
         </Select>
       </div>

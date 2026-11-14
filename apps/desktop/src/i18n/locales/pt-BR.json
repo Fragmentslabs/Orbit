@@ -4686,6 +4686,7 @@
       "pickFolder": "Escolher pasta em {{name}}",
       "useFolder": "Usar esta pasta",
       "noFolder": "Escolher pasta do projeto",
+      "attachmentsTooBig": "Os anexos são grandes demais para enviar a outro computador (cerca de 1,3 MB no total).",
       "newRoutine": "Nova rotina em {{name}}"
     },
     "files": {

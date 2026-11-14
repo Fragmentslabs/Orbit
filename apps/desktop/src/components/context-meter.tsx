@@ -8,7 +8,8 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { formatTokens } from "@/src/lib/format"
 import { chatApi } from "@/src/lib/ipc"
 import { Button } from "@/components/ui/button"
-import type { TokenUsage } from "@shared/chat"
+import type { ChatMessage, TokenUsage } from "@shared/chat"
+import type { LiveContext } from "@/src/stores/session-store"
 
 // Uses the usage of the last step (most recent real call) when available —
 // it is the real size of the current context. `input`/`output` at the top of TokenUsage
@@ -22,10 +23,10 @@ function sumTokens(u: TokenUsage): number {
 const R = 7
 const C = 2 * Math.PI * R
 
-const NO_MSGS: import("@shared/chat").ChatMessage[] = []
+const NO_MSGS: ChatMessage[] = []
 
+/** The meter of this computer's chat: reads the stores, hands the numbers to the view. */
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
-  const { t } = useTranslation()
   // Compacting with the turn running does not happen (the main process refuses): the summary would be
   // made from an old copy of the history and would be lost at the end of the turn.
   const status = useSessionStatus(sessionId)
@@ -33,12 +34,31 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const live = useSessionStore((s) => (sessionId ? s.liveContext[sessionId] : undefined))
   const selected = useSessionModel(sessionId)
-  const model = useProviderStore((s) => {
-    if (!selected) return undefined
-    return s.catalog[selected.providerId]?.models[selected.modelId]
-  })
+  const limit = useProviderStore((s) => (selected ? s.catalog[selected.providerId]?.models[selected.modelId]?.limit?.context : undefined))
+  return (
+    <ContextMeterView
+      messages={messages}
+      live={live}
+      limit={limit}
+      turnRunning={turnRunning}
+      onCompact={sessionId ? () => chatApi.compact(sessionId) : undefined}
+    />
+  )
+}
 
-  const limit = model?.limit?.context
+/**
+ * The meter itself. It takes the numbers instead of reading them, so the chat of another
+ * desktop feeds it from its own copy; without `onCompact` the button is not offered.
+ */
+export function ContextMeterView({ messages, live, limit, turnRunning, onCompact }: {
+  messages: ChatMessage[]
+  live?: LiveContext
+  /** Context window of the model, when it is known. */
+  limit?: number
+  turnRunning: boolean
+  onCompact?: () => void
+}) {
+  const { t } = useTranslation()
 
   const { lastTokens, compacted } = useMemo(() => {
     let lastSummary = -1
@@ -157,16 +177,14 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
               {!compacted && atLimit && (
                 <p className="text-[10px] text-destructive">{t("usage.atLimit")}</p>
               )}
-              <div className="pt-1 border-t border-border" />
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs h-7"
-                disabled={turnRunning}
-                onClick={() => sessionId && chatApi.compact(sessionId)}
-              >
-                {t("usage.compactNow")}
-              </Button>
+              {onCompact && (
+                <>
+                  <div className="pt-1 border-t border-border" />
+                  <Button size="sm" variant="outline" className="w-full text-xs h-7" disabled={turnRunning} onClick={onCompact}>
+                    {t("usage.compactNow")}
+                  </Button>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -178,16 +196,14 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
               </div>
               {liveNote}
               {showBreakdown && breakdown}
-              <div className="pt-1 border-t border-border" />
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs h-7"
-                disabled={turnRunning}
-                onClick={() => sessionId && chatApi.compact(sessionId)}
-              >
-                {t("usage.compactNow")}
-              </Button>
+              {onCompact && (
+                <>
+                  <div className="pt-1 border-t border-border" />
+                  <Button size="sm" variant="outline" className="w-full text-xs h-7" disabled={turnRunning} onClick={onCompact}>
+                    {t("usage.compactNow")}
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>

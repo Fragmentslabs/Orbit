@@ -32,7 +32,7 @@ import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, Com
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, SessionStateResponse, WorkerConfigSnapshot } from "@shared/companion"
 import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
 import type { McpConfig, McpGenerationResult, McpServerStatus } from "@shared/mcp"
-import type { PeerGrants, PeersEvent, PeersSnapshot, RemoteFileContent, RemoteFileTree } from "@shared/peers"
+import type { PeerGrants, PeersEvent, PeersSnapshot, RemoteFileContent, RemoteFileTree, RemoteSendExtras } from "@shared/peers"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
   Delivery,
@@ -1741,7 +1741,7 @@ export const peersApi = {
     window.ipcRenderer.invoke("peers:messages", sessionId, opts) as Promise<ChatMessage[]>,
   sessionState: (sessionId: string) =>
     window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<SessionStateResponse | null>,
-  send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) =>
+  send: (sessionId: string, text: string, opts?: RemoteSendExtras) =>
     window.ipcRenderer.invoke("peers:send", sessionId, text, opts) as Promise<void>,
   abort: (sessionId: string) => window.ipcRenderer.invoke("peers:abort", sessionId) as Promise<void>,
   /** Any companion request, when the peer granted `control` (folders, session CRUD…). */

@@ -10,6 +10,7 @@ import {
 import { Hint } from "@/components/ui/hint"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import type { QueuedMessage } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/src/lib/format"
 
@@ -27,12 +28,8 @@ function formatSchedule(ts: number, locale: string, t: TFunction): string {
   return `${date} ${formatTime(ts, locale)}`
 }
 
+/** The queue of this computer's chat. */
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
-  const { t, i18n } = useTranslation()
-  const [open, setOpen] = useState(false)
-  // Id of the last copied item — it swaps the icon for a check for an instant.
-  // One is enough because copying is instantaneous; it does not need to be a Set.
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const queues = useMessageQueueStore((s) => s.queues)
   const editing = useMessageQueueStore((s) => s.editing)
   const remove = useMessageQueueStore((s) => s.remove)
@@ -41,12 +38,42 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const startEdit = useMessageQueueStore((s) => s.startEdit)
   const cancelEdit = useMessageQueueStore((s) => s.cancelEdit)
   // The previous turn failed: the queue does not go on by itself (see processQueue) — without
-  // avisar, pareceria travada.
+  // warning, it would look stuck.
   const paused = useSessionStore((s) => (sessionId ? s.status[sessionId] === "error" : false))
   if (!sessionId) return null
-  const items = queues[sessionId]
+  return (
+    <QueueView
+      items={queues[sessionId]}
+      editingId={editing[sessionId]}
+      paused={paused}
+      onRemove={(id) => remove(sessionId, id)}
+      onMoveToFront={(id) => moveToFront(sessionId, id)}
+      onSendNow={(id) => sendNow(sessionId, id)}
+      onStartEdit={(id) => startEdit(sessionId, id)}
+      onCancelEdit={() => cancelEdit(sessionId)}
+    />
+  )
+}
+
+/**
+ * The queue list itself. The chat of another desktop feeds it from that machine's queue;
+ * an action left out (`onStartEdit`, `onSendNow`) is simply not drawn.
+ */
+export function QueueView({ items, editingId, paused, onRemove, onMoveToFront, onSendNow, onStartEdit, onCancelEdit }: {
+  items: QueuedMessage[] | undefined
+  editingId?: string
+  paused: boolean
+  onRemove: (id: string) => void
+  onMoveToFront: (id: string) => void
+  onSendNow?: (id: string) => void
+  onStartEdit?: (id: string) => void
+  onCancelEdit?: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const [open, setOpen] = useState(false)
+  // Id of the last copied item — it swaps the icon for a check for an instant.
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   if (!items || items.length === 0) return null
-  const editingId = editing[sessionId]
 
   const queueCount = items.filter((m) => !m.scheduledAt).length
   const scheduledCount = items.filter((m) => m.scheduledAt).length
@@ -100,18 +127,18 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                   <Hint label={t("queue.sendFirst")}>
                     <button
                       type="button"
-                      onClick={() => moveToFront(sessionId, msg.id)}
+                      onClick={() => onMoveToFront(msg.id)}
                       className="cursor-pointer rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
                       <ArrowUpToLine className="size-3.5" />
                     </button>
                   </Hint>
                 )}
-                {paused && (
+                {paused && onSendNow && (
                   <Hint label={t("queue.sendNow")}>
                     <button
                       type="button"
-                      onClick={() => sendNow(sessionId, msg.id)}
+                      onClick={() => onSendNow?.(msg.id)}
 
                       className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
@@ -119,6 +146,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                     </button>
                   </Hint>
                 )}
+                {onStartEdit && (
                 <Hint label={editingId === msg.id ? t("queue.cancelEdit") : t("queue.edit")}>
                   <button
                     type="button"
@@ -127,12 +155,12 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                       // input text stays where it is — we never erase what the
                       // person wrote).
                       if (editingId === msg.id) {
-                        cancelEdit(sessionId)
+                        onCancelEdit?.()
                         return
                       }
                       // The text of the item goes to the main input; Enter saves
                       // back here, without changing the queue order.
-                      startEdit(sessionId, msg.id)
+                      onStartEdit?.(msg.id)
                     }}
 
                     className={cn(
@@ -143,6 +171,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                     <PencilIcon className="size-3.5" />
                   </button>
                 </Hint>
+                )}
                 <Hint label={t("queue.copy")}>
                   <button
                     type="button"
@@ -160,7 +189,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 <Hint label={t("queue.cancelSend")}>
                   <button
                     type="button"
-                    onClick={() => remove(sessionId, msg.id)}
+                    onClick={() => onRemove(msg.id)}
 
                     className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                   >
@@ -182,7 +211,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           <Hint label={t("queue.cancelEdit")}>
             <button
               type="button"
-              onClick={() => cancelEdit(sessionId)}
+              onClick={() => onCancelEdit?.()}
 
               className="ml-auto rounded-sm p-0.5 transition-colors hover:bg-primary/20"
             >

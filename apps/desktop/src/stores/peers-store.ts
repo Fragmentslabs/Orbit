@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import type { ChatEvent, ChatMessage, ChatStatus, FolderInfo, OrchestrationPlan, PlanReview, RotationFallbackInfo, SessionInfo } from "@shared/chat"
-import { parseRemoteSessionId, type PeersEvent, type PeersSnapshot } from "@shared/peers"
+import { parseRemoteSessionId, type PeersEvent, type PeersSnapshot, type RemoteSendExtras } from "@shared/peers"
 import { peersApi } from "@/src/lib/ipc"
 import type { CompactionSuggestion, LiveContext, PendingAskUI } from "@/src/stores/session-store"
 
@@ -75,7 +75,7 @@ interface PeersState {
   loadOlder: (sessionId: string) => Promise<void>
   /** Takes a plan card off the screen on this machine only (the other one keeps its own state). */
   dismissPlanReview: (sessionId: string) => void
-  send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) => Promise<void>
+  send: (sessionId: string, text: string, opts?: RemoteSendExtras) => Promise<void>
   abort: (sessionId: string) => Promise<void>
   /** Answers a question/permission on the machine that runs the agent. */
   replyAsk: (peerId: string, requestId: string, value: unknown) => Promise<void>
