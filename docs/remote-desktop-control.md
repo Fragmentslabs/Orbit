@@ -2,7 +2,11 @@
 
 **Status:** implemented, except the pieces listed under "Not offered" below. Phase 0 (full control), the generic
 `peers:request` bridge, the sidebar, the new-chat screen, memories, routines, the pipeline, usage, the media
-gallery, questions/permissions and the remote model catalog are in. Still open: the footer indicator, the audit
+gallery, questions/permissions and the remote model catalog are in. The link itself is as resilient as the phone's:
+both run on one `ConnectionCore` (`packages/companion-client/src/connection-core.ts` — ping/pong liveness, offline
+request queue, backoff), a desktop never gives up reconnecting, retries on wake/unlock/focus, refreshes the
+routines/pipeline/memory/providers when the machine on screen comes back, and shows the last known sidebar on a
+cold start (`peers/lists/<peerId>`). Still open: the footer indicator, the audit
 log and the confirmation gate.
 
 What a remote environment does today (`apps/desktop/src/lib/env-source.ts`, `src/stores/env-sync.ts`):

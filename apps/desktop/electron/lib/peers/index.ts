@@ -49,6 +49,7 @@ import { seenPeers, setDiscoverySelf, startAdvertising, startBrowsing, stopAdver
 import { indexRemoteIds, peerForAsset, rememberRemoteId } from './remote-index'
 import { isRemoteAsset, remoteMotionProps } from './remote-assets'
 import { sanitizePeerName } from './pairing'
+import { watchWake } from './peer-wake'
 
 /**
  * Orbit ↔ Orbit, wired into the main process: identity, the mutual-TLS server, the
@@ -141,6 +142,7 @@ export async function startPeers(): Promise<void> {
   listenPort = port
   startPeerServer({ identity, port, selfName, isDiscoverable: () => discoverable, onChange: changed })
   await initPeerClient({ identity, selfName, hooks: { emit: send, changed } })
+  watchWake(reconnectPeers)
   applyDiscoverable()
 }
 

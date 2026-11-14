@@ -20,3 +20,17 @@ export {
   type WsMessage,
   type ApiResponse,
 } from '@orbit/shared'
+
+// Transport-agnostic connection core (shared by the phone and desktop peers)
+export { ConnectionCore } from './connection-core'
+export type {
+  CoreSocket,
+  SocketEvents,
+  CoreHooks,
+  CoreOptions,
+  CoreStatus,
+  Handshake,
+  HandshakeOutcome,
+  HeartbeatPolicy,
+} from './connection-core'
+export { backoffDelay, type BackoffPolicy } from './backoff'
