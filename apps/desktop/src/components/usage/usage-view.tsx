@@ -70,6 +70,7 @@ export function UsageView() {
       <div className="flex min-h-0 flex-1 gap-4">
         {/* The container of the sections: their grids and tables adapt to ITS width (container queries). */}
         <div className="@container min-w-0 flex-1 overflow-y-auto overflow-x-hidden pr-2">
+          <div className="mx-auto w-full max-w-[112rem]">
           {loading && !data ? (
             <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">{t("analytics.loading")}</div>
           ) : data ? (
@@ -81,6 +82,7 @@ export function UsageView() {
               {section === "rhythm" && <RhythmTab data={data} />}
             </>
           ) : null}
+          </div>
         </div>
 
         {!stacked && (
