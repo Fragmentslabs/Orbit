@@ -11,7 +11,7 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { resolvePanelSession } from "@/src/lib/panel-session"
-import { ORPHAN_KEY, usePanelStore, type PanelEvent } from "@/src/stores/panel-store"
+import { usePanelStore, type PanelEvent } from "@/src/stores/panel-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import type { SessionMode } from "@shared/chat"
@@ -22,7 +22,9 @@ import { RemoteOffline } from "@/src/components/peers/remote-offline"
 import { RemoteFolderPickerHost } from "@/src/components/peers/remote-folder-picker-host"
 import { RemoteCreateRoutineDialog } from "@/src/components/routines/remote-create-routine-dialog"
 import { PairRequestCards } from "@/src/components/peers/pair-request-cards"
-import { useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
+import { usePeersStore } from "@/src/stores/peers-store"
+import { useActiveChat } from "@/src/hooks/use-active-chat"
+import { RemoteChatHeaderExtras } from "@/src/components/peers/remote-chat-header-extras"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { UsageRangeControls } from "@/src/components/usage/usage-range"
@@ -130,11 +132,8 @@ function Layout() {
   // on going back to that chat does the panel appear — nothing is opened here.
   // Another desktop in the environment selector: the panel bucket is its chat (the
   // namespaced id), so its motion/design/slides tabs live apart from the local ones.
-  const peersEnv = usePeersStore((s) => s.env)
-  const remoteEnv = peersEnv !== "local"
-  const remoteActive = useActiveRemoteSession()
+  const { env: peersEnv, remote: remoteEnv, session: chatSession, key: activeKey } = useActiveChat()
   const remotePeer = usePeersStore((s) => s.snapshot?.peers.find((p) => p.peerId === s.env))
-  const activeKey = remoteEnv ? (remoteActive?.sessionId ?? ORPHAN_KEY) : (activeSession?.id ?? ORPHAN_KEY)
   const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   // A fragment on screen takes the whole area (no padding) and puts back/icon/name in the header.
@@ -413,7 +412,7 @@ function Layout() {
                               : view === "fragments"
                                 ? t("fragments.title")
                                 : remoteEnv
-                                ? remoteActive?.session?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                                ? chatSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   // The menu works in both modes: pin, rename, archive,
@@ -466,6 +465,8 @@ function Layout() {
                       <FragmentHeaderActions fragmentId={openFragmentId} />
                     ) : view === "pipeline" && openPipeline ? (
                       <PipelineHeaderActions pipeline={openPipeline} />
+                    ) : remoteEnv && view === "chat" && chatSession ? (
+                      <RemoteChatHeaderExtras peerId={peersEnv} session={chatSession} />
                     ) : undefined
                   }
                   // The screen's own settings, right before the panel button: the routine's

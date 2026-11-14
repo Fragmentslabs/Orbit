@@ -112,8 +112,7 @@ import { ConnectAppDialog } from "@/components/connect-app-dialog"
 import { EnvironmentSelector } from "@/src/components/peers/environment-selector"
 import { RunningElsewhere } from "@/src/components/peers/running-elsewhere"
 import { EMPTY_LIST, isRemoteRunning, startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
-import { peersApi } from "@/src/lib/ipc"
-import { parseRemoteSessionId } from "@shared/peers"
+import { remoteIdOf, useRemoteRequest, useRemoteSessionActions } from "@/src/hooks/use-remote-session-actions"
 import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1805,17 +1804,6 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
 // paired desktop. The rows act on THAT machine (rename, pin, archive, move,
 // delete) when it granted full control; otherwise they only open.
 
-function useRemoteRequest(peerId: string) {
-  return useCallback(
-    <T,>(payload: { type: string; [key: string]: unknown }) => peersApi.request<T>(peerId, payload),
-    [peerId],
-  )
-}
-
-function remoteIdOf(id: string): string {
-  return parseRemoteSessionId(id)?.sessionId ?? id
-}
-
 function RemoteNewChatButton({ peerId }: { peerId: string }) {
   const { t } = useTranslation()
   const { mode, setView } = useWorkspace()
@@ -1913,15 +1901,11 @@ function RemoteSessionRow({ peerId, session, button: ButtonComponent, buttonClas
   useAgents()
   const Icon = iconProp ?? sessionIcon(session) ?? MessageSquare
   const { mode, setMode, setView } = useWorkspace()
-  const request = useRemoteRequest(peerId)
+  const { canAct, togglePin, toggleArchive, rename, remove } = useRemoteSessionActions(peerId, session)
   const openSession = usePeersStore((s) => s.openSession)
   const activeId = usePeersStore((s) => s.activeByPeer[peerId] ?? null)
   const status = usePeersStore((s) => s.statuses[session.id])
   const waiting = usePeersStore((s) => !!s.snapshot?.running.find((r) => r.sessionId === session.id)?.waiting)
-  const canAct = usePeersStore((s) => {
-    const peer = s.snapshot?.peers.find((p) => p.peerId === peerId)
-    return peer?.grants.control === true && !!peer.online
-  })
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [movingToFolder, setMovingToFolder] = useState(false)
@@ -1931,14 +1915,14 @@ function RemoteSessionRow({ peerId, session, button: ButtonComponent, buttonClas
     {
       icon: session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
       label: session.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
-      onSelect: () => void request({ type: "sessions:pin", sessionId: remoteIdOf(session.id), pinned: !session.pinned }),
+      onSelect: togglePin,
     },
     { icon: <Folder className="size-4" />, label: t("sidebar.folder.addToFolder"), onSelect: () => setMovingToFolder(true) },
     { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
     {
       icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
       label: session.archived ? t("sidebar.session.unarchive") : t("sidebar.session.archive"),
-      onSelect: () => void request({ type: "sessions:archive", sessionId: remoteIdOf(session.id), archived: !session.archived }),
+      onSelect: toggleArchive,
     },
     { separator: true, icon: <></>, label: "", onSelect: () => {} },
     { icon: <Trash2 className="size-4" />, label: t("sidebar.session.delete"), onSelect: () => setConfirmDelete(true), destructive: true },
@@ -1990,14 +1974,14 @@ function RemoteSessionRow({ peerId, session, button: ButtonComponent, buttonClas
             description={t("sidebar.session.deleteDescription", { title: session.title || "…" })}
             confirmLabel={t("sidebar.session.confirmDelete")}
             destructive
-            onConfirm={() => void request({ type: "sessions:delete", sessionId: remoteIdOf(session.id) })}
+            onConfirm={remove}
           />
           <PromptDialog
             open={renaming}
             onOpenChange={setRenaming}
             title={t("sidebar.session.renameTitle")}
             initialValue={session.title}
-            onSubmit={(title) => void request({ type: "sessions:rename", sessionId: remoteIdOf(session.id), title })}
+            onSubmit={rename}
           />
           {movingToFolder && (
             <RemoteMoveToFolderDialog peerId={peerId} open={movingToFolder} onOpenChange={setMovingToFolder} session={session} />

@@ -31,6 +31,14 @@ export function useEnvSessionStatus(sessionId: string | undefined): ChatStatus |
   return env === "local" ? local : remote
 }
 
+/** The status of every chat of the machine on screen, keyed by (namespaced) session id. */
+export function useEnvStatusMap(): Record<string, ChatStatus> {
+  const env = usePeersStore((s) => s.env)
+  const local = useSessionStore((s) => s.status)
+  const remote = usePeersStore((s) => s.statuses)
+  return env === "local" ? local : remote
+}
+
 /**
  * Opens a chat on the machine on screen and leaves the current page for the conversation.
  * Returns false when the chat is gone (so the caller can fall back to something else).
