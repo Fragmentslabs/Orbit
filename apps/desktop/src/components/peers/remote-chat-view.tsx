@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Folder, FolderOpen, Loader2, Lock, Send, Square, WifiOff } from "lucide-react"
-import type { ChatMessage, FilePart, SessionInfo } from "@shared/chat"
+import type { SessionInfo } from "@shared/chat"
 import { showsPersonaOnWelcome } from "@shared/appearance"
 import { remoteSessionId } from "@shared/peers"
 import { pickWelcomeTitle } from "@shared/welcome-title"
@@ -11,17 +11,15 @@ import { useWorkspaceMode } from "@/lib/workspace-context"
 import { Persona } from "@/src/components/ai/persona"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
-import { Message, MessageContent } from "@/src/components/ai/message"
-import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
-import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { ErrorBoundary } from "@/src/components/error-boundary"
+import { ReplyBar } from "@/src/components/reply-bar"
 import { peersApi } from "@/src/lib/ipc"
-import { visibleMessageText } from "@/src/lib/message-utils"
+import { withReplyPrefix } from "@/src/stores/message-reply"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { isRemoteRunning, useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { RemoteFiles } from "./remote-files"
 import { RemoteFolderPicker } from "./remote-folder-picker"
+import { RemoteMessageList } from "./remote-message-list"
 
 /**
  * A chat of another desktop, read live over the pinned connection.
@@ -51,7 +49,6 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
   const sessionId = pinned ?? active?.sessionId ?? null
   const session = usePeersStore((s) => (sessionId && s.env !== "local" ? s.sessionsByPeer[s.env]?.find((x) => x.id === sessionId) : undefined))
   const messages = usePeersStore((s) => (sessionId ? s.messages[sessionId] : undefined))
-  const loading = usePeersStore((s) => (sessionId ? !!s.loading[sessionId] : false))
   const error = usePeersStore((s) => (sessionId ? s.errors[sessionId] : undefined))
   const status = usePeersStore((s) => (sessionId ? s.statuses[sessionId] : undefined))
   const sending = usePeersStore((s) => (sessionId ? !!s.sending[sessionId] : false))
@@ -62,8 +59,6 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
   const send = usePeersStore((s) => s.send)
   const abort = usePeersStore((s) => s.abort)
   const [filesOpen, setFilesOpen] = useState(false)
-  const scroller = useRef<HTMLDivElement>(null)
-  const stick = useRef(true)
 
   const name = peer?.name ?? ""
   const busy = isRemoteRunning(status)
@@ -83,13 +78,7 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
 
   useEffect(() => {
     setFilesOpen(false)
-    stick.current = true
   }, [sessionId])
-
-  useLayoutEffect(() => {
-    const el = scroller.current
-    if (el && stick.current) el.scrollTop = el.scrollHeight
-  }, [messages])
 
   if (env === "local") return null
 
@@ -100,60 +89,25 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
 
   const submit = async (value: string) => {
     if (!value || !canSend || busy || sending) return
-    await send(sessionId, value)
-    stick.current = true
+    await send(sessionId, withReplyPrefix(sessionId, value))
   }
-
-  const empty = !loading && (messages?.length ?? 0) === 0 && !!startScreen
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 gap-3">
-        <div
-          ref={scroller}
-          onScroll={(e) => {
-            const el = e.currentTarget
-            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-          }}
-          className="relative min-h-0 flex-1 overflow-y-auto"
-        >
-          {sessionId && canFiles ? (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {canFiles ? (
             <Button
               variant={filesOpen ? "secondary" : "ghost"}
               size="sm"
-              className="sticky top-0 z-10 float-right mr-2 h-7 gap-1.5 text-xs"
+              className="absolute right-2 top-0 z-10 h-7 gap-1.5 text-xs"
               onClick={() => setFilesOpen((v) => !v)}
             >
               <FolderOpen className="size-3.5" />
               {t("peers.remote.files")}
             </Button>
           ) : null}
-          {empty ? (
-            <div className="flex w-full flex-col items-center pt-24">{startScreen}</div>
-          ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 pb-6">
-              {loading && !messages ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  {t("peers.remote.loading")}
-                </div>
-              ) : null}
-              {error && !messages ? (
-                <p className="py-10 text-center text-sm text-destructive">{t("peers.remote.loadError", { error })}</p>
-              ) : null}
-              {(messages ?? []).map((msg, index, all) => (
-                <ErrorBoundary key={msg.id} label="remote-message" fallback={() => <p className="text-xs text-muted-foreground">…</p>}>
-                  <RemoteMessage
-                    msg={msg}
-                    mode={mode}
-                    sessionId={sessionId}
-                    isLast={index === all.length - 1}
-                    isBusy={busy && index === all.length - 1}
-                  />
-                </ErrorBoundary>
-              ))}
-            </div>
-          )}
+          <RemoteMessageList sessionId={sessionId} mode={mode} startScreen={startScreen} />
         </div>
         {filesOpen && canFiles ? <RemoteFiles sessionId={sessionId} peerName={name} onClose={() => setFilesOpen(false)} /> : null}
       </div>
@@ -195,6 +149,7 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
             note={busy ? t("peers.remote.busyNote") : t("peers.remote.runsThere", { name })}
             busy={busy}
             sending={sending}
+            replyKey={sessionId}
             onSubmit={submit}
             onStop={() => void abort(sessionId)}
           />
@@ -319,7 +274,9 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
   )
 }
 
-function RemoteComposer({ placeholder, note, busy, sending, onSubmit, onStop }: {
+function RemoteComposer({ placeholder, note, busy, sending, onSubmit, onStop, replyKey }: {
+  /** The chat whose "reply to this message" quote rides along with the text. */
+  replyKey?: string
   placeholder: string
   note: string
   busy: boolean
@@ -341,6 +298,7 @@ function RemoteComposer({ placeholder, note, busy, sending, onSubmit, onStop }: 
   }
   return (
     <div className="rounded-xl border bg-background p-2 shadow-sm">
+      {replyKey ? <ReplyBar replyKey={replyKey} /> : null}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -369,57 +327,5 @@ function RemoteComposer({ placeholder, note, busy, sending, onSubmit, onStop }: 
         )}
       </div>
     </div>
-  )
-}
-
-function RemoteMessage({ msg, mode, sessionId, isLast, isBusy }: {
-  msg: ChatMessage
-  mode: "chat" | "code"
-  sessionId: string
-  isLast: boolean
-  isBusy: boolean
-}) {
-  if (msg.role === "user") {
-    const text = visibleMessageText(msg)
-    const images = msg.parts.filter((p): p is FilePart => p.type === "file" && p.mime.startsWith("image/") && !!p.url)
-    const others = msg.parts.filter((p): p is FilePart => p.type === "file" && !p.mime.startsWith("image/"))
-    return (
-      <Message from="user" data-msg-id={msg.id}>
-        <div className="flex flex-col items-end gap-1">
-          {images.length > 0 ? (
-            <div className="flex flex-wrap justify-end gap-1.5">
-              {images.map((file) => (
-                <img key={file.id} src={file.url} alt={file.filename ?? ""} className="max-h-40 rounded-lg border object-cover" />
-              ))}
-            </div>
-          ) : null}
-          {others.length > 0 ? (
-            <div className="flex flex-wrap justify-end gap-1.5">
-              {others.map((file) => (
-                <span key={file.id} className="rounded-md border bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
-                  {file.filename || file.mime}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {text ? (
-            <MessageContent>
-              <p className="whitespace-pre-wrap break-words">{text}</p>
-            </MessageContent>
-          ) : null}
-        </div>
-      </Message>
-    )
-  }
-  return (
-    <Message from="assistant" data-msg-id={msg.id}>
-      <MessageContent className={cn("w-full")}>
-        {mode === "chat" ? (
-          <ChatAssistantMessage message={msg} sessionId={sessionId} isLast={isLast} isBusy={isBusy} />
-        ) : (
-          <CodeAssistantMessage message={msg} sessionId={sessionId} isLast={isLast} isBusy={isBusy} />
-        )}
-      </MessageContent>
-    </Message>
   )
 }

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { parseMessageReply, replyExcerpt, replySnippet } from "@shared/chat"
+import { parseRemoteSessionId } from "@shared/peers"
 import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, RoutineRunPart, ToolPart } from "@shared/chat"
 import { useMessageReply } from "@/src/stores/message-reply"
 import { useReplyLabel } from "@/src/components/reply-bar"
@@ -726,7 +727,8 @@ export function RevertAction({ messageId, sessionId }: {
   const activeRevert = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId)?.revert : undefined,
   )
-  if (!sessionId || activeRevert) return null
+  // A chat of another desktop is reverted there, not from here.
+  if (!sessionId || activeRevert || parseRemoteSessionId(sessionId)) return null
 
   return (
     <Action

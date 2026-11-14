@@ -978,6 +978,7 @@
     "brokenMessage": "Não foi possível mostrar esta mensagem.",
     "earlierMessages_one": "Mostrar {{count}} mensagem anterior",
     "earlierMessages_other": "Mostrar {{count}} mensagens anteriores",
+    "earlierMessagesMore": "Carregar mensagens anteriores",
     "pendingAsk_one": "{{count}} pergunta pendente",
     "pendingAsk_other": "{{count}} perguntas pendentes",
     "noModelSelected": "Nenhum modelo selecionado. Configure um provedor em Configurações.",

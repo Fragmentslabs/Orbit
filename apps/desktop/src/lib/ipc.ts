@@ -29,7 +29,7 @@ import { AGENT_SHARE_CHANNELS, type AgentExportResult, type AgentImportConfirmRe
 import { AGENT_CHANNELS, type AgentDefinition, type AgentGenerationResult, type AgentInput, type AgentsSnapshot, type BuiltinOverride } from "@shared/agents"
 import { ARTIFACT_CHATS_CHANNELS, type ArtifactChats, type ArtifactChatsEvent, type ArtifactRef } from "@shared/artifacts"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
-import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
+import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, SessionStateResponse, WorkerConfigSnapshot } from "@shared/companion"
 import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
 import type { McpConfig, McpGenerationResult, McpServerStatus } from "@shared/mcp"
 import type { PeerGrants, PeersEvent, PeersSnapshot, RemoteFileContent, RemoteFileTree } from "@shared/peers"
@@ -1740,7 +1740,7 @@ export const peersApi = {
   messages: (sessionId: string, opts?: { limit?: number; offset?: number }) =>
     window.ipcRenderer.invoke("peers:messages", sessionId, opts) as Promise<ChatMessage[]>,
   sessionState: (sessionId: string) =>
-    window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<{ pendingAsks?: unknown[] } | null>,
+    window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<SessionStateResponse | null>,
   send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) =>
     window.ipcRenderer.invoke("peers:send", sessionId, text, opts) as Promise<void>,
   abort: (sessionId: string) => window.ipcRenderer.invoke("peers:abort", sessionId) as Promise<void>,
