@@ -544,7 +544,7 @@ export const permissionsApi = {
     window.ipcRenderer.invoke("permissions:rules:remove", ruleId) as Promise<void>,
 }
 
-export const hooksApi = {
+const localHooksApi = {
   list: () => window.ipcRenderer.invoke("hooks:list") as Promise<HookWithRun[]>,
   add: (input: HookInput) => window.ipcRenderer.invoke("hooks:add", input) as Promise<Hook>,
   update: (id: string, input: HookInput) => window.ipcRenderer.invoke("hooks:update", id, input) as Promise<Hook | null>,
@@ -553,9 +553,14 @@ export const hooksApi = {
   /** The model writes a hook from a description (nothing is saved until the user confirms the form). */
   generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
     window.ipcRenderer.invoke("hooks:generate", description, model, folders, language) as Promise<HookGenerationResult>,
+  /** This machine's hooks changed (a hook written by an agent after its card was approved). */
+  onChanged: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on("hooks:changed", () => listener())
+    return () => window.ipcRenderer.off("hooks:changed", wrapper)
+  },
 }
 
-export const skillsApi = {
+const localSkillsApi = {
   list: (directory?: string) =>
     window.ipcRenderer.invoke("skills:list", directory) as Promise<Skill[]>,
   create: (data: { name: string; description?: string; content: string; slug?: string; oldSlug?: string }) =>
@@ -602,7 +607,7 @@ export const fractaApi = {
   disconnect: () => window.ipcRenderer.invoke("fracta:disconnect") as Promise<FractaStatus>,
 }
 
-export const mcpApi = {
+const localMcpApi = {
   /** The model configures a server from a description; nothing is saved or started. */
   generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
     window.ipcRenderer.invoke("mcp:generate", description, model, folders, language) as Promise<McpGenerationResult>,
@@ -617,6 +622,9 @@ export const mcpApi = {
     window.ipcRenderer.invoke("mcp:auth", name) as Promise<McpServerStatus[]>,
   /** redirect_uri of the OAuth loopback, to register in the provider's app */
   oauthRedirect: () => window.ipcRenderer.invoke("mcp:oauth-redirect") as Promise<string>,
+  /** Takes back the "always allow" given to a server's tools (a server set to ask must ask). */
+  revokeTrust: (name: string) =>
+    window.ipcRenderer.invoke("permissions:rules:remove", `mcp:${name}`) as Promise<void>,
   /** State of the server's rewritten descriptions ("Optimize" button) */
   descriptions: (name: string) =>
     window.ipcRenderer.invoke("mcp:descriptions", name) as Promise<{
@@ -2027,4 +2035,124 @@ export const memoryApi: typeof localMemoryApi = {
     const peerId = getActivePeer()
     return peerId ? peerAsk<boolean>(peerId, { type: "memory:link", sourceId, targetId }) : localMemoryApi.link(sourceId, targetId)
   },
+}
+
+/**
+ * The Tools screen of the machine on screen: MCP servers, skills and hooks. Another desktop
+ * answers through `electron/lib/peers/tools-requests.ts`; its MCP secrets come back masked
+ * and a masked value is read as "keep" when saved (shared/tools-remote). What needs THIS
+ * computer — the OAuth browser, the import file dialog, "ask Orbit" drafts — rejects, and
+ * the screen does not offer it (`useToolsRemote`).
+ */
+export const mcpApi: typeof localMcpApi = {
+  ...localMcpApi,
+  generate: (...args) => (getActivePeer() ? unsupportedRemote("mcp:generate") : localMcpApi.generate(...args)),
+  config: async () => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<McpConfig>(peerId, { type: "mcp:config" })) ?? { servers: [] }) : localMcpApi.config()
+  },
+  status: async () => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<McpServerStatus[]>(peerId, { type: "mcp:status" })) ?? []) : localMcpApi.status()
+  },
+  save: async (config) => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<McpServerStatus[]>(peerId, { type: "mcp:save", config })) ?? []) : localMcpApi.save(config)
+  },
+  reconnect: async (name) => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<McpServerStatus[]>(peerId, { type: "mcp:reconnect", name })) ?? []) : localMcpApi.reconnect(name)
+  },
+  auth: (name) => (getActivePeer() ? unsupportedRemote("mcp:auth") : localMcpApi.auth(name)),
+  oauthRedirect: () => (getActivePeer() ? unsupportedRemote("mcp:oauthRedirect") : localMcpApi.oauthRedirect()),
+  revokeTrust: async (name) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localMcpApi.revokeTrust(name)
+    await peerAsk(peerId, { type: "mcp:revoke-trust", name })
+  },
+  descriptions: async (name) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Awaited<ReturnType<typeof localMcpApi.descriptions>>>(peerId, { type: "mcp:descriptions", name }) : localMcpApi.descriptions(name)
+  },
+  optimize: async (name) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Awaited<ReturnType<typeof localMcpApi.optimize>>>(peerId, { type: "mcp:optimize", name }) : localMcpApi.optimize(name)
+  },
+}
+
+export const skillsApi: typeof localSkillsApi = {
+  ...localSkillsApi,
+  list: async (directory) => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<Skill[]>(peerId, { type: "skills:list", directory })) ?? []) : localSkillsApi.list(directory)
+  },
+  create: async (data) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localSkillsApi.create(data)
+    const result = await peerAsk<{ filePath: string } | { error: string }>(peerId, { type: "skills:create", data })
+    if ("error" in result) throw new Error(result.error)
+    return result
+  },
+  remove: async (slug) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localSkillsApi.remove(slug)
+    await peerAsk(peerId, { type: "skills:remove", slug })
+  },
+  generate: (...args) => (getActivePeer() ? unsupportedRemote("skills:generate") : localSkillsApi.generate(...args)),
+  meta: async (directory) => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<SkillMetaView[]>(peerId, { type: "skills:meta", directory })) ?? []) : localSkillsApi.meta(directory)
+  },
+  optimize: async (slug, directory, language) => {
+    const peerId = getActivePeer()
+    return peerId
+      ? peerAsk<Awaited<ReturnType<typeof localSkillsApi.optimize>>>(peerId, { type: "skills:optimize", slug, directory, language })
+      : localSkillsApi.optimize(slug, directory, language)
+  },
+  setPref: async (slug, patch) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localSkillsApi.setPref(slug, patch)
+    await peerAsk(peerId, { type: "skills:set-pref", slug, patch })
+  },
+  import: () => (getActivePeer() ? unsupportedRemote("skills:import") : localSkillsApi.import()),
+  pending: async () => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<SkillProposal[]>(peerId, { type: "skills:pending" })) ?? []) : localSkillsApi.pending()
+  },
+  approve: async (slug) => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<boolean>(peerId, { type: "skills:approve", slug })) ?? false) : localSkillsApi.approve(slug)
+  },
+  discard: async (slug) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localSkillsApi.discard(slug)
+    await peerAsk(peerId, { type: "skills:discard", slug })
+  },
+}
+
+export const hooksApi: typeof localHooksApi = {
+  ...localHooksApi,
+  list: async () => {
+    const peerId = getActivePeer()
+    return peerId ? ((await peerAsk<HookWithRun[]>(peerId, { type: "hooks:list" })) ?? []) : localHooksApi.list()
+  },
+  add: async (input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Hook>(peerId, { type: "hooks:add", input }) : localHooksApi.add(input)
+  },
+  update: async (id, input) => {
+    const peerId = getActivePeer()
+    return peerId ? peerAsk<Hook | null>(peerId, { type: "hooks:update", id, input }) : localHooksApi.update(id, input)
+  },
+  toggle: async (id, enabled) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localHooksApi.toggle(id, enabled)
+    await peerAsk(peerId, { type: "hooks:toggle", id, enabled })
+  },
+  remove: async (id) => {
+    const peerId = getActivePeer()
+    if (!peerId) return localHooksApi.remove(id)
+    await peerAsk(peerId, { type: "hooks:remove", id })
+  },
+  generate: (...args) => (getActivePeer() ? unsupportedRemote("hooks:generate") : localHooksApi.generate(...args)),
 }

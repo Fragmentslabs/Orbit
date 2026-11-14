@@ -43,9 +43,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
+import { fractaApi, hooksApi, mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
 import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { useStacked } from "@/src/hooks/use-stacked"
+import { useToolsRemote } from "@/src/hooks/use-tools-remote"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { HooksPanel } from "@/src/components/hooks-panel"
@@ -198,10 +199,11 @@ function McpServerDialog({ open, onOpenChange, initial, draft }: {
 
   // The loopback port is chosen at runtime; the user needs the exact
   // value to register the redirect_uri in the provider's OAuth app.
+  const tools = useToolsRemote()
   useEffect(() => {
-    if (!oauthOpen || redirectUri) return
+    if (!oauthOpen || redirectUri || !tools.oauth) return
     void mcpApi.oauthRedirect().then(setRedirectUri).catch(() => {})
-  }, [oauthOpen, redirectUri])
+  }, [oauthOpen, redirectUri, tools.oauth])
 
   useEffect(() => {
     if (open) {
@@ -276,7 +278,7 @@ function McpServerDialog({ open, onOpenChange, initial, draft }: {
     // before the mode is ever consulted (electron/lib/permission/index.ts), so
     // going back to ask means giving the released rule back. The mode select is
     // the one control for a server, and it settles what was released too.
-    if (entry.permissionMode === "ask") await permissionsApi.revoke(`mcp:${entry.name}`)
+    if (entry.permissionMode === "ask") await mcpApi.revokeTrust(entry.name)
     await refresh()
     setSaving(false)
     onOpenChange(false)
@@ -294,7 +296,14 @@ function McpServerDialog({ open, onOpenChange, initial, draft }: {
         <div className="flex flex-col gap-3">
           <div>
             <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.name")}</p>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("mcp.servers.dialog.namePlaceholder")} />
+            {/* Over there a rename would orphan the masked secrets, which are matched by name. */}
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("mcp.servers.dialog.namePlaceholder")}
+              disabled={tools.remote && Boolean(initial) && !draft}
+            />
+            {tools.remote && <p className="mt-1 text-[10px] text-muted-foreground">{t("mcp.servers.dialog.remoteSecretsHint")}</p>}
           </div>
           <div>
             <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.type")}</p>
@@ -354,15 +363,17 @@ function McpServerDialog({ open, onOpenChange, initial, draft }: {
                       <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthScope")}</p>
                       <Input value={oauthScope} onChange={(e) => setOauthScope(e.target.value)} placeholder="mcp:connect" />
                     </div>
-                    <div>
-                      <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthRedirect")}</p>
-                      <code className="block truncate rounded bg-muted px-2 py-1 text-[10px] font-mono text-muted-foreground">
-                        {redirectUri || "…"}
-                      </code>
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        {t("mcp.servers.dialog.oauthRedirectHint")}
-                      </p>
-                    </div>
+                    {tools.oauth && (
+                      <div>
+                        <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthRedirect")}</p>
+                        <code className="block truncate rounded bg-muted px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                          {redirectUri || "…"}
+                        </code>
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {t("mcp.servers.dialog.oauthRedirectHint")}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -381,10 +392,12 @@ function McpServerDialog({ open, onOpenChange, initial, draft }: {
                 <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.cwd")}</p>
                 <div className="flex items-center gap-2">
                   <Input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder={t("mcp.servers.dialog.cwdPlaceholder")} className="flex-1" />
-                  <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1" onClick={() => void pickCwd()}>
-                    <Folder className="size-3" />
-                    {t("mcp.servers.dialog.select")}
-                  </Button>
+                  {tools.pickers && (
+                    <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1" onClick={() => void pickCwd()}>
+                      <Folder className="size-3" />
+                      {t("mcp.servers.dialog.select")}
+                    </Button>
+                  )}
                 </div>
               </div>
               <div>
@@ -820,6 +833,7 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
 
 export function McpSkillsPanel() {
   const { t } = useTranslation()
+  const tools = useToolsRemote()
   const { skills, meta, mcpServers, refresh, directory: skillsDirectory } = useSkillsStore()
   const activeLocale = useLocaleStore((st) => st.activeLocale)
   const language = LOCALE_PROMPT_NAME[activeLocale]
@@ -834,7 +848,9 @@ export function McpSkillsPanel() {
   const startCreation = useStartCreationChat()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
-  const [section, setSection] = useState<ToolsSection>(() => useToolsNavStore.getState().consume() ?? "integrations")
+  const [requestedSection, setSection] = useState<ToolsSection>(() => useToolsNavStore.getState().consume() ?? "integrations")
+  // The local apps' cards and the specialists stay on this machine: another desktop opens on MCP.
+  const section: ToolsSection = !tools.localOnlySections && (requestedSection === "integrations" || requestedSection === "specialists") ? "mcp" : requestedSection
   const agentCount = useAgents().length
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const stacked = useStacked(root, STACK_BELOW_PX)
@@ -847,11 +863,10 @@ export function McpSkillsPanel() {
   }
   const [hookCount, setHookCount] = useState(0)
   useEffect(() => {
-    const load = () => void hooksApi.list().then((list) => setHookCount(list.length))
+    const load = () => void hooksApi.list().then((list) => setHookCount(list.length)).catch(() => setHookCount(0))
     load()
-    const listener = window.ipcRenderer.on("hooks:changed", load)
-    return () => window.ipcRenderer.off("hooks:changed", listener)
-  }, [])
+    return hooksApi.onChanged(load)
+  }, [tools.remote])
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [skillDraft, setSkillDraft] = useState<Pick<Skill, "name" | "slug" | "description" | "content"> | undefined>()
   const [importError, setImportError] = useState("")
@@ -861,8 +876,8 @@ export function McpSkillsPanel() {
   const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refresh().catch(() => {})
+  }, [refresh, tools.remote])
 
   const runServerAction = async (name: string, action: () => Promise<unknown>) => {
     setBusy(name)
@@ -1011,18 +1026,22 @@ export function McpSkillsPanel() {
   // page is narrow (the side panel is open) — the same sections, only laid out to fit.
   const menu = (compact: boolean) => (
     <>
-      <ToolsNavItem
-        icon={Blocks}
-        label={t("toolsPage.integrations")}
-        count={INTEGRATIONS.length}
-        active={section === "integrations"}
-        compact={compact}
-        onClick={() => pickSection("integrations")}
-      />
-      {compact ? (
-        <span className="mx-1 w-px shrink-0 self-stretch bg-border" role="separator" />
-      ) : (
-        <div className="mx-2 my-2 h-px bg-border" role="separator" />
+      {tools.localOnlySections && (
+        <>
+          <ToolsNavItem
+            icon={Blocks}
+            label={t("toolsPage.integrations")}
+            count={INTEGRATIONS.length}
+            active={section === "integrations"}
+            compact={compact}
+            onClick={() => pickSection("integrations")}
+          />
+          {compact ? (
+            <span className="mx-1 w-px shrink-0 self-stretch bg-border" role="separator" />
+          ) : (
+            <div className="mx-2 my-2 h-px bg-border" role="separator" />
+          )}
+        </>
       )}
       <ToolsNavItem
         icon={Cable}
@@ -1049,14 +1068,16 @@ export function McpSkillsPanel() {
         compact={compact}
         onClick={() => pickSection("hooks")}
       />
-      <ToolsNavItem
-        icon={Bot}
-        label={t("specialists.title")}
-        count={BUILTIN_PROFILES.length + agentCount}
-        active={section === "specialists"}
-        compact={compact}
-        onClick={() => pickSection("specialists")}
-      />
+      {tools.localOnlySections && (
+        <ToolsNavItem
+          icon={Bot}
+          label={t("specialists.title")}
+          count={BUILTIN_PROFILES.length + agentCount}
+          active={section === "specialists"}
+          compact={compact}
+          onClick={() => pickSection("specialists")}
+        />
+      )}
     </>
   )
 
@@ -1119,13 +1140,15 @@ export function McpSkillsPanel() {
           <CreateMenu
             label={t("mcp.servers.add")}
             options={[
-              {
-                id: "ask",
-                icon: Wand2,
-                title: t("askOrbit.menu.mcp.title"),
-                description: t("askOrbit.menu.mcp.description"),
-                onSelect: () => void startCreation("mcp"),
-              },
+              ...(tools.askOrbit
+                ? [{
+                    id: "ask",
+                    icon: Wand2,
+                    title: t("askOrbit.menu.mcp.title"),
+                    description: t("askOrbit.menu.mcp.description"),
+                    onSelect: () => void startCreation("mcp"),
+                  }]
+                : []),
               {
                 id: "manual",
                 icon: PenLine,
@@ -1217,7 +1240,15 @@ export function McpSkillsPanel() {
                       aria-label={t("mcp.servers.enabledHint")}
                       onCheckedChange={(checked) => void toggleServer(server.config.name, checked)}
                     />
-                    {needsAuth(server) && (
+                    {needsAuth(server) && !tools.oauth && (
+                      <Hint label={t("mcp.servers.authorizeRemoteHint")}>
+                        <Button size="sm" variant="outline" className="gap-1" disabled>
+                          <KeyRound className="size-3" />
+                          {t("mcp.servers.authorizeRemote")}
+                        </Button>
+                      </Hint>
+                    )}
+                    {needsAuth(server) && tools.oauth && (
                       <Hint label={t("mcp.servers.authorizeHint")}>
                         <Button
                           size="sm"
@@ -1285,13 +1316,15 @@ export function McpSkillsPanel() {
           <CreateMenu
             label={t("mcp.skills.create")}
             options={[
-              {
-                id: "ask",
-                icon: Wand2,
-                title: t("askOrbit.menu.skills.title"),
-                description: t("askOrbit.menu.skills.description"),
-                onSelect: () => void startCreation("skill"),
-              },
+              ...(tools.askOrbit
+                ? [{
+                    id: "ask",
+                    icon: Wand2,
+                    title: t("askOrbit.menu.skills.title"),
+                    description: t("askOrbit.menu.skills.description"),
+                    onSelect: () => void startCreation("skill"),
+                  }]
+                : []),
               {
                 id: "manual",
                 icon: PenLine,
@@ -1299,13 +1332,15 @@ export function McpSkillsPanel() {
                 description: t("mcp.skills.createMenu.manual.description"),
                 onSelect: () => { setSkillEdit(undefined); setSkillDraft(undefined); setSkillDialogOpen(true) },
               },
-              {
-                id: "import",
-                icon: FileUp,
-                title: t("mcp.skills.createMenu.import.title"),
-                description: t("mcp.skills.createMenu.import.description"),
-                onSelect: () => void importSkill(),
-              },
+              ...(tools.pickers
+                ? [{
+                    id: "import",
+                    icon: FileUp,
+                    title: t("mcp.skills.createMenu.import.title"),
+                    description: t("mcp.skills.createMenu.import.description"),
+                    onSelect: () => void importSkill(),
+                  }]
+                : []),
             ]}
           />
         </div>

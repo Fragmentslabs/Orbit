@@ -10,6 +10,7 @@ import {
   remoteModelInfo,
   remoteModeActive,
   remotePermission,
+  remoteTools,
   remoteThinking,
   type ComposerKind,
   type RemoteComposerState,
@@ -35,6 +36,7 @@ interface Draft {
   modes: Partial<Record<ChatModeKey, boolean>>
   permission?: PermissionMode
   thinking?: { enabled: boolean; variantId?: string }
+  tools?: string[] | null
 }
 
 const NO_DRAFT: Draft = { modes: {} }
@@ -70,7 +72,9 @@ export function useRemoteComposer(peerId: string, sessionId: string | undefined,
     [baseThinking.enabled, baseThinking.variantId, baseThinking.canDisable, draftThinking], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  const state = useMemo<RemoteComposerState>(() => ({ kind, model, modes, permission, thinking }), [kind, model, modes, permission, thinking])
+  const tools = draftMode && draft.tools !== undefined ? draft.tools : remoteTools(sync, sessionId)
+
+  const state = useMemo<RemoteComposerState>(() => ({ kind, model, modes, permission, thinking, tools }), [kind, model, modes, permission, thinking, tools])
 
   const request = useCallback((payload: { type: string; [key: string]: unknown }) => peersApi.request(peerId, payload).catch(() => {}), [peerId])
 
@@ -110,6 +114,16 @@ export function useRemoteComposer(peerId: string, sessionId: string | undefined,
     [sessionId, peerId, sync.prefs, apply, request],
   )
 
+  /** The MCP servers of the chat (`null` = all of that machine's), the same request the phone makes. */
+  const setTools = useCallback(
+    (servers: string[] | null) => {
+      if (!sessionId) return setDraft((d) => ({ ...d, tools: servers }))
+      apply(peerId, { type: "session:tools-change", overrides: { ...sync.tools, [sessionId]: servers } })
+      void request({ type: "tools:select", servers, sessionId })
+    },
+    [sessionId, peerId, sync.tools, apply, request],
+  )
+
   /** A chat just created on the other machine takes the choices made on the new-chat screen. */
   const commitDraft = useCallback(
     async (id: string) => {
@@ -117,6 +131,7 @@ export function useRemoteComposer(peerId: string, sessionId: string | undefined,
       if (draft.model) jobs.push(request({ type: "models:select", ...draft.model, sessionId: id }))
       for (const [mode, value] of Object.entries(draft.modes)) jobs.push(request({ type: "modes:select", mode, value, sessionId: id }))
       if (draft.permission) jobs.push(request({ type: "session:prefs-select", sessionId: id, permission: draft.permission }))
+      if (draft.tools !== undefined) jobs.push(request({ type: "tools:select", servers: draft.tools, sessionId: id }))
       if (draft.thinking) jobs.push(request({ type: "session:prefs-select", sessionId: id, reasoning: draft.thinking }))
       await Promise.all(jobs)
     },
@@ -163,6 +178,7 @@ export function useRemoteComposer(peerId: string, sessionId: string | undefined,
     setMode,
     setThinking,
     setPermission,
+    setTools,
     commitDraft,
     queue,
     queueOps,

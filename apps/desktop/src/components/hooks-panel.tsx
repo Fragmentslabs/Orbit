@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Ban, Pencil, PenLine, Power, PowerOff, Trash2, Wand2, Webhook } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,8 @@ import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { hooksApi } from "@/src/lib/ipc"
+import { useToolsRemote } from "@/src/hooks/use-tools-remote"
+import { usePeersStore } from "@/src/stores/peers-store"
 import type { HookEvent, HookInput, HookRun, HookWithRun } from "@shared/hooks"
 import { hookMatcher } from "@shared/hooks"
 
@@ -64,7 +66,13 @@ function HookForm({ initial, draft, onDone }: {
   onDone: () => void
 }) {
   const { t } = useTranslation()
-  const { folders } = useWorkspace()
+  const { folders: localFolders } = useWorkspace()
+  // A hook is scoped to a project of the machine it runs on.
+  const peerFolders = usePeersStore((s) => (s.env === "local" ? undefined : s.foldersByPeer[s.env]))
+  const folders = useMemo(
+    () => (peerFolders ? peerFolders.flatMap((f) => (f.workspace?.[0] ? [f.workspace[0]] : [])) : localFolders),
+    [peerFolders, localFolders],
+  )
   const seed = initial ?? draft
   const [event, setEvent] = useState<HookEvent>(seed?.event ?? "pre_tool_call")
   const [match, setMatch] = useState(seed?.match ?? "")
@@ -179,22 +187,24 @@ export function HooksPanel({ query = "" }: { query?: string }) {
   // Suggestion from "ask Orbit" being reviewed in the form of a new hook.
   const [draft, setDraft] = useState<HookInput | undefined>()
   const startCreation = useStartCreationChat()
+  const tools = useToolsRemote()
 
   const refresh = useCallback(() => {
-    void hooksApi.list().then(setHooks)
+    void hooksApi.list().then(setHooks).catch(() => {})
   }, [])
 
   useEffect(() => {
+    setHooks([])
     refresh()
     // The last run changes with every tool call; a light poll while the page is open
     // is cheaper than an event per call for a screen almost nobody has open.
     const timer = setInterval(refresh, 4_000)
-    const listener = window.ipcRenderer.on("hooks:changed", refresh)
+    const stopListening = hooksApi.onChanged(refresh)
     return () => {
       clearInterval(timer)
-      window.ipcRenderer.off("hooks:changed", listener)
+      stopListening()
     }
-  }, [refresh])
+  }, [refresh, tools.remote])
 
   const needle = query.trim().toLowerCase()
   const visibleHooks = needle
@@ -221,13 +231,15 @@ export function HooksPanel({ query = "" }: { query?: string }) {
         <CreateMenu
           label={t("hooks.add")}
           options={[
-            {
-              id: "ask",
-              icon: Wand2,
-              title: t("askOrbit.menu.hooks.title"),
-              description: t("askOrbit.menu.hooks.description"),
-              onSelect: () => void startCreation("hook"),
-            },
+            ...(tools.askOrbit
+              ? [{
+                  id: "ask",
+                  icon: Wand2,
+                  title: t("askOrbit.menu.hooks.title"),
+                  description: t("askOrbit.menu.hooks.description"),
+                  onSelect: () => void startCreation("hook"),
+                }]
+              : []),
             {
               id: "manual",
               icon: PenLine,

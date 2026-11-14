@@ -1810,9 +1810,12 @@
         "oauthClientSecretPlaceholder": "Só para apps confidenciais",
         "oauthScope": "Escopos",
         "oauthRedirect": "Redirect URI",
+        "remoteSecretsHint": "Os segredos deste servidor ficam naquele computador: •••••••• mantém o valor salvo e digitar outro o substitui.",
         "oauthRedirectHint": "Cadastre exatamente esta URL no app OAuth do provedor."
       },
       "reauthorize": "Reautorizar",
+      "authorizeRemote": "Autorizar",
+      "authorizeRemoteHint": "O login abre um navegador, então precisa ser feito no computador dono deste servidor",
       "authorizeHint": "Abre o navegador para entrar no provedor e liberar o acesso"
     },
     "skills": {

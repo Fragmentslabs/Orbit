@@ -86,3 +86,58 @@ describe("another desktop as the data source", () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 })
+
+describe("the Tools screen of another desktop", () => {
+  it("uses this machine's IPC while no peer is selected", async () => {
+    invoke.mockResolvedValue([])
+    const { hooksApi, mcpApi, skillsApi } = await api()
+    await mcpApi.status()
+    await skillsApi.list("/p")
+    await hooksApi.list()
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["mcp:status", "skills:list", "hooks:list"])
+  })
+
+  it("asks the peer for MCP servers, skills and hooks, and edits them there", async () => {
+    setActivePeer(PEER)
+    invoke.mockResolvedValue(undefined)
+    const { hooksApi, mcpApi, skillsApi } = await api()
+    const config = { servers: [{ name: "gh", type: "http" as const, url: "https://x", env: { TOKEN: "••••••••" } }] }
+    await mcpApi.save(config)
+    await mcpApi.reconnect("gh")
+    await mcpApi.revokeTrust("gh")
+    await skillsApi.create({ name: "n", content: "c" })
+      .catch(() => undefined)
+    await skillsApi.setPref("n", { pin: true })
+    await skillsApi.remove("n")
+    await hooksApi.toggle("h1", false)
+    const sent = invoke.mock.calls.map((c) => [c[0], c[1], c[2].type])
+    expect(sent).toEqual([
+      ["peers:request", PEER, "mcp:save"],
+      ["peers:request", PEER, "mcp:reconnect"],
+      ["peers:request", PEER, "mcp:revoke-trust"],
+      ["peers:request", PEER, "skills:create"],
+      ["peers:request", PEER, "skills:set-pref"],
+      ["peers:request", PEER, "skills:remove"],
+      ["peers:request", PEER, "hooks:toggle"],
+    ])
+    expect(invoke.mock.calls[0][2]).toEqual({ type: "mcp:save", config })
+  })
+
+  it("surfaces the peer's error for an invalid skill instead of pretending it saved", async () => {
+    setActivePeer(PEER)
+    invoke.mockResolvedValue({ error: "Invalid slug" })
+    const { skillsApi } = await api()
+    await expect(skillsApi.create({ name: "!", content: "c" })).rejects.toThrow("Invalid slug")
+  })
+
+  it("keeps what needs this computer off the other machine", async () => {
+    setActivePeer(PEER)
+    const { mcpApi, skillsApi, hooksApi } = await api()
+    await expect(mcpApi.auth("gh")).rejects.toThrow("remote_unsupported")
+    await expect(mcpApi.oauthRedirect()).rejects.toThrow("remote_unsupported")
+    await expect(skillsApi.import()).rejects.toThrow("remote_unsupported")
+    await expect(skillsApi.generate("d", { providerId: "p", modelId: "m" }, [])).rejects.toThrow("remote_unsupported")
+    await expect(hooksApi.generate("d", { providerId: "p", modelId: "m" }, [])).rejects.toThrow("remote_unsupported")
+    expect(invoke).not.toHaveBeenCalled()
+  })
+})

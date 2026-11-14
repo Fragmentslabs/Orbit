@@ -9,6 +9,7 @@ import {
   remoteModel,
   remotePermission,
   remoteThinking,
+  remoteTools,
   type RemoteComposerState,
 } from "./remote-composer-state"
 
@@ -86,5 +87,21 @@ describe("remote send payload", () => {
     const big = { id: "1", type: "file" as const, mime: "x", url: "d".repeat(2_000_000) }
     expect(attachmentsFit([big])).toBe(false)
     expect(attachmentsFit(undefined)).toBe(true)
+  })
+})
+
+describe("remote tools scope", () => {
+  it("reads the chat's own server subset; none means every server of that machine", () => {
+    expect(remoteTools(sync({ tools: { a: ["github"], b: [] } }), "a")).toEqual(["github"])
+    expect(remoteTools(sync({ tools: { b: null } }), "b")).toBeNull()
+    expect(remoteTools(sync(), undefined)).toBeNull()
+  })
+
+  it("sends the subset with the turn, and nothing when every server is on", () => {
+    const base: RemoteComposerState = { kind: "chat", model, modes: {}, permission: "ask", thinking: { enabled: false, variantId: undefined } }
+    expect(buildRemoteOptions({ ...base, tools: ["github"] })).toMatchObject({ toolsServers: ["github"] })
+    expect(buildRemoteOptions({ ...base, tools: [] })).toMatchObject({ toolsServers: [] })
+    expect(buildRemoteOptions({ ...base, tools: null })).not.toHaveProperty("toolsServers")
+    expect(buildRemoteOptions(base)).not.toHaveProperty("toolsServers")
   })
 })

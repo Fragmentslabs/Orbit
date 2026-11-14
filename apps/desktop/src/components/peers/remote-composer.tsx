@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon } from "lucide-react"
 import type { ChatMessage, FilePart, SendMessageOptions } from "@shared/chat"
@@ -19,6 +19,7 @@ import { ContextMeterView } from "@/src/components/context-meter"
 import { ModeMenuItems } from "@/src/components/mode-menu-items"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { ModelPicker } from "@/src/components/model-picker"
+import { ToolsPopoverView } from "@/src/components/tools-popover"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { QueueView } from "@/src/components/queue-indicator"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
@@ -26,6 +27,7 @@ import { ReplyBar } from "@/src/components/reply-bar"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
 import { useRemoteComposer } from "@/src/hooks/use-remote-composer"
+import { useSkillsStore } from "@/src/stores/skills-store"
 import { remoteIdOf } from "@/src/hooks/use-remote-session-actions"
 import { buildRemoteSend, attachmentsFit, MAX_REMOTE_ATTACHMENT_CHARS, type ComposerKind } from "@/src/lib/remote-composer-state"
 import { toFileParts } from "@/src/lib/message-utils"
@@ -54,7 +56,7 @@ export interface RemoteSubmit {
  * model, modes and queue are not this machine's to change.
  *
  * Out of the composer on purpose, because the companion API cannot do them remotely:
- * "@" references (files, skills, MCP), the fragments / tools / hooks controls, voice calls,
+ * "@" references (files, skills, MCP), the fragments / hooks controls, voice calls,
  * dictation, orchestra and loop, sending to a side panel, and compacting the context.
  */
 export function RemoteComposer({ peerId, sessionId, kind, canControl, placeholder, note, sending, onSubmit }: {
@@ -79,6 +81,11 @@ export function RemoteComposer({ peerId, sessionId, kind, canControl, placeholde
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const actionCommands = useSlashActionCommands(kind)
+  const mcpServers = useSkillsStore((s) => s.mcpServers)
+  // The servers of the machine on screen (the store follows the environment selector).
+  useEffect(() => {
+    if (canControl) void useSkillsStore.getState().refreshServers().catch(() => {})
+  }, [canControl, peerId])
   const [error, setError] = useState<string | null>(null)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const composerRef = useRef<HTMLDivElement>(null)
@@ -211,6 +218,7 @@ export function RemoteComposer({ peerId, sessionId, kind, canControl, placeholde
                   ))}
               </div>
               <div className="ml-auto mt-2 flex items-center gap-0.5">
+                <ToolsPopoverView servers={mcpServers} selection={state.tools ?? null} onChange={remote.setTools} iconOnly={modeLabelStyle === "icon"} />
                 <ContextMeterView messages={messages ?? NO_MESSAGES} live={live} limit={info?.limit?.context} turnRunning={busy} />
               </div>
             </PromptInputTools>
