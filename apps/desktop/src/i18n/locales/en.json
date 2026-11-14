@@ -4656,35 +4656,16 @@
       "local": "This computer",
       "connect": "Connect devices…",
       "label": "Environment",
-      "remoteBanner": "Remote environment: {{name}}",
       "viewOnly": "View only",
       "canSend": "View and send",
-      "offline": "{{name}} is offline",
-      "back": "Back to this computer"
+      "offline": "{{name}} is offline"
     },
     "running": {
       "title": "Running on other computers",
       "waiting": "waiting for approval"
     },
     "remote": {
-      "empty": "No chats on {{name}} yet.",
-      "pick": "Pick a chat from {{name}} in the sidebar.",
-      "sessions": "Sessions",
-      "newChat": "New chat",
-      "folders": "Folders",
-      "recent": "Recent",
-      "archived": "Archived",
-      "actions": "Chat actions",
-      "rename": "Rename",
-      "renamePrompt": "New name for this chat",
-      "pin": "Pin",
-      "unpin": "Unpin",
-      "archive": "Archive",
-      "unarchive": "Unarchive",
-      "delete": "Delete",
-      "deleteConfirm": "Delete \"{{title}}\" on {{name}}? This cannot be undone.",
       "readOnly": "View only on {{name}}",
-      "controlNote": "Full control of {{name}}",
       "loading": "Loading…",
       "loadError": "Couldn't load this chat: {{error}}",
       "inputPlaceholder": "Message this chat on {{name}}",
@@ -4695,8 +4676,11 @@
       "stop": "Stop",
       "send": "Send",
       "files": "Files",
-      "reload": "Reload",
-      "sendError": "Couldn't send: {{error}}"
+      "sendError": "Couldn't send: {{error}}",
+      "pickFolder": "Pick a folder on {{name}}",
+      "useFolder": "Use this folder",
+      "noFolder": "Choose a project folder",
+      "newRoutine": "New routine on {{name}}"
     },
     "files": {
       "title": "Files on {{name}}",

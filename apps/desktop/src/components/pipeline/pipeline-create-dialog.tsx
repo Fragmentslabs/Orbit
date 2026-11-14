@@ -26,6 +26,7 @@ import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { pipelineApi } from "@/src/lib/ipc"
 import { useReasoningPrefsStore } from "@/src/stores/reasoning-prefs"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
+import { useEnvProviders } from "@/src/hooks/use-env-providers"
 import { cn } from "@/lib/utils"
 import { PhaseEditor, useModelLabel, useSavePhaseTemplate, type PhaseDestination } from "./phase-editor"
 import { Hint } from "@/components/ui/hint"
@@ -70,6 +71,17 @@ export function PipelineCreateDialog({
   const savePhaseTemplate = useSavePhaseTemplate()
   const model = useSessionModel(MODEL_KEY)
   const modelKey = model ? `${model.providerId}/${model.modelId}` : null
+
+  // Another desktop on screen: the pipeline runs there, so its model must exist there. A model
+  // that machine does not have (the one picked here) is replaced by its own default.
+  const envProviders = useEnvProviders()
+  const { remote: remoteModels, defaultModel: remoteDefault, catalog: remoteCatalog, connectedProviders: remoteConnected } = envProviders
+  useEffect(() => {
+    if (!open || !remoteModels || !remoteDefault) return
+    const usable =
+      !!model && remoteConnected.includes(model.providerId) && !!remoteCatalog[model.providerId]?.models[model.modelId]
+    if (!usable) useSessionModelPrefs.getState().selectModel(MODEL_KEY, remoteDefault.providerId, remoteDefault.modelId)
+  }, [open, remoteModels, remoteDefault, remoteCatalog, remoteConnected, model])
 
   const [name, setName] = useState("")
   const [folders, setFolders] = useState<string[]>([])

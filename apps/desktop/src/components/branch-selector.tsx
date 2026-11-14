@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { usePeersStore } from "@/src/stores/peers-store"
 import { useTranslation, Trans } from "react-i18next"
 import { GitBranch, Check, Loader2Icon, PlusIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -36,7 +37,13 @@ interface BranchSelectorProps {
   compact?: boolean
 }
 
-export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp, onOpenChange, hideTrigger, side = "bottom", compact = false }: BranchSelectorProps) {
+/** The branches live in a repository ON the machine the folder belongs to; another desktop's paths mean nothing here. */
+export function BranchSelector(props: BranchSelectorProps) {
+  const remote = usePeersStore((s) => s.env !== "local")
+  return remote ? null : <LocalBranchSelector {...props} />
+}
+
+function LocalBranchSelector({ repoPath, onRequestAgentAction, open: openProp, onOpenChange, hideTrigger, side = "bottom", compact = false }: BranchSelectorProps) {
   const { t } = useTranslation()
   const byDir = useBranchStore((s) => s.byDir[repoPath])
   const loading = useBranchStore((s) => s.loading)

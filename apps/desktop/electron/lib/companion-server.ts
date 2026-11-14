@@ -48,7 +48,7 @@ import type {
   MessageQueueSnapshot,
   MessageQueueChangeEvent,
 } from '@shared/companion'
-import { SESSION_BUSY_ERROR } from '@shared/companion'
+import { SESSION_BUSY_ERROR, type ProvidersSnapshotResponse } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, RotationConfig } from '@shared/chat'
 import type { RoutineEvent } from '@shared/routines'
 import { setArchivedState } from '@shared/archive'
@@ -56,7 +56,6 @@ import type { PipelineEvent } from '@shared/pipeline'
 import { StorageKeys, normalizeOrchestrationPlan } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
-import { listCredentialProviders } from './auth'
 import { replyOrResume } from './ask-resume'
 import {
   revert as revertSession,
@@ -71,13 +70,19 @@ import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan, resumePlan 
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
+import type { MemoryEvent } from '@shared/memory'
+import { listCredentialProviders } from './auth'
+import { listCustomProviders } from './custom-providers'
 import { computeAnalytics } from './analytics'
+import { summarizeWork } from './usage-summary'
 import {
   list as listMemories,
   update as updateMemory,
   remove as removeMemory,
   promote as promoteMemory,
   getFull as getMemoryFull,
+  save as saveMemory,
+  link as linkMemories,
 } from './memory/service'
 import * as routines from './routines'
 import * as pipelineApi from './pipeline'
@@ -499,7 +504,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       return
     }
     if (req.type === 'messages:send') {
-      const clean = await sanitizeDesktopSend(req)
+      const clean = await sanitizeDesktopSend(req, client.grants)
       if (!clean) {
         sendResponse(ws, requestId, false, undefined, 'invalid')
         return
@@ -963,8 +968,19 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
       case 'analytics:summary': {
         const range = req.range ?? '7d'
-        const analytics = await computeAnalytics(range)
+        // The phone gets the compact summary. A desktop shows the same Usage page
+        // as the app, so it asks for the detailed one (and may filter by mode).
+        const analytics = await computeAnalytics(
+          range,
+          client.kind === 'desktop' ? { detailed: true, mode: req.mode } : undefined,
+        )
         sendResponse(ws, requestId, true, analytics)
+        break
+      }
+
+      case 'analytics:summarize': {
+        // The usage page's "what was done": runs on THIS machine's aux model.
+        sendResponse(ws, requestId, true, await summarizeWork(req.input))
         break
       }
 
@@ -1156,6 +1172,35 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const promoted = await promoteMemory(req.id)
         if (promoted) sendResponse(ws, requestId, true, promoted)
         else sendResponse(ws, requestId, false, undefined, tNow('companion.server.memoryCannotPromote'))
+        break
+      }
+
+      case 'providers:snapshot': {
+        const [catalog, credentialProviders, custom, selected] = await Promise.all([
+          getCatalog(),
+          listCredentialProviders(),
+          listCustomProviders(),
+          readJson<{ providerId: string; modelId: string }>(StorageKeys.selectedModel),
+        ])
+        const merged: Record<string, unknown> = { ...catalog }
+        for (const provider of custom) merged[provider.id] = provider
+        const withModels = custom.filter((p) => Object.keys(p.models).length > 0).map((p) => p.id)
+        sendResponse(ws, requestId, true, {
+          catalog: merged,
+          connectedProviders: [...new Set([...credentialProviders, ...withModels])],
+          ...(selected ? { selectedModel: selected } : {}),
+        } satisfies ProvidersSnapshotResponse)
+        break
+      }
+
+      case 'memory:create': {
+        const created = await saveMemory(req.input)
+        sendResponse(ws, requestId, true, created)
+        break
+      }
+
+      case 'memory:link': {
+        sendResponse(ws, requestId, true, await linkMemories(req.sourceId, req.targetId))
         break
       }
 
@@ -1736,18 +1781,37 @@ export function forwardChatEvent(event: ChatEvent): void {
   }
 }
 
+/**
+ * Routines and the pipeline are part of what a phone controls — and of what a
+ * desktop paired with full control sees, since it shows the same screens. A
+ * view-only desktop never asks for them (its requests are refused), so it gets
+ * no events either.
+ */
+function receivesWorkEvents(client: { kind: string; grants?: PeerGrants }): boolean {
+  return client.kind === 'phone' || (client.kind === 'desktop' && client.grants?.control === true)
+}
+
 /** Relays a RoutineEvent to every authenticated companion. */
 export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'routines:event', event } as CompanionEvent))
+  }
+}
+
+/** Memory changes, for the desktops that show the Memories page of this machine. */
+export function forwardMemoryEvent(event: MemoryEvent): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.kind !== 'desktop' || client.grants?.control !== true) continue
+    if (client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'memory:event', event } as CompanionEvent))
   }
 }
 
 /** Relays a PipelineEvent to every authenticated companion. */
 export function forwardPipelineEvent(event: PipelineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'pipeline:event', event } as CompanionEvent))
   }
 }

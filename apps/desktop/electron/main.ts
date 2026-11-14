@@ -180,7 +180,7 @@ import {
 } from './lib/fonts/store'
 import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, stopCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionTools, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
+import { startCompanionServer, stopCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, forwardMemoryEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionTools, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setSessionToolsCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setSessionModes } from './lib/permission/global-mode'
 import { setRotationConfigCache } from './lib/model-rotation'
@@ -2467,6 +2467,7 @@ app.whenReady().then(async () => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('memory:event', event)
     }
+    forwardMemoryEvent(event)
   })
   setupMemoryScheduler()
   // Text index of past conversations (search + chat_search): built in the background once the

@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { Delivery, PhaseTemplate, Pipeline, PipelineEvent, Project, Task } from "@shared/pipeline"
+import { getActivePeer } from "@/src/lib/env-source"
 import { pipelineApi, type NewPipelineInput } from "@/src/lib/ipc"
 
 /**
@@ -108,7 +109,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   setPlanOpen: (open) => set({ planOpen: open }),
 
   load: async () => {
+    const peer = getActivePeer()
     const [data, templates] = await Promise.all([pipelineApi.load(), pipelineApi.templates()])
+    // The environment moved on while this was in flight: it belongs to a machine no longer shown.
+    if (getActivePeer() !== peer) return
     set({
       projects: data.projects,
       pipelines: data.pipelines,

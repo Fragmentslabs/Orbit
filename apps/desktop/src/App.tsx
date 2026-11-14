@@ -18,6 +18,9 @@ import type { SessionMode } from "@shared/chat"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { RemoteChatView } from "@/src/components/peers/remote-chat-view"
+import { RemoteOffline } from "@/src/components/peers/remote-offline"
+import { RemoteFolderPickerHost } from "@/src/components/peers/remote-folder-picker-host"
+import { RemoteCreateRoutineDialog } from "@/src/components/routines/remote-create-routine-dialog"
 import { PairRequestCards } from "@/src/components/peers/pair-request-cards"
 import { useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
@@ -110,6 +113,12 @@ function retargetToVisibleChat(event: PanelEvent, mode: SessionMode): PanelEvent
   return sessionId === event.sessionId ? event : { ...event, sessionId }
 }
 
+function RemoteRoutineDialogHost() {
+  const open = usePeersStore((s) => s.routineDialogOpen)
+  const setOpen = usePeersStore((s) => s.setRoutineDialogOpen)
+  return <RemoteCreateRoutineDialog open={open} onOpenChange={setOpen} onCreated={(id) => useRoutinesStore.getState().open(id)} />
+}
+
 function Layout() {
   const { t } = useTranslation()
   const { open, setOpen } = useSidebar()
@@ -124,6 +133,7 @@ function Layout() {
   const peersEnv = usePeersStore((s) => s.env)
   const remoteEnv = peersEnv !== "local"
   const remoteActive = useActiveRemoteSession()
+  const remotePeer = usePeersStore((s) => s.snapshot?.peers.find((p) => p.peerId === s.env))
   const activeKey = remoteEnv ? (remoteActive?.sessionId ?? ORPHAN_KEY) : (activeSession?.id ?? ORPHAN_KEY)
   const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
@@ -261,6 +271,12 @@ function Layout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Tools and fragments belong to the machine you are sitting at; another desktop
+  // offers chats, memories, routines, the pipeline and usage.
+  useEffect(() => {
+    if (remoteEnv && (view === "tools" || view === "fragments")) setView("chat")
+  }, [remoteEnv, view, setView])
+
   useEffect(() => {
     if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
   }, [workspaceMode, setRightPanelOpen])
@@ -397,7 +413,7 @@ function Layout() {
                               : view === "fragments"
                                 ? t("fragments.title")
                                 : remoteEnv
-                                ? remoteActive?.session?.title ?? ""
+                                ? remoteActive?.session?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   // The menu works in both modes: pin, rename, archive,
@@ -473,7 +489,17 @@ function Layout() {
                 />
                 <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${fragmentFullscreen || routineScreen || view === "routines" ? "" : "p-4"}`} style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                   {remoteEnv ? null : <MissingFoldersBanner />}
-                  {remoteEnv ? (
+                  {remoteEnv && remotePeer && !remotePeer.online && view !== "chat" ? (
+                    <RemoteOffline name={remotePeer.name} error={remotePeer.error} />
+                  ) : remoteEnv && view === "routines" ? (
+                    <RoutinesView />
+                  ) : remoteEnv && view === "pipeline" ? (
+                    <PipelineBoard />
+                  ) : remoteEnv && view === "memories" ? (
+                    <MemoriesView />
+                  ) : remoteEnv && view === "analytics" ? (
+                    <UsageView />
+                  ) : remoteEnv ? (
                     <RemoteChatView />
                   ) : view === "memories" ? (
                     <MemoriesView />
@@ -512,6 +538,8 @@ function Layout() {
         {!rightPanelOpen && <RightPanelDropZone />}
       </div>
       <PairRequestCards />
+      {remoteEnv && <RemoteRoutineDialogHost />}
+      {remoteEnv && <RemoteFolderPickerHost />}
       </DndContext>
     </VoiceCallProvider>
   )

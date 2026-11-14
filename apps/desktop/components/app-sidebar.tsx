@@ -43,6 +43,7 @@ import {
   Terminal,
   Trash2,
   Wand2,
+  WifiOff,
   X,
 } from "lucide-react"
 
@@ -110,8 +111,9 @@ import {
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
 import { EnvironmentSelector } from "@/src/components/peers/environment-selector"
 import { RunningElsewhere } from "@/src/components/peers/running-elsewhere"
-import { RemoteSessionList } from "@/src/components/peers/remote-session-list"
-import { EMPTY_LIST, startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
+import { EMPTY_LIST, isRemoteRunning, startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
+import { peersApi } from "@/src/lib/ipc"
+import { parseRemoteSessionId } from "@shared/peers"
 import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1796,6 +1798,640 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
   )
 }
 
+// ─── Another desktop in the sidebar ─────────────────────────────────────────
+//
+// The same list the person sees at home — folders with their chats nested under
+// them, pinned, recent, archived, sub-chats under their parent — read from the
+// paired desktop. The rows act on THAT machine (rename, pin, archive, move,
+// delete) when it granted full control; otherwise they only open.
+
+function useRemoteRequest(peerId: string) {
+  return useCallback(
+    <T,>(payload: { type: string; [key: string]: unknown }) => peersApi.request<T>(peerId, payload),
+    [peerId],
+  )
+}
+
+function remoteIdOf(id: string): string {
+  return parseRemoteSessionId(id)?.sessionId ?? id
+}
+
+function RemoteNewChatButton({ peerId }: { peerId: string }) {
+  const { t } = useTranslation()
+  const { mode, setView } = useWorkspace()
+  const goHome = usePeersStore((s) => s.goHome)
+  return (
+    <Button
+      variant="outline"
+      className="h-8 w-full justify-start gap-2 p-2 text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg:not([class*='size-'])]:size-4"
+      onClick={() => {
+        setView("chat")
+        goHome(peerId)
+      }}
+    >
+      <Plus className="size-4" />
+      {mode === "chat" ? t("sidebar.newChat") : t("sidebar.newSession")}
+    </Button>
+  )
+}
+
+function RemoteMoveToFolderDialog({ peerId, open, onOpenChange, session }: {
+  peerId: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  session: SessionInfo
+}) {
+  const { t } = useTranslation()
+  const request = useRemoteRequest(peerId)
+  const folders = (usePeersStore((s) => s.foldersByPeer[peerId] ?? EMPTY_LIST) as FolderInfo[]).filter(
+    (f) => f.mode === session.mode && !f.archived,
+  )
+  const [newName, setNewName] = useState("")
+  const move = (folderId: string | null) => {
+    void request({ type: "sessions:move-folder", sessionId: remoteIdOf(session.id), folderId })
+    onOpenChange(false)
+  }
+  const createAndMove = async () => {
+    const name = newName.trim()
+    if (!name) return
+    const folder = await request<FolderInfo>({ type: "folders:create", mode: session.mode, name })
+    if (folder?.id) move(folder.id)
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{t("sidebar.folder.addToFolder")}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-1">
+          {folders.map((folder) => (
+            <Button
+              key={folder.id}
+              variant={session.folderId === folder.id ? "secondary" : "ghost"}
+              className="justify-start gap-2"
+              onClick={() => move(folder.id)}
+            >
+              <Folder className="size-4" />
+              {folder.name}
+            </Button>
+          ))}
+          {session.folderId && (
+            <Button variant="ghost" className="justify-start gap-2 text-muted-foreground" onClick={() => move(null)}>
+              <Trash2 className="size-4" />
+              {t("sidebar.folder.removeFromCurrent")}
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={newName}
+            placeholder={t("sidebar.folder.newFolderPlaceholder")}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void createAndMove()
+            }}
+          />
+          <Button variant="outline" disabled={!newName.trim()} onClick={() => void createAndMove()}>
+            {t("sidebar.create")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RemoteSessionRow({ peerId, session, button: ButtonComponent, buttonClassName, actionButtonClassName, icon: iconProp, trailing }: {
+  peerId: string
+  session: SessionInfo
+  button: React.ElementType
+  buttonClassName?: string
+  actionButtonClassName?: string
+  icon?: React.ElementType
+  trailing?: React.ReactNode
+}) {
+  const { t } = useTranslation()
+  useAgents()
+  const Icon = iconProp ?? sessionIcon(session) ?? MessageSquare
+  const { mode, setMode, setView } = useWorkspace()
+  const request = useRemoteRequest(peerId)
+  const openSession = usePeersStore((s) => s.openSession)
+  const activeId = usePeersStore((s) => s.activeByPeer[peerId] ?? null)
+  const status = usePeersStore((s) => s.statuses[session.id])
+  const waiting = usePeersStore((s) => !!s.snapshot?.running.find((r) => r.sessionId === session.id)?.waiting)
+  const canAct = usePeersStore((s) => {
+    const peer = s.snapshot?.peers.find((p) => p.peerId === peerId)
+    return peer?.grants.control === true && !!peer.online
+  })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [movingToFolder, setMovingToFolder] = useState(false)
+  const running = isRemoteRunning(status)
+
+  const menuItems: MenuItem[] = [
+    {
+      icon: session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
+      label: session.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
+      onSelect: () => void request({ type: "sessions:pin", sessionId: remoteIdOf(session.id), pinned: !session.pinned }),
+    },
+    { icon: <Folder className="size-4" />, label: t("sidebar.folder.addToFolder"), onSelect: () => setMovingToFolder(true) },
+    { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
+    {
+      icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
+      label: session.archived ? t("sidebar.session.unarchive") : t("sidebar.session.archive"),
+      onSelect: () => void request({ type: "sessions:archive", sessionId: remoteIdOf(session.id), archived: !session.archived }),
+    },
+    { separator: true, icon: <></>, label: "", onSelect: () => {} },
+    { icon: <Trash2 className="size-4" />, label: t("sidebar.session.delete"), onSelect: () => setConfirmDelete(true), destructive: true },
+  ]
+
+  const handleClick = () => {
+    // Sub-chats belong to their parent's section: opening one cannot flip the sidebar mode.
+    if (!session.parentId && session.mode !== mode) setMode(session.mode)
+    setView("chat")
+    openSession(session.id)
+  }
+
+  return (
+    <div className="group/menu-row relative min-w-0">
+      <ButtonComponent
+        isActive={activeId === session.id}
+        onClick={handleClick}
+        className={cn(
+          "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+          "text-xs",
+          canAct && (session.pinned ? "group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8"),
+          buttonClassName,
+        )}
+      >
+        <Truncate>
+          <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
+            <Icon className="size-4 shrink-0" />
+            <span className="truncate">{session.title}</span>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {running && !waiting && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
+              {waiting && <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />}
+              {trailing}
+            </div>
+          </div>
+        </Truncate>
+        {session.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
+      </ButtonComponent>
+      {canAct && (
+        <>
+          <EllipsisMenu
+            groupClass="group-hover/menu-row:opacity-100"
+            buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-6", actionButtonClassName)}
+            items={menuItems}
+          />
+          <ConfirmDialog
+            open={confirmDelete}
+            onOpenChange={setConfirmDelete}
+            title={t("sidebar.session.deleteTitle")}
+            description={t("sidebar.session.deleteDescription", { title: session.title || "…" })}
+            confirmLabel={t("sidebar.session.confirmDelete")}
+            destructive
+            onConfirm={() => void request({ type: "sessions:delete", sessionId: remoteIdOf(session.id) })}
+          />
+          <PromptDialog
+            open={renaming}
+            onOpenChange={setRenaming}
+            title={t("sidebar.session.renameTitle")}
+            initialValue={session.title}
+            onSubmit={(title) => void request({ type: "sessions:rename", sessionId: remoteIdOf(session.id), title })}
+          />
+          {movingToFolder && (
+            <RemoteMoveToFolderDialog peerId={peerId} open={movingToFolder} onOpenChange={setMovingToFolder} session={session} />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** A chat and the sub-chats/workers hanging from it. `nested` = inside a folder. */
+function RemoteSessionNode({ peerId, session, childSessions = [], nested = false }: {
+  peerId: string
+  session: SessionInfo
+  childSessions?: SessionInfo[]
+  nested?: boolean
+}) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(true)
+  const hasChildren = childSessions.length > 0
+  useAgents()
+  const Button_ = nested ? SidebarMenuSubButton : SidebarMenuButton
+  const toggle = hasChildren ? (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      aria-label={expanded ? t("sidebar.collapseList") : t("sidebar.expandList")}
+      className={ROW_CONTROL}
+      onClick={(e) => {
+        e.stopPropagation()
+        setExpanded((prev) => !prev)
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        e.stopPropagation()
+        setExpanded((prev) => !prev)
+      }}
+    >
+      <ChevronDown className={cn("transition-transform", !expanded && "-rotate-90")} />
+    </span>
+  ) : undefined
+  const row = (
+    <RemoteSessionRow
+      peerId={peerId}
+      session={session}
+      button={Button_}
+      actionButtonClassName={nested ? "top-1" : undefined}
+      trailing={toggle}
+    />
+  )
+  const childRows = childSessions.map((child) => (
+    <RemoteSessionRow
+      key={child.id}
+      peerId={peerId}
+      session={child}
+      button={SidebarMenuSubButton}
+      actionButtonClassName="top-1"
+      icon={sessionIcon(child) ?? (child.orchestration?.role === "worker" ? Bot : MessagesSquare)}
+    />
+  ))
+  if (nested) {
+    return (
+      <SidebarMenuSubItem>
+        {row}
+        {hasChildren && expanded && (
+          <div className="ml-3 border-l border-sidebar-border pl-2">
+            {childRows.map((child, i) => (
+              <div key={childSessions[i].id} className="py-0.5">{child}</div>
+            ))}
+          </div>
+        )}
+      </SidebarMenuSubItem>
+    )
+  }
+  return (
+    <SidebarMenuItem>
+      {row}
+      {hasChildren && expanded && (
+        <SidebarMenuSub className="mr-0">
+          {childRows.map((child, i) => (
+            <SidebarMenuSubItem key={childSessions[i].id}>{child}</SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
+    </SidebarMenuItem>
+  )
+}
+
+function RemoteFolderItem({ peerId, folder, sessions, childrenByParent }: {
+  peerId: string
+  folder: FolderInfo
+  sessions: SessionInfo[]
+  childrenByParent: Record<string, SessionInfo[]>
+}) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(() => loadExpandedFolders()[folder.id] ?? false)
+  const { setView } = useWorkspace()
+  const request = useRemoteRequest(peerId)
+  const goHome = usePeersStore((s) => s.goHome)
+  const canAct = usePeersStore((s) => {
+    const peer = s.snapshot?.peers.find((p) => p.peerId === peerId)
+    return peer?.grants.control === true && !!peer.online
+  })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+
+  return (
+    <SidebarMenuItem>
+      <div className="group/menu-row relative min-w-0">
+        <SidebarMenuButton
+          className={cn(
+            "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+            "text-xs",
+            canAct && (folder.pinned ? "group-hover/menu-row:pr-14" : "group-hover/menu-row:pr-12"),
+          )}
+          onClick={() =>
+            setExpanded((prev) => {
+              persistExpandedFolder(folder.id, !prev)
+              return !prev
+            })
+          }
+        >
+          <Folder className="size-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <Truncate text={folder.name}>
+              <span className="truncate">{folder.name}</span>
+            </Truncate>
+            <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+          </div>
+          {folder.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
+        </SidebarMenuButton>
+
+        {canAct && !folder.archived && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setView("chat")
+              goHome(peerId, folder.id)
+            }}
+            className={cn(ROW_CONTROL, "absolute top-1 right-8 w-0 overflow-hidden transition-all duration-200 group-hover/menu-row:w-6")}
+          >
+            <Plus />
+            <span className="sr-only">{t("sidebar.folder.add")}</span>
+          </button>
+        )}
+
+        {canAct && (
+          <EllipsisMenu
+            groupClass="group-hover/menu-row:opacity-100"
+            buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-6"
+            items={[
+              { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
+              {
+                icon: folder.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
+                label: folder.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
+                onSelect: () => void request({ type: "folders:pin", folderId: folder.id, pinned: !folder.pinned }),
+              },
+              {
+                icon: folder.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
+                label: folder.archived ? t("sidebar.folder.unarchive") : t("sidebar.folder.archive"),
+                onSelect: () => void request({ type: "folders:archive", folderId: folder.id, archived: !folder.archived }),
+              },
+              { icon: <Trash2 className="size-4" />, label: t("sidebar.folder.remove"), onSelect: () => setConfirmDelete(true) },
+            ]}
+          />
+        )}
+      </div>
+
+      {expanded && sessions.length > 0 && (
+        <SidebarMenuSub className="mr-0">
+          {sessions.map((session) => (
+            <RemoteSessionNode key={session.id} peerId={peerId} session={session} childSessions={childrenByParent[session.id]} nested />
+          ))}
+        </SidebarMenuSub>
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={t("sidebar.folder.deleteTitle")}
+        description={t("sidebar.folder.deleteDescription", { name: folder.name })}
+        confirmLabel={t("sidebar.folder.remove")}
+        destructive
+        onConfirm={() => void request({ type: "folders:delete", folderId: folder.id })}
+      />
+      <PromptDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title={t("sidebar.folder.rename")}
+        initialValue={folder.name}
+        onSubmit={(name) => void request({ type: "folders:rename", folderId: folder.id, name })}
+      />
+    </SidebarMenuItem>
+  )
+}
+
+/** An ACTIVE folder inside "Archived", only to group the chats archived out of it. */
+function RemoteArchivedFolderGroup({ peerId, folder, sessions }: { peerId: string; folder: FolderInfo; sessions: SessionInfo[] }) {
+  const [expanded, setExpanded] = useState(false)
+  if (sessions.length === 0) return null
+  return (
+    <>
+      <SidebarMenuItem>
+        <SidebarMenuButton className="text-sidebar-foreground/70" onClick={() => setExpanded((v) => !v)}>
+          <Folder className="size-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <Truncate text={folder.name}>
+              <span className="truncate">{folder.name}</span>
+            </Truncate>
+            <span className="shrink-0 text-[10px] text-sidebar-foreground/40">{sessions.length}</span>
+            <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      {expanded && (
+        <div className="ml-3 border-l border-sidebar-border pl-1">
+          {sessions.map((session) => (
+            <RemoteSessionNode key={session.id} peerId={peerId} session={session} />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function RemoteChatHistory({ peerId }: { peerId: string }) {
+  const { t } = useTranslation()
+  const { mode } = useWorkspace()
+  const sessions = usePeersStore((s) => s.sessionsByPeer[peerId] ?? EMPTY_LIST) as SessionInfo[]
+  const folders = usePeersStore((s) => s.foldersByPeer[peerId] ?? EMPTY_LIST) as FolderInfo[]
+  const request = useRemoteRequest(peerId)
+  const canAct = usePeersStore((s) => {
+    const peer = s.snapshot?.peers.find((p) => p.peerId === peerId)
+    return peer?.grants.control === true && !!peer.online
+  })
+  const [creatingFolder, setCreatingFolder] = useState(false)
+
+  // Same ordering and filtering as the local list: a block's position follows the most
+  // recent activity of the chat or of its sub-chats; routine runs and a fragment's own
+  // chat never take a row.
+  const activity = useMemo(() => sessionActivityMap(sessions), [sessions])
+  const activityOf = (session: SessionInfo) => activity.get(session.id) ?? session.updatedAt
+  const modeSessions = useMemo(
+    () =>
+      sessions
+        .filter((s) => s.mode === mode && !s.routineId && !isEmbeddedArtifactChat(s))
+        .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
+    [sessions, mode, activity],
+  )
+  const childrenByParent = useMemo(() => {
+    const map: Record<string, SessionInfo[]> = {}
+    for (const s of sessions) {
+      if (s.parentId && !s.archived) (map[s.parentId] ??= []).push(s)
+    }
+    for (const children of Object.values(map)) children.sort((a, b) => b.updatedAt - a.updatedAt)
+    return map
+  }, [sessions])
+
+  const active = modeSessions.filter((s) => !s.archived && !s.parentId)
+  const archivedSessions = modeSessions.filter((s) => s.archived && !s.parentId)
+  const modeFolders = folders.filter((f) => f.mode === mode)
+  const activeFolders = modeFolders.filter((f) => !f.archived)
+  const archivedFolders = modeFolders.filter((f) => f.archived)
+  const archivedFolderIds = new Set(archivedFolders.map((f) => f.id))
+  const folderActivity = (folderId: string) =>
+    active.filter((s) => s.folderId === folderId).reduce((latest, s) => Math.max(latest, activityOf(s)), 0)
+  const sortedFolders = [...activeFolders].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return folderActivity(b.id) - folderActivity(a.id)
+  })
+  const sortedArchivedFolders = [...archivedFolders].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return b.createdAt - a.createdAt
+  })
+  const rootSessions = active
+    .filter((s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId))
+    .sort((a, b) => activityOf(b) - activityOf(a))
+  const archivedInActiveFolders = archivedSessions.filter((s) => s.folderId != null && !archivedFolderIds.has(s.folderId))
+  const activeFoldersWithArchived = activeFolders
+    .filter((f) => archivedInActiveFolders.some((s) => s.folderId === f.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const archived = archivedSessions.filter((s) => !s.folderId)
+  const pinned = rootSessions.filter((s) => s.pinned)
+  const recent = rootSessions.filter((s) => !s.pinned)
+
+  return (
+    <>
+      <AccordionGroup
+        label={t("sidebar.groups.folders")}
+        action={
+          canAct && (
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t("sidebar.folder.newFolderTitle")}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setCreatingFolder(true)
+                      }}
+                      className={GROUP_ACTION_CLASS}
+                    />
+                  }
+                >
+                  <FolderPlus className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent side="top">{t("sidebar.folder.newFolderTitle")}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )
+        }
+      >
+        <SidebarMenu>
+          {sortedFolders.map((folder) => (
+            <RemoteFolderItem
+              key={folder.id}
+              peerId={peerId}
+              folder={folder}
+              sessions={active.filter((s) => s.folderId === folder.id)}
+              childrenByParent={childrenByParent}
+            />
+          ))}
+          {sortedFolders.length === 0 && (
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">{t("sidebar.folder.none")}</div>
+          )}
+        </SidebarMenu>
+      </AccordionGroup>
+
+      {pinned.length > 0 && (
+        <AccordionGroup label={t("sidebar.groups.pinned")}>
+          <SidebarMenu>
+            {pinned.map((session) => (
+              <RemoteSessionNode key={session.id} peerId={peerId} session={session} childSessions={childrenByParent[session.id]} />
+            ))}
+          </SidebarMenu>
+        </AccordionGroup>
+      )}
+
+      <AccordionGroup label={t("sidebar.groups.chats")}>
+        <SidebarMenu>
+          {recent.map((session) => (
+            <RemoteSessionNode key={session.id} peerId={peerId} session={session} childSessions={childrenByParent[session.id]} />
+          ))}
+          {recent.length === 0 && (
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">{t("sidebar.groups.noChats")}</div>
+          )}
+        </SidebarMenu>
+      </AccordionGroup>
+
+      {(archived.length > 0 || sortedArchivedFolders.length > 0 || activeFoldersWithArchived.length > 0) && (
+        <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
+          <SidebarMenu>
+            {sortedArchivedFolders.map((folder) => (
+              <RemoteFolderItem
+                key={folder.id}
+                peerId={peerId}
+                folder={folder}
+                sessions={archivedSessions.filter((s) => s.folderId === folder.id)}
+                childrenByParent={childrenByParent}
+              />
+            ))}
+            {activeFoldersWithArchived.map((folder) => (
+              <RemoteArchivedFolderGroup
+                key={`arch:${folder.id}`}
+                peerId={peerId}
+                folder={folder}
+                sessions={archivedInActiveFolders.filter((s) => s.folderId === folder.id)}
+              />
+            ))}
+            {archived.map((session) => (
+              <RemoteSessionNode key={session.id} peerId={peerId} session={session} />
+            ))}
+          </SidebarMenu>
+        </AccordionGroup>
+      )}
+
+      <PromptDialog
+        open={creatingFolder}
+        onOpenChange={setCreatingFolder}
+        title={t("sidebar.folder.newFolderTitle")}
+        placeholder={t("sidebar.folder.newFolderPlaceholder")}
+        onSubmit={(name) => void request({ type: "folders:create", mode, name })}
+      />
+    </>
+  )
+}
+
+/** The whole sidebar body while another desktop is the environment: same blocks as at home. */
+function RemoteSidebarContent({ peerId }: { peerId: string }) {
+  const { t } = useTranslation()
+  const peer = usePeersStore((s) => s.snapshot?.peers.find((p) => p.peerId === peerId))
+  const { mode } = useWorkspace()
+  const online = !!peer?.online
+  const control = peer?.grants.control === true
+  const name = peer?.name ?? ""
+  return (
+    <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
+      {!online && (
+        <div className="mx-2 mt-2 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          <WifiOff className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            {t("peers.env.offline", { name })}
+            {peer?.error ? ` ${t(`peers.error_${peer.error}`)}` : null}
+          </span>
+        </div>
+      )}
+      {control && online ? (
+        <div className="flex flex-col gap-1 px-2 py-2">
+          <RemoteNewChatButton peerId={peerId} />
+        </div>
+      ) : online ? (
+        <p className="px-4 py-2 text-[11px] text-muted-foreground">{t("peers.remote.readOnly", { name })}</p>
+      ) : null}
+      {control && online && (
+        <div className="space-y-1 px-2 pb-2">
+          <RoutinesButton />
+          {mode === "code" && <PipelineButton />}
+          <MemoriesButton />
+          <UsageButton />
+        </div>
+      )}
+      <SidebarSeparator className="mx-3" />
+      <div className="pt-2">
+        <RunningElsewhere />
+      </div>
+      <RemoteChatHistory peerId={peerId} />
+    </div>
+  )
+}
+
 export function AppSidebar() {
   const initialize = useSessionStore((s) => s.initialize)
   const initQueue = useMessageQueueStore((s) => s.initialize)
@@ -1818,10 +2454,7 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarContent>
           {env !== "local" ? (
-            <div className="flex min-w-0 flex-col overflow-x-hidden pt-2 select-none">
-              <RunningElsewhere />
-              <RemoteSessionList peerId={env} />
-            </div>
+            <RemoteSidebarContent peerId={env} />
           ) : (
           <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
             <div className="flex flex-col gap-1 px-2 py-2">

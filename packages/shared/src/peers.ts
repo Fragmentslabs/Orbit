@@ -12,6 +12,9 @@
  */
 
 import type { ChatEvent, FolderInfo, SessionInfo } from './chat'
+import type { MemoryEvent } from './memory'
+import type { PipelineEvent } from './pipeline'
+import type { RoutineEvent } from './routines'
 
 export const PEER_PROTOCOL_VERSION = 1
 /** Mutual-TLS server (HTTPS + WSS on the same port) for desktop peers. */
@@ -177,6 +180,10 @@ export type PeersEvent =
   | { type: 'folders'; peerId: string; folders: FolderInfo[] }
   | { type: 'chat'; peerId: string; event: ChatEvent }
   | { type: 'statuses'; peerId: string; running: string[] }
+  /** Routine and pipeline events of the other machine (full-control peers only). */
+  | { type: 'routines'; peerId: string; event: RoutineEvent }
+  | { type: 'pipeline'; peerId: string; event: PipelineEvent }
+  | { type: 'memory'; peerId: string; event: MemoryEvent }
 
 // ─── Wire protocol (peer server) ─────────────────────────────────────────────
 

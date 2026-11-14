@@ -11,6 +11,7 @@ import { getSlides, slidesIdForName, slidesIdForPath } from '../slides/slides-st
 import { documentInfo, readArtifact, readDocumentSource } from '../media'
 import { getSessionModelsCache } from '../companion-http'
 import { listDirectory, readProjectFile } from './fs-access'
+import { cleanDirectories } from './send-folders'
 
 /**
  * The requests only a desktop peer makes (the allowlist in permissions.ts already
@@ -119,12 +120,16 @@ export async function handleDesktopOnlyRequest(req: Req): Promise<unknown> {
 const MAX_TEXT = 100_000
 
 /**
- * A message from another desktop keeps only the text. Folders, permission mode,
- * models, loop, orchestration and attachments are this machine's decisions: the
- * turn runs with the model the chat already uses here and under this machine's
- * own permission mode.
+ * A message from another desktop keeps the text. Permission mode, models, loop,
+ * orchestration and attachments are this machine's decisions: the turn runs with the
+ * model the chat already uses here and under this machine's own permission mode.
+ * The working folders of a code chat are the exception, and only for a desktop paired
+ * with full control — it picks them from this machine's own folders, as the phone does.
  */
-export async function sanitizeDesktopSend(req: SendMessageRequest): Promise<SendMessageRequest | null> {
+export async function sanitizeDesktopSend(
+  req: SendMessageRequest,
+  grants?: { control?: boolean },
+): Promise<SendMessageRequest | null> {
   const sessionId = str(req.sessionId, 200)
   const text = typeof req.text === 'string' ? req.text.slice(0, MAX_TEXT) : ''
   if (!sessionId || !text.trim()) return null
@@ -136,6 +141,7 @@ export async function sanitizeDesktopSend(req: SendMessageRequest): Promise<Send
     type: 'messages:send',
     sessionId,
     text,
+    ...(grants?.control ? cleanDirectories(req) : {}),
     ...(model ? { providerId: model.providerId, modelId: model.modelId } : {}),
   }
 }

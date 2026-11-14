@@ -4656,35 +4656,16 @@
       "local": "Este computador",
       "connect": "Conectar dispositivos…",
       "label": "Ambiente",
-      "remoteBanner": "Ambiente remoto: {{name}}",
       "viewOnly": "Somente ver",
       "canSend": "Ver e enviar",
-      "offline": "{{name}} está offline",
-      "back": "Voltar para este computador"
+      "offline": "{{name}} está offline"
     },
     "running": {
       "title": "Rodando em outros computadores",
       "waiting": "aguardando aprovação"
     },
     "remote": {
-      "empty": "Ainda não há chats em {{name}}.",
-      "pick": "Escolha um chat de {{name}} na barra lateral.",
-      "sessions": "Sessões",
-      "newChat": "Novo chat",
-      "folders": "Pastas",
-      "recent": "Recentes",
-      "archived": "Arquivados",
-      "actions": "Ações do chat",
-      "rename": "Renomear",
-      "renamePrompt": "Novo nome para este chat",
-      "pin": "Fixar",
-      "unpin": "Desafixar",
-      "archive": "Arquivar",
-      "unarchive": "Desarquivar",
-      "delete": "Apagar",
-      "deleteConfirm": "Apagar \"{{title}}\" em {{name}}? Isso não pode ser desfeito.",
       "readOnly": "Somente visualização em {{name}}",
-      "controlNote": "Controle total de {{name}}",
       "loading": "Carregando…",
       "loadError": "Não foi possível carregar este chat: {{error}}",
       "inputPlaceholder": "Mensagem para este chat em {{name}}",
@@ -4695,8 +4676,11 @@
       "stop": "Parar",
       "send": "Enviar",
       "files": "Arquivos",
-      "reload": "Recarregar",
-      "sendError": "Não foi possível enviar: {{error}}"
+      "sendError": "Não foi possível enviar: {{error}}",
+      "pickFolder": "Escolher pasta em {{name}}",
+      "useFolder": "Usar esta pasta",
+      "noFolder": "Escolher pasta do projeto",
+      "newRoutine": "Nova rotina em {{name}}"
     },
     "files": {
       "title": "Arquivos em {{name}}",

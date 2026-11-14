@@ -8,6 +8,7 @@ import type {
   WebhookActivity,
 } from "@shared/routines"
 import { DEFAULT_ROUTINES, LEGACY_DEFAULT_ROUTINE_IDS } from "@shared/routines-default"
+import { getActivePeer } from "@/src/lib/env-source"
 import { routinesApi } from "@/src/lib/ipc"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -137,14 +138,18 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   toggleDetails: () => set((state) => ({ detailsOpen: !state.detailsOpen })),
 
   load: async () => {
+    const peer = getActivePeer()
     const data = await routinesApi.load()
+    // The environment moved on while this was in flight: it belongs to a machine no longer shown.
+    if (getActivePeer() !== peer) return
     set({
       routines: data.routines,
       runs: data.runs,
       activity: Object.fromEntries(data.activities.map((a) => [a.routineId, a])),
       loaded: true,
     })
-    await seedDefaultRoutines()
+    // The presets are this machine's own housekeeping: never seed them onto another desktop.
+    if (!peer) await seedDefaultRoutines()
   },
 
   applyEvent: (event) => {

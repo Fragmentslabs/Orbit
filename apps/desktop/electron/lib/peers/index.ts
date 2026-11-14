@@ -202,11 +202,16 @@ export function registerPeersIpc(): void {
     const r = remote(sessionId)
     return peerRequest(r.peerId, { type: 'session:state', sessionId: r.sessionId })
   })
-  ipcMain.handle('peers:send', async (_e, sessionId: string, text: string) => {
+  ipcMain.handle('peers:send', async (_e, sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) => {
     const r = remote(sessionId)
     const grants = peerGrants(r.peerId)
     if (!grants.control && !grants.send) throw new Error('forbidden')
-    return peerRequest(r.peerId, { type: 'messages:send', sessionId: r.sessionId, text: String(text ?? '') })
+    // The working folders of a code chat belong to a peer with full control; the other
+    // machine checks the same thing again before honoring them.
+    const folders = grants.control && typeof opts?.directory === 'string' && opts.directory
+      ? { directory: opts.directory, ...(Array.isArray(opts.extraDirectories) ? { extraDirectories: opts.extraDirectories.filter((d) => typeof d === 'string') } : {}) }
+      : {}
+    return peerRequest(r.peerId, { type: 'messages:send', sessionId: r.sessionId, text: String(text ?? ''), ...folders })
   })
   ipcMain.handle('peers:abort', async (_e, sessionId: string) => {
     const r = remote(sessionId)

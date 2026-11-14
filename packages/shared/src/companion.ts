@@ -6,8 +6,9 @@
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage, OrchestrationSettings } from './chat'
 import type { VoiceEngineId, VoiceEngineStatus } from './voice'
-import type { AnalyticsRange } from './analytics'
+import type { AnalyticsRange, UsageSummaryRequest } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
+import type { MemoryEvent } from './memory'
 import type {
   NewPipelineInput,
   PlannedTask,
@@ -395,6 +396,14 @@ export interface GetAnalyticsRequest {
   type: 'analytics:summary'
   /** Presets or a custom interval (type: 'custom', from/to in ms). */
   range?: AnalyticsRange
+  /** Desktops only: restrict the usage to one workspace mode. */
+  mode?: 'chat' | 'code'
+}
+
+/** Desktops only: "what was done" of a project/day, written by the aux model on THIS machine. */
+export interface SummarizeAnalyticsRequest {
+  type: 'analytics:summarize'
+  input: UsageSummaryRequest
 }
 
 export interface GetStatusRequest {
@@ -499,6 +508,41 @@ export interface DeleteMemoryRequest {
 export interface PromoteMemoryRequest {
   type: 'memory:promote'
   id: string
+}
+
+/**
+ * The models usable on THIS machine — the full catalog with its custom providers merged in, which of
+ * them have credentials, and the model it picks by default. A desktop paired with full control reads it
+ * to create a routine or a pipeline with models that exist here, not the ones it has itself.
+ */
+export interface ProvidersSnapshotRequest {
+  type: 'providers:snapshot'
+}
+
+export interface ProvidersSnapshotResponse {
+  catalog: Record<string, unknown>
+  connectedProviders: string[]
+  selectedModel?: { providerId: string; modelId: string }
+}
+
+/** Manual creation (file drop on the memory graph). Desktops only. */
+export interface CreateMemoryRequest {
+  type: 'memory:create'
+  input: {
+    text: string
+    kind: 'general' | 'project'
+    tags?: string[]
+    document?: string
+    directory?: string
+    relatedId?: string
+  }
+}
+
+/** Draws a relation between two memories (graph). Desktops only. */
+export interface LinkMemoriesRequest {
+  type: 'memory:link'
+  sourceId: string
+  targetId: string
 }
 
 /** Fetches the .md document attached to a memory (hasDoc). */
@@ -850,6 +894,7 @@ export type CompanionRequest =
   | SetWorkerConfigRequest
   | GetCatalogRequest
   | GetAnalyticsRequest
+  | SummarizeAnalyticsRequest
   | GetStatusRequest
   | RenameSessionRequest
   | PinSessionRequest
@@ -872,6 +917,9 @@ export type CompanionRequest =
   | DeleteMemoryRequest
   | PromoteMemoryRequest
   | GetMemoryDocRequest
+  | ProvidersSnapshotRequest
+  | CreateMemoryRequest
+  | LinkMemoriesRequest
   | ListRoutinesRequest
   | CreateRoutineRequest
   | UpdateRoutineRequest
@@ -957,6 +1005,12 @@ export interface RoutineEventMessage {
   event: RoutineEvent
 }
 
+/** Memory event relayed to a desktop paired with full control (the phone does not need it). */
+export interface MemoryEventMessage {
+  type: 'memory:event'
+  event: MemoryEvent
+}
+
 /** Pipeline event relayed from the desktop (mirrors of the PipelineEvent):
  *  tasks finishing, phases advancing, progress/thinking/tools live. */
 export interface PipelineEventMessage {
@@ -1002,6 +1056,7 @@ export type CompanionEvent =
   | ApiResponse
   | ChatEventMessage
   | RoutineEventMessage
+  | MemoryEventMessage
   | PipelineEventMessage
   | PendingAskNotification
   | NewMessageNotification

@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { ChatEvent, ChatMessage, ChatStatus, FolderInfo, SessionInfo } from "@shared/chat"
 import { parseRemoteSessionId, type PeersEvent, type PeersSnapshot } from "@shared/peers"
 import { peersApi } from "@/src/lib/ipc"
+import type { PendingAskUI } from "@/src/stores/session-store"
 
 const ENV_KEY = "orbit:environment"
 
@@ -34,6 +35,8 @@ interface PeersState {
   activeByPeer: Record<string, string | null>
   messages: Record<string, ChatMessage[]>
   statuses: Record<string, ChatStatus>
+  /** Questions and permissions the other machine's agent is waiting on, by namespaced chat id. */
+  pendingAsks: Record<string, PendingAskUI[]>
   loading: Record<string, boolean>
   errors: Record<string, string | undefined>
   /** Message being sent from here (the input shows the spinner). */
@@ -45,9 +48,18 @@ interface PeersState {
   setConnectOpen: (open: boolean) => void
   setEnv: (env: EnvId) => void
   openSession: (sessionId: string) => void
+  /** Folder (of the active desktop) where the next new chat is born — the "+" of a folder row. */
+  homeFolderId: string | null
+  /** The "new routine" form of the desktop on screen (opened from the Routines page). */
+  routineDialogOpen: boolean
+  setRoutineDialogOpen: (open: boolean) => void
+  /** Back to the "new chat" screen of a desktop (no chat open), optionally inside a folder. */
+  goHome: (peerId: string, folderId?: string | null) => void
   loadMessages: (sessionId: string, force?: boolean) => Promise<void>
-  send: (sessionId: string, text: string) => Promise<void>
+  send: (sessionId: string, text: string, opts?: { directory?: string; extraDirectories?: string[] }) => Promise<void>
   abort: (sessionId: string) => Promise<void>
+  /** Answers a question/permission on the machine that runs the agent. */
+  replyAsk: (peerId: string, requestId: string, value: unknown) => Promise<void>
 }
 
 const DELTA_FLUSH_MS = 50
@@ -63,9 +75,13 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   activeByPeer: {},
   messages: {},
   statuses: {},
+  pendingAsks: {},
   loading: {},
   errors: {},
   sending: {},
+  homeFolderId: null,
+  routineDialogOpen: false,
+  setRoutineDialogOpen: (open) => set({ routineDialogOpen: open }),
   connectOpen: false,
   connectTab: "phone",
   openConnect: (tab) => set((s) => ({ connectOpen: true, connectTab: tab ?? s.connectTab })),
@@ -84,16 +100,30 @@ export const usePeersStore = create<PeersState>((set, get) => ({
   openSession: (sessionId) => {
     const parsed = parseRemoteSessionId(sessionId)
     if (!parsed) return
-    set((s) => ({ env: parsed.peerId, activeByPeer: { ...s.activeByPeer, [parsed.peerId]: sessionId } }))
+    set((s) => ({
+      env: parsed.peerId,
+      homeFolderId: null,
+      activeByPeer: { ...s.activeByPeer, [parsed.peerId]: sessionId },
+    }))
     void get().loadMessages(sessionId)
   },
+
+  goHome: (peerId, folderId = null) =>
+    set((s) => ({ env: peerId, homeFolderId: folderId, activeByPeer: { ...s.activeByPeer, [peerId]: null } })),
 
   loadMessages: async (sessionId, force = false) => {
     if (!force && (get().messages[sessionId] || get().loading[sessionId])) return
     set((s) => ({ loading: { ...s.loading, [sessionId]: true }, errors: { ...s.errors, [sessionId]: undefined } }))
     try {
-      const list = await peersApi.messages(sessionId, { limit: 100 })
-      set((s) => ({ messages: { ...s.messages, [sessionId]: list } }))
+      const [list, state] = await Promise.all([
+        peersApi.messages(sessionId, { limit: 100 }),
+        // The cards the agent is waiting on live outside the messages.
+        peersApi.sessionState(sessionId).catch(() => null),
+      ])
+      set((s) => ({
+        messages: { ...s.messages, [sessionId]: list },
+        pendingAsks: { ...s.pendingAsks, [sessionId]: (state?.pendingAsks ?? []) as PendingAskUI[] },
+      }))
     } catch (err) {
       set((s) => ({ errors: { ...s.errors, [sessionId]: (err as Error).message } }))
     } finally {
@@ -101,10 +131,10 @@ export const usePeersStore = create<PeersState>((set, get) => ({
     }
   },
 
-  send: async (sessionId, text) => {
+  send: async (sessionId, text, opts) => {
     set((s) => ({ sending: { ...s.sending, [sessionId]: true }, errors: { ...s.errors, [sessionId]: undefined } }))
     try {
-      await peersApi.send(sessionId, text)
+      await peersApi.send(sessionId, text, opts)
     } catch (err) {
       set((s) => ({ errors: { ...s.errors, [sessionId]: (err as Error).message } }))
       throw err
@@ -115,6 +145,10 @@ export const usePeersStore = create<PeersState>((set, get) => ({
 
   abort: async (sessionId) => {
     await peersApi.abort(sessionId).catch(() => {})
+  },
+
+  replyAsk: async (peerId, requestId, value) => {
+    await peersApi.request(peerId, { type: "ask:reply", requestId, value })
   },
 }))
 
@@ -188,6 +222,43 @@ function applyChat(event: ChatEvent) {
       if (!deltaTimer) deltaTimer = setTimeout(flushDeltas, DELTA_FLUSH_MS)
       break
     }
+    case "permission":
+    case "question":
+    case "subchat": {
+      const ask: PendingAskUI =
+        event.type === "permission"
+          ? { requestId: event.requestId, kind: "permission", claim: event.claim, origin: event.origin }
+          : event.type === "subchat"
+            ? {
+                requestId: event.requestId,
+                kind: "subchat",
+                subchat: { title: event.title, brief: event.brief, scope: event.scope, profile: event.profile },
+                origin: event.origin,
+              }
+            : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }
+      usePeersStore.setState((s) => {
+        const current = s.pendingAsks[sessionId] ?? []
+        if (current.some((a) => a.requestId === ask.requestId)) return {}
+        return { pendingAsks: { ...s.pendingAsks, [sessionId]: [...current, ask] } }
+      })
+      break
+    }
+    case "ask:batch":
+      usePeersStore.setState((s) => {
+        const current = s.pendingAsks[sessionId] ?? []
+        const fresh = event.items
+          .filter((item) => !current.some((a) => a.requestId === item.requestId))
+          .map((item) => ({ ...item, batchId: event.batchId }))
+        return fresh.length ? { pendingAsks: { ...s.pendingAsks, [sessionId]: [...current, ...fresh] } } : {}
+      })
+      break
+    case "ask:done":
+      usePeersStore.setState((s) => {
+        const current = s.pendingAsks[sessionId]
+        if (!current?.some((a) => a.requestId === event.requestId)) return {}
+        return { pendingAsks: { ...s.pendingAsks, [sessionId]: current.filter((a) => a.requestId !== event.requestId) } }
+      })
+      break
     default:
       break
   }
