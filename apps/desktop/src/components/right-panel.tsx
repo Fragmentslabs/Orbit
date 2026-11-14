@@ -1,14 +1,8 @@
-import { sessionIcon } from "@/src/components/agent-meta"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { AppWindow, Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Pin, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
+import { AppWindow, Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Pin, Play, Presentation, Quote, MessageSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
-import { ChatInput } from "@/src/components/chat-input"
-import { BranchSelector } from "@/src/components/branch-selector"
-import { FolderSelector } from "@/src/components/folder-selector"
-import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
-import type { SendMessageOptions, FilePart } from "@shared/chat"
 import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { destroyWebview } from "@/src/components/browser/webview-session"
@@ -33,7 +27,13 @@ import { RoutineTab } from "@/src/components/routines/routine-tab"
 import { Hint } from "@/components/ui/hint"
 import { Truncate, TruncatedText } from "@/components/ui/truncated-text"
 
-import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
+import { useWorkspace } from "@/lib/workspace-context"
+import { useActiveChat } from "@/src/hooks/use-active-chat"
+import { useEnvSessions, useEnvStatusMap } from "@/src/hooks/use-env-sessions"
+import { usePeersStore } from "@/src/stores/peers-store"
+import { ChatTabHeader, ChatTabIcon, NewChatTab } from "@/src/components/right-panel/chat-tabs"
+import { RemoteChatTab, RemoteFilesTab } from "@/src/components/right-panel/remote-tabs"
+import { canBrowseRemoteFiles, isSelectableTab, isTabAvailable } from "@/src/components/right-panel/tab-availability"
 import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
@@ -46,53 +46,6 @@ interface TabMeta {
   icon: typeof MessageSquare
   label: string
   description: string
-}
-
-/**
- * The tab types the user can open empty, through the selector.
- *
- * "artifact" never enters: an artifact tab only exists pointing at an
- * artifact (it opens through the card in the conversation or through the gallery), never empty — and
- * "source" (singular, the viewer of a cited source) for the same reason.
- *
- * Code mode has everything; chat has the subset that makes sense without a working
- * folder. "sources" is in both: in code the repository is the corpus
- * of the FILES — `read` and `grep` already open PDF, DOCX and spreadsheet from there — but
- * site and pasted text are not in the repository and are precisely the material
- * that cannot be committed. The agent already receives the document tools and the
- * instruction about `srcN` in code mode (electron/lib/tools/index.ts and
- * prompts.ts): it was only the tab that was missing for the user to be able to declare a source.
- */
-function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
-  // "process" also never enters: a process tab only exists following a
-  // process that is already running (it opens through the card in the selector footer).
-  //
-  // "diff" left with them: it only exists pointing at ONE chat message or ONE
-  // pipeline task. The CURRENT changes are read in the folders tab (Changes),
-  // and the diff of a turn is conversation context — not a tab that opens empty.
-  // "motion" and "design" neither: the preview exists for ONE registered piece and
-  // is born from the event the agent fires when registering it (motion_preview /
-  // design_write), never empty — like the artifact.
-  if (
-    type === "artifact" ||
-    type === "source" ||
-    type === "document" ||
-    type === "process" ||
-    type === "diff" ||
-    type === "motion" ||
-    type === "design" ||
-    type === "slides" ||
-    // "memory" also only exists pointing at a memory — it is born from the click
-    // on the citation, inside the conversation. "routine" is the same: it is born from the
-    // click on a routine in the Routines page.
-    type === "memory" ||
-    type === "routine"
-  )
-    return false
-  if (mode === "code") return true
-  // "browser" enters chat: the browser does not depend on a working folder (the
-  // input's "browser" mode already counts in both modes, and the server list comes from the session).
-  return type === "chat" || type === "media" || type === "sources" || type === "browser" || type === "fragment"
 }
 
 function useTabMeta(): Record<TabType, TabMeta> {
@@ -118,105 +71,6 @@ function useTabMeta(): Record<TabType, TabMeta> {
   }
 }
 
-/** The icon of a conversation tab: the craft's icon for a specialist chat, nested bubbles otherwise. */
-function ChatTabIcon({ sessionId }: { sessionId: string }) {
-  const Icon = useSessionStore((s) => sessionIcon(s.sessions.find((x) => x.id === sessionId) ?? {})) ?? MessagesSquare
-  return <Icon className="size-3.5 shrink-0" />
-}
-
-function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
-  const { t } = useTranslation()
-  // The folders of the tab are born like the screen's (the new chat would start the same as the
-  // main panel's), but they change only here: the draft of a tab is not a
-  // folder association of the chat that is open in the window.
-  const { folders: screenFolders } = useWorkspace()
-  const [folders, setFolders] = useState<string[]>(screenFolders)
-  const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
-    if (folders.length > 0) {
-      // Mirrors the main panel: a new chat with a folder becomes a code session
-      const [directory, ...extraDirectories] = folders
-      const newSession = await useSessionStore.getState().createSession("code", { setActive: false, directory, extraDirectories })
-      onCreated(newSession.id)
-      await useSessionStore.getState().sendMessage("code", text, { options, sessionId: newSession.id, directory, extraDirectories, files })
-    } else {
-      const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
-      onCreated(newSession.id)
-      await useSessionStore.getState().sendMessage("chat", text, { options, sessionId: newSession.id, files })
-    }
-  }
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
-      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
-        <FolderSelector folders={folders} onFoldersChange={setFolders} />
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-lg font-medium text-foreground">{t("panel.newChat.title")}</p>
-          <p className="text-sm text-muted-foreground">{t("panel.newChat.subtitle")}</p>
-        </div>
-      </div>
-      <ChatInput onSubmit={handleSubmit} draftKey="panel" />
-    </div>
-  )
-}
-
-/** Header of a chat opened in a tab: name + folder + branch, like the main panel header */
-function ChatTabHeader({ sessionId }: { sessionId?: string }) {
-  const session = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined))
-  const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories)
-  const folders = useMemo(() => {
-    if (!session?.directory) return []
-    return [session.directory, ...(session.extraDirectories ?? [])]
-  }, [session])
-
-  const handleAgentAction = useCallback((instruction: string) => {
-    if (!sessionId) return
-    const s = useSessionStore.getState().sessions.find((x) => x.id === sessionId)
-    void useSessionStore.getState().sendMessage("code", instruction, {
-      options: { simple: true },
-      sessionId,
-      directory: s?.directory,
-      extraDirectories: s?.extraDirectories,
-    })
-  }, [sessionId])
-
-  if (!session) return null
-
-  const isCode = session.mode === "code" && !!session.directory
-
-  // The association belongs to the tab session — the workspace is the main window's and
-  // cannot start pointing at the folders from here.
-  const handleFoldersChange = (next: string[]) => {
-    setSessionDirectories(session.id, next[0], next.slice(1))
-  }
-
-  return (
-    // z-20: `@container` creates a stacking context (layout containment), so
-    // without it the folders dropdown stays trapped below the gradient at the top of the chat.
-    // `bg-sidebar` + `shrink-0`: the conversation here has no veil, and without its own
-    // background what passed under the header (message scrolling, card)
-    // appeared behind the title and the folder chip.
-    <div className="@container relative z-20 flex min-w-0 shrink-0 items-center gap-2 bg-sidebar px-1 pb-2">
-      <Truncate text={session.title}>
-        <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
-      </Truncate>
-      <div className="hidden min-w-0 items-center gap-2 @xl:flex">
-        {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
-        {folders.length > 0 && <FolderSelector folders={folders} onFoldersChange={handleFoldersChange} compact />}
-      </div>
-      <div className="flex min-w-0 items-center @xl:hidden">
-        <CompactWorkspaceSelector
-          repoPath={isCode ? session.directory : undefined}
-          folders={folders}
-          onFoldersChange={handleFoldersChange}
-          onRequestAgentAction={handleAgentAction}
-        />
-      </div>
-    </div>
-  )
-}
-
 function TerminalTabContent({ tabId, sessionId }: { tabId: string; sessionId?: string }) {
   const { t } = useTranslation()
   const terminalEntry = useTerminalStore((s) => s.entries[tabId])
@@ -234,9 +88,11 @@ function TerminalTabContent({ tabId, sessionId }: { tabId: string; sessionId?: s
   )
 }
 
-function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?: string; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
+function TabContent({ tab, sessionId, remote, onUpdateTab }: { tab: PanelTab; sessionId?: string; remote: boolean; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
   switch (tab.type) {
     case "chat":
+      // A chat of another desktop: its own view, fed by the peers connection.
+      if (remote) return <RemoteChatTab sessionId={tab.sessionId} onPick={(picked) => onUpdateTab(tab.id, { pending: false, sessionId: picked })} />
       if (tab.pending) {
         return <NewChatTab onCreated={(sessionId) => onUpdateTab(tab.id, { pending: false, sessionId })} />
       }
@@ -251,6 +107,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
     case "process":
       return <ProcessTab pid={tab.processPid ?? 0} sessionId={tab.sessionId ?? sessionId} />
     case "folders":
+      if (remote) return <RemoteFilesTab sessionId={sessionId} />
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <FoldersTab />
@@ -409,14 +266,14 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   const { t } = useTranslation()
   const tabMeta = useTabMeta()
   const { mode, folders } = useWorkspace()
-  const activeId = useSessionStore((s) => s.activeIds[mode])
+  const { remote, sessionId: activeId, key: bucketKey } = useActiveChat()
+  const peer = usePeersStore((s) => s.snapshot?.peers.find((p) => p.peerId === s.env))
 
   const allProcesses = useProcessStore((s) => s.allProcesses)
   const fetchAllProcesses = useProcessStore((s) => s.fetchAll)
   const killProcess = useProcessStore((s) => s.kill)
-  // Bucket of tabs of the active session (or the orphan one, in the new chat still without a session):
-  // the process tab opened here needs to fall into the same bucket as the rest.
-  const bucketKey = activeId ?? ORPHAN_KEY
+  // `bucketKey`: tabs of the active session (or the orphan one, in the new chat still without a
+  // session) — the process tab opened here needs to fall into the same bucket as the rest.
 
   // Scope of the footer: only this conversation (default) or all chats. It stays in
   // localStorage because the selector unmounts when a tab opens — without that the mode
@@ -434,8 +291,8 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   // guarantees that the "this chat" mode does not show a process of another chat even if
   // another consumer of the store swaps the list.
   const ownProcesses = useMemo(
-    () => (activeId ? allProcesses.filter((p) => p.sessionId === activeId) : []),
-    [allProcesses, activeId],
+    () => (!remote && activeId ? allProcesses.filter((p) => p.sessionId === activeId) : []),
+    [allProcesses, activeId, remote],
   )
 
   // In global mode, the ones of this conversation on top; the ones of other chats after.
@@ -449,9 +306,9 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   const availableTabs = useMemo(
     () =>
       (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) =>
-        isSelectableTab(type, mode),
+        isSelectableTab(type, mode, remote),
       ),
-    [mode, tabMeta],
+    [mode, remote, tabMeta],
   )
 
   const fragmentItems = useFragmentsStore((s) => s.items)
@@ -459,7 +316,8 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   useEffect(() => {
     void loadFragments()
   }, [loadFragments])
-  const pinnedFragments = useMemo(() => fragmentItems.filter((f) => f.pinned.panel), [fragmentItems])
+  // Fragments are screens of THIS machine: another desktop's panel does not offer them.
+  const pinnedFragments = useMemo(() => (remote ? [] : fragmentItems.filter((f) => f.pinned.panel)), [fragmentItems, remote])
 
   // The footer fetches the GLOBAL list (unfiltered) on purpose: the "this chat" mode
   // is filtered right above, and it is that same list that supports the "all chats" one.
@@ -474,18 +332,22 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   return (
     <div className="@container flex flex-1 flex-col overflow-hidden">
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-6">
-        <CreateCards />
-        <RecentMedia
-          onOpenEntry={(entry) => openMediaEntryInPanel(entry, bucketKey)}
-          onSeeAll={() => onSelect("media")}
-        />
+        {/* Creating and the recent shelf read this machine's media: the media tab covers the other desktop. */}
+        {remote ? null : <CreateCards />}
+        {remote ? null : (
+          <RecentMedia
+            onOpenEntry={(entry) => openMediaEntryInPanel(entry, bucketKey)}
+            onSeeAll={() => onSelect("media")}
+          />
+        )}
         <section className="flex flex-col gap-2.5">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("panel.hub.open")}</p>
           <div className="grid grid-cols-2 gap-2 @[30rem]:grid-cols-3">
             {availableTabs.map(([type, { icon: Icon, label, description }]) => {
               // Folders follow the repository selected in the workspace: with no active
               // chat it is still possible to open (new chat), as long as there is a project.
-              const isDisabled = folders.length === 0 && type === "folders"
+              // On another desktop the files tab needs the peer's grant instead of a local project.
+              const isDisabled = type === "folders" && (remote ? !canBrowseRemoteFiles(peer) || !activeId : folders.length === 0)
               return (
                 <button
                   key={type}
@@ -520,7 +382,7 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
         </section>
       </div>
 
-      {allProcesses.length === 0 ? (
+      {remote ? null : allProcesses.length === 0 ? (
         <div className="flex shrink-0 items-center gap-2 border-t border-sidebar-border px-4 py-2.5 text-[11px] text-muted-foreground">
           <span className="flex-1">{t("panel.processes.title")}</span>
           <span>{t("panel.processes.none")}</span>
@@ -637,15 +499,15 @@ export function RightPanel() {
   const { t } = useTranslation()
   const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition)
   const tabMeta = useTabMeta()
-  const { mode, folders } = useWorkspace()
-  const activeSessionId = useSessionStore((s) => s.activeIds[mode])
-  const sessions = useSessionStore((s) => s.sessions)
-  const statusMap = useSessionStore((s) => s.status)
+  const { folders } = useWorkspace()
+  // The chat on screen — this computer's or the paired desktop's (namespaced id) — decides the bucket.
+  const { remote, sessionId: activeSessionId, key: sessionKey } = useActiveChat()
+  const sessions = useEnvSessions()
+  const statusMap = useEnvStatusMap()
   const unreadCounts = useSessionStore((s) => s.unreadCounts)
 
   const tabsBySession = usePanelStore((s) => s.tabsBySession)
   const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
-  const sessionKey = activeSessionId ?? ORPHAN_KEY
   // `?? []` creates a new array on every render: memoized, the callbacks and
   // effects below stop recreating along with it.
   const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
@@ -678,12 +540,12 @@ export function RightPanel() {
     const seen = new Set<string>()
     const out: PanelTab[] = []
     for (const tab of [...pinnedTabs, ...tabs]) {
-      if (seen.has(tab.id)) continue
+      if (seen.has(tab.id) || !isTabAvailable(tab, remote)) continue
       seen.add(tab.id)
       out.push(tab)
     }
     return out
-  }, [pinnedTabs, tabs])
+  }, [pinnedTabs, tabs, remote])
   /** Chat that owns a tab — undefined when it lives in the bucket with no chat (the orphan). */
   const sessionOfTab = useCallback(
     (tabId: string) => {
@@ -744,7 +606,7 @@ export function RightPanel() {
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
     // Folders follow the repository selected in the workspace: they only stay
     // blocked when there is no project selected (even with no active chat).
-    if (type === "folders" && folders.length === 0) return
+    if (type === "folders" && !remote && folders.length === 0) return
 
     // A tab was chosen: the selector leaves the scene and the open tab takes over.
     setSelectorOpen(false)
@@ -782,7 +644,7 @@ export function RightPanel() {
     const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [sessionKey, visibleTabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
+  }, [sessionKey, remote, visibleTabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
 
   /**
    * The palette (⌘P) asked for a file. Here one only prepares the PLACE: opening the panel,
@@ -793,14 +655,15 @@ export function RightPanel() {
   useEffect(() => {
     if (!pendingFile || handledFileRequest.current === pendingFile.nonce) return
     handledFileRequest.current = pendingFile.nonce
-    if (folders.length === 0) return
+    // The palette searches this computer's folders.
+    if (remote || folders.length === 0) return
     setRightPanelOpen(true)
     // A pinned Folders tab of another chat is the same browser: it is reused instead of
     // opening a second one.
     const existing = visibleTabs.find((tab) => tab.type === "folders")
     if (existing) setActiveTabInStore(sessionKey, existing.id)
     else void addTab("folders")
-  }, [pendingFile, folders.length, visibleTabs, sessionKey, setActiveTabInStore, setRightPanelOpen, addTab])
+  }, [pendingFile, remote, folders.length, visibleTabs, sessionKey, setActiveTabInStore, setRightPanelOpen, addTab])
 
   const removeTab = useCallback((id: string) => {
     // The bucket comes from the tab, not from the chat on the screen: a pinned tab can be
@@ -1088,7 +951,7 @@ export function RightPanel() {
           // re-attaches the webview of that tab coming from the pool.
           // The tab's OWN chat goes to the content: a pinned tab of another conversation
           // keeps reading and writing in the chat that opened it.
-          <TabContent key={activeTab.id} tab={activeTab} sessionId={sessionOfTab(activeTab.id)} onUpdateTab={updateTab} />
+          <TabContent key={activeTab.id} tab={activeTab} sessionId={sessionOfTab(activeTab.id)} remote={remote} onUpdateTab={updateTab} />
         ) : (
           <SelectorScreen
             onSelect={addTab}

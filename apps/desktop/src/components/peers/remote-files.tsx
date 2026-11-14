@@ -11,7 +11,13 @@ import { peersApi } from "@/src/lib/ipc"
  * grant). The other machine resolves every path inside the chat's own folders and
  * hides secrets (.env, keys, .git); this side only names a root, a path and a file.
  */
-export function RemoteFiles({ sessionId, peerName, onClose }: { sessionId: string; peerName: string; onClose: () => void }) {
+export function RemoteFiles({ sessionId, peerName, onClose, embedded = false }: {
+  sessionId: string
+  peerName: string
+  onClose: () => void
+  /** Inside a panel tab: fills it, with no close button (the tab's own closes it). */
+  embedded?: boolean
+}) {
   const { t } = useTranslation()
   const [root, setRoot] = useState(0)
   const [dir, setDir] = useState("")
@@ -49,7 +55,7 @@ export function RemoteFiles({ sessionId, peerName, onClose }: { sessionId: strin
   const parent = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : ""
 
   return (
-    <aside className="flex w-[44%] min-w-[280px] max-w-[560px] flex-col overflow-hidden rounded-lg border bg-card">
+    <aside className={cn("flex flex-col overflow-hidden bg-card", embedded ? "min-h-0 flex-1" : "w-[44%] min-w-[280px] max-w-[560px] rounded-lg border")}>
       <header className="flex items-center gap-2 border-b px-3 py-2 text-xs">
         <span className="min-w-0 flex-1 truncate font-medium">{t("peers.files.title", { name: peerName })}</span>
         {tree && tree.roots.length > 1 ? (
@@ -69,9 +75,11 @@ export function RemoteFiles({ sessionId, peerName, onClose }: { sessionId: strin
             ))}
           </select>
         ) : null}
-        <Button variant="ghost" size="icon" className="size-6" onClick={onClose} aria-label={t("peers.files.close")}>
-          <X className="size-3.5" />
-        </Button>
+        {embedded ? null : (
+          <Button variant="ghost" size="icon" className="size-6" onClick={onClose} aria-label={t("peers.files.close")}>
+            <X className="size-3.5" />
+          </Button>
+        )}
       </header>
 
       {file ? (

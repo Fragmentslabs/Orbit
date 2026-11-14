@@ -54,7 +54,7 @@ interface ChatHeaderProps {
   endActions?: React.ReactNode
 }
 
-function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
+export function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialValue: string
