@@ -5,6 +5,7 @@ import { peersApi } from "@/src/lib/ipc"
 import { refreshRemoteProviders } from "@/src/hooks/use-env-providers"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { usePeersStore } from "@/src/stores/peers-store"
+import { applyPeerSync, useRemoteSyncStore } from "@/src/stores/remote-sync-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 
@@ -70,6 +71,7 @@ function refreshAfterReconnect(peerId: string): void {
   if (usePipelineStore.getState().loaded) void usePipelineStore.getState().load().catch(() => {})
   if (useMemoryStore.getState().initialized) void useMemoryStore.getState().refresh().catch(() => {})
   void refreshRemoteProviders(peerId)
+  if (useRemoteSyncStore.getState().byPeer[peerId]) void useRemoteSyncStore.getState().load(peerId, true)
 }
 
 function remoteRoutineEvent(peerId: string, event: RoutineEvent): RoutineEvent {
@@ -93,6 +95,9 @@ export function startEnvSync(): void {
       if (event.peerId === getActivePeer()) useRoutinesStore.getState().applyEvent(remoteRoutineEvent(event.peerId, event.event))
     } else if (event.type === "memory") {
       if (event.peerId === getActivePeer()) useMemoryStore.getState().applyEvent(event.event)
+    } else if (event.type === "sync") {
+      // Per-chat settings and the queue of ANY paired machine: a chat open there reads them.
+      applyPeerSync(event.peerId, event.event)
     } else if (event.type === "pipeline") {
       if (event.peerId === getActivePeer()) usePipelineStore.getState().applyEvent(event.event as PipelineEvent)
     }

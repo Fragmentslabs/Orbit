@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Folder, FolderOpen, Loader2, Lock, Send, Square, WifiOff } from "lucide-react"
+import { Folder, FolderOpen, Lock, WifiOff } from "lucide-react"
 import type { SessionInfo } from "@shared/chat"
 import { showsPersonaOnWelcome } from "@shared/appearance"
 import { remoteSessionId } from "@shared/peers"
@@ -11,14 +11,13 @@ import { useWorkspaceMode } from "@/lib/workspace-context"
 import { Persona } from "@/src/components/ai/persona"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
-import { ReplyBar } from "@/src/components/reply-bar"
 import { peersApi } from "@/src/lib/ipc"
-import { withReplyPrefix } from "@/src/stores/message-reply"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { isRemoteRunning, useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { RemoteFiles } from "./remote-files"
 import { RemoteFolderPicker } from "./remote-folder-picker"
+import { RemoteComposer, type RemoteSubmit } from "./remote-composer"
 import { RemoteMessageList } from "./remote-message-list"
 
 /**
@@ -31,8 +30,8 @@ import { RemoteMessageList } from "./remote-message-list"
  * The messages go through the same components as a local chat, with the namespaced
  * session id — that is what makes a motion/design/slides card, an image or an audio of
  * that machine open from here (main routes the piece IPCs and the orbit-* schemes to the
- * peer). What this view does NOT offer is on purpose: approvals, revert, fork,
- * attachments — those belong to the machine that runs the agent.
+ * peer). The composer is the local one's counterpart (remote-composer.tsx). What this view
+ * does NOT offer is on purpose: revert and fork — those belong to the machine that runs the agent.
  *
  * `sessionId` pins a specific chat (the routine screen embeds one); without it the view
  * follows the chat picked in the sidebar, and no chat means the new-chat screen.
@@ -57,12 +56,12 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
   const replyAsk = usePeersStore((s) => s.replyAsk)
   const loadMessages = usePeersStore((s) => s.loadMessages)
   const send = usePeersStore((s) => s.send)
-  const abort = usePeersStore((s) => s.abort)
   const [filesOpen, setFilesOpen] = useState(false)
 
   const name = peer?.name ?? ""
   const busy = isRemoteRunning(status)
   const canSend = (!!peer?.grants.control || !!peer?.grants.send) && !!peer?.online
+  const canControl = !!peer?.grants.control && !!peer?.online
   const canFiles = !!peer?.grants.files && !!peer?.online
   const mode = session?.mode === "code" ? "code" : "chat"
 
@@ -87,9 +86,9 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
     return <RemoteWelcome peerId={env} name={name} canSend={canSend} online={!!peer?.online} />
   }
 
-  const submit = async (value: string) => {
-    if (!value || !canSend || busy || sending) return
-    await send(sessionId, withReplyPrefix(sessionId, value))
+  const submit = async ({ text, extras }: RemoteSubmit) => {
+    if (!canSend || busy || sending) return
+    await send(sessionId, text, extras)
   }
 
   return (
@@ -145,13 +144,14 @@ export function RemoteChatView({ sessionId: pinned, startScreen }: {
           </div>
         ) : canSend ? (
           <RemoteComposer
+            peerId={env}
+            sessionId={sessionId}
+            kind={mode}
+            canControl={canControl}
             placeholder={t("peers.remote.inputPlaceholder", { name })}
             note={busy ? t("peers.remote.busyNote") : t("peers.remote.runsThere", { name })}
-            busy={busy}
             sending={sending}
-            replyKey={sessionId}
             onSubmit={submit}
-            onStop={() => void abort(sessionId)}
           />
         ) : null}
         {error && messages ? <p className="mt-1 text-xs text-destructive">{t("peers.remote.sendError", { error })}</p> : null}
@@ -193,7 +193,7 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
   const title = t(pickWelcomeTitle({ mode, userName }), { name: userName ?? "" })
   const subtitle = mode === "chat" ? t("chat.empty.chatSubtitle") : t("chat.empty.codeSubtitle")
 
-  const start = async (text: string) => {
+  const start = async ({ text, extras, commitDraft }: RemoteSubmit) => {
     setError(null)
     setStarting(true)
     try {
@@ -206,7 +206,9 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
       // Ready before the first event of the new chat arrives, so none is dropped.
       usePeersStore.setState((s) => ({ messages: { ...s.messages, [id]: s.messages[id] ?? [] } }))
       openSession(id)
-      await send(id, text, mode === "code" && directory ? { directory } : undefined)
+      // The choices made on this screen (model, modes, permission) become the new chat's own.
+      await commitDraft(created.id)
+      await send(id, text, { ...extras, ...(mode === "code" && directory ? { directory } : {}) })
     } catch (err) {
       setError((err as Error).message)
       throw err
@@ -255,12 +257,13 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
         ) : null}
         {canSend ? (
           <RemoteComposer
+            peerId={peerId}
+            kind={mode}
+            canControl={control && online}
             placeholder={t("peers.remote.inputPlaceholder", { name })}
             note={t("peers.remote.runsThere", { name })}
-            busy={false}
             sending={starting}
             onSubmit={start}
-            onStop={() => {}}
           />
         ) : online ? (
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
@@ -269,62 +272,6 @@ function RemoteWelcome({ peerId, name, canSend, online }: { peerId: string; name
           </div>
         ) : null}
         {error ? <p className="mt-1 text-xs text-destructive">{t("peers.remote.sendError", { error })}</p> : null}
-      </div>
-    </div>
-  )
-}
-
-function RemoteComposer({ placeholder, note, busy, sending, onSubmit, onStop, replyKey }: {
-  /** The chat whose "reply to this message" quote rides along with the text. */
-  replyKey?: string
-  placeholder: string
-  note: string
-  busy: boolean
-  sending: boolean
-  onSubmit: (text: string) => Promise<void>
-  onStop: () => void
-}) {
-  const { t } = useTranslation()
-  const [text, setText] = useState("")
-  const submit = async () => {
-    const value = text.trim()
-    if (!value || busy || sending) return
-    try {
-      await onSubmit(value)
-      setText("")
-    } catch {
-      /* the error shows under the input */
-    }
-  }
-  return (
-    <div className="rounded-xl border bg-background p-2 shadow-sm">
-      {replyKey ? <ReplyBar replyKey={replyKey} /> : null}
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault()
-            void submit()
-          }
-        }}
-        rows={2}
-        placeholder={placeholder}
-        className="block max-h-48 min-h-[44px] w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
-      />
-      <div className="flex items-center gap-2 px-1 pt-1">
-        <span className="flex-1 truncate text-[11px] text-muted-foreground">{note}</span>
-        {busy ? (
-          <Button size="sm" variant="secondary" className="h-7 gap-1.5 text-xs" onClick={onStop}>
-            <Square className="size-3" />
-            {t("peers.remote.stop")}
-          </Button>
-        ) : (
-          <Button size="sm" className="h-7 gap-1.5 text-xs" disabled={!text.trim() || sending} onClick={() => void submit()}>
-            {sending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
-            {t("peers.remote.send")}
-          </Button>
-        )}
       </div>
     </div>
   )

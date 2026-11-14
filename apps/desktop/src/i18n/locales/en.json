@@ -4686,6 +4686,7 @@
       "pickFolder": "Pick a folder on {{name}}",
       "useFolder": "Use this folder",
       "noFolder": "Choose a project folder",
+      "attachmentsTooBig": "Attachments are too large to send to another computer (about 1.3 MB in total).",
       "newRoutine": "New routine on {{name}}"
     },
     "files": {

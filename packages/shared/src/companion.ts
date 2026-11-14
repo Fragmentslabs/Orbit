@@ -388,6 +388,26 @@ export interface AppPreferencesChangeEvent {
   prefs: AppPreferences
 }
 
+/**
+ * Everything the phone reads over several HTTP endpoints when it connects (model, modes,
+ * tools, thinking and permission per chat, rotation, worker config, preferences, queue) in
+ * one request — a desktop has no HTTP side, and these mirrors only arrive as changes.
+ */
+export interface GetSyncSnapshotRequest {
+  type: 'sync:get'
+}
+
+export interface SyncSnapshotResponse {
+  models: Record<string, { providerId: string; modelId: string }>
+  modes: SessionModeOverrides
+  tools: SessionToolsOverrides
+  prefs: SessionPrefsSnapshot
+  reasoning: ReasoningPrefsMap
+  workerConfig: WorkerConfigSnapshot
+  appPrefs: AppPreferences | null
+  queues: MessageQueueSnapshot
+}
+
 export interface GetCatalogRequest {
   type: 'catalog:get'
 }
@@ -893,6 +913,7 @@ export type CompanionRequest =
   | SetRotationsRequest
   | SetWorkerConfigRequest
   | GetCatalogRequest
+  | GetSyncSnapshotRequest
   | GetAnalyticsRequest
   | SummarizeAnalyticsRequest
   | GetStatusRequest

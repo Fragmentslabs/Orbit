@@ -106,6 +106,7 @@ import { normalizeGrants, type GrantedDevice, type PeerGrants } from '@shared/pe
 import { normalizeFingerprint } from './peers/pairing'
 import { desktopMayRequest, isDesktopOnlyRequest } from './peers/permissions'
 import { receivesMemoryEvents, receivesNotifications, receivesSyncEvents, receivesWorkEvents } from './client-capabilities'
+import { buildSyncSnapshot } from './sync-snapshot'
 import { handleDesktopOnlyRequest, sanitizeDesktopSend } from './peers/desktop-requests'
 
 const execFileAsync = promisify(execFile)
@@ -841,6 +842,11 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           }
         }
         sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'sync:get': {
+        sendResponse(ws, requestId, true, buildSyncSnapshot({ queues: messageQueueCache, appPrefs: getAppPreferences() }))
         break
       }
 

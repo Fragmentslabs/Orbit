@@ -96,6 +96,10 @@ describe('desktop permissions', () => {
     expect(desktopMayRequest('messages:send', NO_GRANTS)).toBe(false)
     expect(desktopMayRequest('messages:send', { control: false, send: true, files: false })).toBe(true)
     expect(desktopMayRequest('messages:send', full)).toBe(true)
+    // The settings snapshot and the queue are control: a send-only peer cannot read or change them.
+    expect(desktopMayRequest('sync:get', { control: false, send: true, files: false })).toBe(false)
+    expect(desktopMayRequest('queue:op', { control: false, send: true, files: false })).toBe(false)
+    expect(desktopMayRequest('sync:get', full)).toBe(true)
     expect(desktopMayRequest('fs:read', { control: false, send: true, files: false })).toBe(false)
     expect(desktopMayRequest('fs:read', { control: false, send: false, files: true })).toBe(true)
     expect(classifyDesktopRequest('chat:abort')).toBe('send')
