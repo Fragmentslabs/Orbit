@@ -16,15 +16,15 @@ import {
 import { formatCost, formatTokens } from "@/src/lib/format"
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("rounded-xl border bg-card p-3.5", className)}>{children}</div>
+  return <div className={cn("rounded-xl border bg-card p-3.5 @[80rem]:p-5", className)}>{children}</div>
 }
 
 export function CardHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-2.5 flex items-center gap-3">
+    <div className="mb-2.5 flex items-center gap-3 @[80rem]:mb-4">
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-semibold">{title}</p>
-        {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+        <p className="text-[13px] font-semibold @[80rem]:text-base">{title}</p>
+        {subtitle && <p className="text-[11px] text-muted-foreground @[80rem]:text-sm">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -52,11 +52,11 @@ export function Delta({ current, previous, lowerIsBetter }: { current: number; p
 export function Sparkline({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, Number.EPSILON)
   return (
-    <div className="flex h-7 items-end gap-0.5" aria-hidden>
+    <div className="flex h-7 items-end gap-0.5 @[80rem]:h-12 @[80rem]:gap-1" aria-hidden>
       {values.map((v, i) => (
         <span
           key={i}
-          className="w-[5px] rounded-sm"
+          className="w-[5px] rounded-sm @[80rem]:w-2"
           style={{ height: `${Math.max(8, Math.round((v / max) * 100))}%`, backgroundColor: color, opacity: v === 0 ? 0.25 : 1 }}
         />
       ))}
@@ -72,11 +72,11 @@ export function StatCard({ label, value, footer, spark, color }: {
   color: string
 }) {
   return (
-    <Card className="flex items-end justify-between gap-2 px-3.5 py-3">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[11px] text-muted-foreground">{label}</span>
-        <span className="text-lg font-semibold tabular-nums">{value}</span>
-        <span className="text-[11px]">{footer}</span>
+    <Card className="flex items-end justify-between gap-2 px-3.5 py-3 @[80rem]:min-h-32 @[80rem]:px-5 @[80rem]:py-5">
+      <div className="flex min-w-0 flex-col gap-0.5 @[80rem]:gap-1.5">
+        <span className="text-[11px] text-muted-foreground @[80rem]:text-sm">{label}</span>
+        <span className="text-lg font-semibold tabular-nums @[80rem]:text-3xl">{value}</span>
+        <span className="text-[11px] @[80rem]:text-sm">{footer}</span>
       </div>
       {spark && spark.length > 1 && <Sparkline values={spark} color={color} />}
     </Card>
@@ -122,10 +122,10 @@ export function ShareRow({ name, sub, value, pct, color, onClick }: {
 /** The small number card of every section: label, value, a line of context. */
 export function KpiCard({ label, value, meta }: { label: string; value: string; meta?: string }) {
   return (
-    <Card className="flex flex-col gap-0.5 px-3.5 py-3">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-      <span className="text-lg font-semibold tabular-nums">{value}</span>
-      {meta && <span className="text-[11px] text-muted-foreground">{meta}</span>}
+    <Card className="flex flex-col gap-0.5 px-3.5 py-3 @[80rem]:px-5 @[80rem]:py-4">
+      <span className="text-[11px] text-muted-foreground @[80rem]:text-sm">{label}</span>
+      <span className="text-lg font-semibold tabular-nums @[80rem]:text-2xl">{value}</span>
+      {meta && <span className="text-[11px] text-muted-foreground @[80rem]:text-sm">{meta}</span>}
     </Card>
   )
 }
@@ -135,9 +135,10 @@ export function EmptyNote({ children }: { children: React.ReactNode }) {
 }
 
 /** Bars of one value per day (or per week, when the period is long). */
-export function DayBars({ points, metric, height = 110, color }: {
+export function DayBars({ points, metric, height, color }: {
   points: SeriesPoint[]
   metric: Metric
+  /** Fixed height in px; without it the chart grows with the width of the page. */
   height?: number
   color?: string
 }) {
@@ -146,7 +147,10 @@ export function DayBars({ points, metric, height = 110, color }: {
   const peak = points.reduce((best, p) => (p.value > best.value ? p : best), points[0])
   return (
     <div>
-      <div className="flex items-end gap-[3px] border-b" style={{ height }}>
+      <div
+        className={cn("flex items-end gap-[3px] border-b", height === undefined && "h-[110px] @[64rem]:h-44 @[80rem]:h-60 @[100rem]:h-72")}
+        style={height === undefined ? undefined : { height }}
+      >
         {points.map((p) => (
           <div
             key={p.date}
@@ -161,7 +165,7 @@ export function DayBars({ points, metric, height = 110, color }: {
         ))}
       </div>
       {points.length > 1 && (
-        <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+        <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground @[80rem]:text-xs">
           <span>{points[0].label}</span>
           <span>{points[points.length - 1].label}</span>
         </div>

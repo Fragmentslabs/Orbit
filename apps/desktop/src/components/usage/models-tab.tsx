@@ -180,7 +180,7 @@ function ModelDetail({ data, model, color, onBack }: {
 
       <Card>
         <CardHeader title={t("usage.models.hoursPerDay")} />
-        <DayBars points={points} metric="hours" height={110} color={color} />
+        <DayBars points={points} metric="hours" color={color} />
       </Card>
 
       <div className="grid gap-3 @[48rem]:grid-cols-[1fr_1.4fr]">
