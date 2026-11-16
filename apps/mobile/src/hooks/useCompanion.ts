@@ -125,6 +125,7 @@ export function useCompanion() {
         void useModelRotationStore.getState().hydrate()
         // Active modes per chat (same path: snapshot of the renderer)
         void fetchSessionModes()
+        void useLiveStore.getState().hydrate()
         // Tools (MCP servers) per chat — same path again, so the chat opens on the
         // phone with the same tools that are on in the desktop
         void useSessionTools.getState().hydrate()
