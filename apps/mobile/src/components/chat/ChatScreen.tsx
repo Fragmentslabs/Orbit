@@ -548,6 +548,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           <ChatMessageSearchBar
             messages={activeMessages}
             onJumpToMessage={(id) => messageListRef.current?.scrollToMessageId(id)}
+            onBegin={() => messageListRef.current?.saveScrollPosition()}
+            onEnd={() => messageListRef.current?.restoreScrollPosition()}
           />
         )}
 

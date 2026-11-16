@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, Pressable, Modal } from 'react-native'
 import { ChevronDown, ChevronUp, Search, X, CalendarDays } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { DateTimePicker } from '@expo/ui/community/datetime-picker'
-import { normalizeText, type ChatMessage } from '@orbit/shared'
-import { messageText } from '~/lib/message-utils'
+import type { ChatMessage } from '@orbit/shared'
+import { findMatchIds, reconcileIndex, stepIndex } from '~/lib/chat-search'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
@@ -12,9 +12,14 @@ import { useChatSearchStore } from '~/stores/chat-search-store'
 interface Props {
   messages: ChatMessage[]
   onJumpToMessage: (id: string) => void
+  /** Called when the bar mounts / unmounts — the screen saves and restores the scroll position. */
+  onBegin?: () => void
+  onEnd?: () => void
 }
 
-export function ChatMessageSearchBar({ messages, onJumpToMessage }: Props) {
+const DEBOUNCE_MS = 180
+
+export function ChatMessageSearchBar({ messages, onJumpToMessage, onBegin, onEnd }: Props) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const close = useChatSearchStore((s) => s.close)
@@ -23,29 +28,66 @@ export function ChatMessageSearchBar({ messages, onJumpToMessage }: Props) {
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [pickedDate, setPickedDate] = useState(new Date())
 
-  const matches = useMemo(() => {
-    const q = normalizeText(query.trim())
-    if (!q) return []
-    return messages.filter((m) => !m.summary && normalizeText(messageText(m)).includes(q))
-  }, [messages, query])
+  const setActive = useChatSearchStore((s) => s.setActive)
+  // Typing only updates `query`; the scan over the conversation runs on the debounced value.
+  const [debounced, setDebounced] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query), query.trim() ? DEBOUNCE_MS : 0)
+    return () => clearTimeout(id)
+  }, [query])
 
-  // Goes back to the first result when the search changes — adjusted during render, which
-  // is the React pattern for state derived from prop/state, instead of an
-  // effect that causes a second render with the old index.
-  const [lastQuery, setLastQuery] = useState(query)
-  if (query !== lastQuery) {
-    setLastQuery(query)
+  const matches = useMemo(() => findMatchIds(messages, debounced), [messages, debounced])
+
+  const activeIdRef = useRef<string | undefined>(undefined)
+  const reconciledQueryRef = useRef(debounced)
+  // A new query restarts at the first result; a growing conversation keeps the same message.
+  const [lastDebounced, setLastDebounced] = useState(debounced)
+  if (debounced !== lastDebounced) {
+    setLastDebounced(debounced)
     setMatchIndex(0)
   }
+  const safeIndex = matches.length === 0 ? 0 : Math.min(matchIndex, matches.length - 1)
+  const currentId = matches[safeIndex]
+  const term = debounced.trim()
 
   useEffect(() => {
-    const current = matches[matchIndex]
-    if (current) onJumpToMessage(current.id)
+    onBegin?.()
+    return () => onEnd?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matches, matchIndex])
+  }, [])
 
-  const goNext = () => matches.length > 0 && setMatchIndex((i) => (i + 1) % matches.length)
-  const goPrev = () => matches.length > 0 && setMatchIndex((i) => (i - 1 + matches.length) % matches.length)
+  useEffect(() => {
+    // Streaming adds messages: realign the index so it keeps pointing at the same one.
+    if (reconciledQueryRef.current !== debounced) {
+      reconciledQueryRef.current = debounced
+      return
+    }
+    if (activeIdRef.current && matches[matchIndex] !== activeIdRef.current) {
+      const next = reconcileIndex(activeIdRef.current, matches)
+      if (next !== matchIndex) setMatchIndex(next)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches])
+
+  useEffect(() => {
+    setActive(currentId ?? null, currentId ? term : '')
+    if (currentId) onJumpToMessage(currentId)
+    activeIdRef.current = currentId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, term])
+
+  // Stepping onto the same message from the same index is impossible, but with a single
+  // result the buttons still re-center it.
+  const goNext = () => {
+    if (matches.length === 0) return
+    setMatchIndex(stepIndex(safeIndex, 1, matches.length))
+    if (matches.length === 1 && currentId) onJumpToMessage(currentId)
+  }
+  const goPrev = () => {
+    if (matches.length === 0) return
+    setMatchIndex(stepIndex(safeIndex, -1, matches.length))
+    if (matches.length === 1 && currentId) onJumpToMessage(currentId)
+  }
 
   const handleDatePicked = (date?: Date) => {
     setDatePickerOpen(false)
@@ -70,23 +112,27 @@ export function ChatMessageSearchBar({ messages, onJumpToMessage }: Props) {
           style={{ flex: 1, fontSize: 14, color: tokens.foreground, paddingVertical: 2 }}
           returnKeyType="search"
           onSubmitEditing={goNext}
+          submitBehavior="submit"
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
         />
         {query.trim().length > 0 && (
           <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
-            {matches.length === 0 ? t('chatSearch.noMatches') : t('chatSearch.of', { current: matchIndex + 1, total: matches.length })}
+            {matches.length === 0 ? (debounced === query ? t('chatSearch.noMatches') : '…') : t('chatSearch.of', { current: safeIndex + 1, total: matches.length })}
           </Text>
         )}
       </View>
-      <Pressable onPress={goPrev} disabled={matches.length === 0} hitSlop={6} style={{ opacity: matches.length === 0 ? 0.4 : 1 }}>
+      <Pressable accessibilityLabel={t('chatSearch.previousMatch')} onPress={goPrev} disabled={matches.length === 0} hitSlop={6} style={{ opacity: matches.length === 0 ? 0.4 : 1 }}>
         <ChevronUp size={18} color={tokens.foreground} />
       </Pressable>
-      <Pressable onPress={goNext} disabled={matches.length === 0} hitSlop={6} style={{ opacity: matches.length === 0 ? 0.4 : 1 }}>
+      <Pressable accessibilityLabel={t('chatSearch.nextMatch')} onPress={goNext} disabled={matches.length === 0} hitSlop={6} style={{ opacity: matches.length === 0 ? 0.4 : 1 }}>
         <ChevronDown size={18} color={tokens.foreground} />
       </Pressable>
       <Pressable onPress={() => setDatePickerOpen(true)} hitSlop={6}>
         <CalendarDays size={18} color={tokens.mutedForeground} />
       </Pressable>
-      <Pressable onPress={close} hitSlop={6}>
+      <Pressable accessibilityLabel={t('chatSearch.close')} onPress={close} hitSlop={6}>
         <X size={18} color={tokens.mutedForeground} />
       </Pressable>
 
