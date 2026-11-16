@@ -26,6 +26,7 @@ import { applyRemoteSessionPrefs, fetchSessionPrefs } from '~/stores/session-pre
 import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-sync'
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRoutinesStore } from '~/stores/routines-store'
+import { useSourcesStore } from '~/stores/sources-store'
 import { usePipelineStore } from '~/stores/pipeline-store'
 
 /**
@@ -175,6 +176,11 @@ export function useCompanion() {
       if (msg?.config) useModelRotationStore.getState().applySync(msg.config)
     })
 
+    // sources:changed → the Sources screen (if open) re-reads its scope
+    const unsubSources = conn.onEvent('sources:changed', () => {
+      void useSourcesStore.getState().refresh()
+    })
+
     // session:mode-change → active modes per chat changed on the desktop
     const unsubModes = conn.onEvent('session:mode-change', (event) => {
       const msg = event as { overrides?: SessionModeOverrides }
@@ -240,6 +246,7 @@ export function useCompanion() {
       unsubChat()
       unsubModels()
       unsubRotation()
+      unsubSources()
       unsubModes()
       unsubTools()
       unsubSessionPrefs()

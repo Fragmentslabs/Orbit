@@ -221,6 +221,37 @@ export interface RotationChangeEvent {
   config: RotationConfig
 }
 
+/** A conversation source as the Sources tab lists it: `docN` is an attachment of the
+ *  conversation, `srcN` a source of the folder (see session-documents.ts). */
+export interface CompanionSource {
+  id: string
+  filename: string
+  kind: 'pdf' | 'docx' | 'spreadsheet' | 'text' | 'web'
+  totalPages: number
+  truncated: boolean
+  sizeBytes?: number
+  createdAt: number
+  /** true when it lives in the folder scope (`srcN`). */
+  shared: boolean
+  /** Origin address of a website source. */
+  sourceUrl?: string
+}
+
+/** `GET /api/sources/:sessionId` — the two areas of the desktop tab. `sessionId` may be
+ *  `draft` (a chat that is not a session yet). */
+export interface CompanionSourcesList {
+  shared: CompanionSource[]
+  own: CompanionSource[]
+  folderId: string | null
+  usage: number
+}
+
+/** The set of sources changed on the desktop (or on another device): the phone
+ *  refetches the list it has open. */
+export interface SourcesChangedEvent {
+  type: 'sources:changed'
+}
+
 /** Complete map of modes per chat pushed by the desktop to the companions. */
 export interface SessionModeChangeEvent {
   type: 'session:mode-change'
@@ -1102,6 +1133,7 @@ export type CompanionEvent =
   | ReasoningPrefsChangeEvent
   | SessionPrefsChangeEvent
   | RotationChangeEvent
+  | SourcesChangedEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent
   | MessageQueueChangeEvent

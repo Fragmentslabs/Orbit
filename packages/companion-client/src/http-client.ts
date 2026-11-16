@@ -7,6 +7,7 @@
 
 import type { ConnectionConfig } from './types'
 import type {
+  CompanionSourcesList,
   MediaEntry,
   MediaUsage,
   ReasoningPrefsMap,
@@ -263,6 +264,34 @@ export class CompanionHttp {
 
   async deleteManyMedia(ids: string[]): Promise<HttpResult<{ removed: number }>> {
     return this.request('POST', '/api/media/delete', { ids })
+  }
+
+  // ─── Sources ────────────────────────────────────────────────────────────
+
+  listSources(sessionId: string): Promise<HttpResult<CompanionSourcesList>> {
+    return this.get(`/api/sources/${encodeURIComponent(sessionId)}`)
+  }
+
+  /** A file as base64 — same format as the desktop IPC. */
+  addSourceFile(sessionId: string, filename: string, data: string, shared: boolean): Promise<HttpResult<{ id: string }>> {
+    return this.request('POST', `/api/sources/${encodeURIComponent(sessionId)}/file`, { filename, data, shared })
+  }
+
+  addSourceText(sessionId: string, title: string, text: string, shared: boolean): Promise<HttpResult<{ id: string }>> {
+    return this.request('POST', `/api/sources/${encodeURIComponent(sessionId)}/text`, { title, text, shared })
+  }
+
+  addSourceUrl(sessionId: string, url: string, shared: boolean): Promise<HttpResult<{ id: string }>> {
+    return this.request('POST', `/api/sources/${encodeURIComponent(sessionId)}/url`, { url, shared })
+  }
+
+  /** Moves between the conversation (`docN`) and the folder (`srcN`); the id changes. */
+  setSourceShared(sessionId: string, docId: string, shared: boolean): Promise<HttpResult<{ id: string }>> {
+    return this.request('POST', `/api/sources/${encodeURIComponent(sessionId)}/${encodeURIComponent(docId)}/share`, { shared })
+  }
+
+  removeSource(sessionId: string, docId: string): Promise<HttpResult<{ removed: boolean }>> {
+    return this.request('DELETE', `/api/sources/${encodeURIComponent(sessionId)}/${encodeURIComponent(docId)}`)
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────

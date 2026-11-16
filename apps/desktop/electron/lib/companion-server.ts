@@ -41,6 +41,7 @@ import type {
   ReasoningPrefsMap,
   ReasoningPrefsChangeEvent,
   RotationChangeEvent,
+  SourcesChangedEvent,
   WorkerConfigSnapshot,
   WorkerConfigChangeEvent,
   AppPreferences,
@@ -103,6 +104,7 @@ import {
 } from './companion-http'
 import { createAssetToken } from './companion-token'
 import { tNow } from './i18n'
+import { onDocumentsChanged } from './session-documents'
 import { normalizeGrants, type GrantedDevice, type PeerGrants } from '@shared/peers'
 import { normalizeFingerprint } from './peers/pairing'
 import { desktopMayRequest, isDesktopOnlyRequest } from './peers/permissions'
@@ -1888,6 +1890,21 @@ export function broadcastRotationConfig(config: RotationConfig): void {
     client.ws.send(wrap({ type: 'rotation:change', config } satisfies RotationChangeEvent))
   }
 }
+
+/** The set of sources changed (any scope): each phone refetches the list it has open.
+ *  Debounced because adding one file notifies more than once. */
+let sourcesTimer: ReturnType<typeof setTimeout> | null = null
+export function broadcastSourcesChanged(): void {
+  if (sourcesTimer) return
+  sourcesTimer = setTimeout(() => {
+    sourcesTimer = null
+    for (const client of clients) {
+      if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
+      client.ws.send(wrap({ type: 'sources:changed' } satisfies SourcesChangedEvent))
+    }
+  }, 150)
+}
+onDocumentsChanged(broadcastSourcesChanged)
 
 /** Same idea as broadcastSessionModels, for the modes active per chat
  *  (research, browser, plan, subagents, orchestration, vision, simple and
