@@ -37,7 +37,7 @@ import { useThemeStore } from '~/stores/theme-store'
 import { PieceView } from '../../PieceView'
 
 import { BarButton, Stage, StageLoading, ViewerBar, fitScript, fitSize, useStageBox } from './kit'
-import { audioPlanUrl, parseAudioPlan, useMotionAudio, type AudioTrack } from './motion-audio'
+import { audioPlanUrl, parseAudioPlan, tracksFromVideoFacts, useMotionAudio, type AudioTrack } from './motion-audio'
 import type { PieceViewerProps } from './index'
 
 /** The default fps of the contract (`MOTION_FPS` of the desktop runtime). */
@@ -153,6 +153,9 @@ const PROBE_JS = `(function () {
         if (typeof seconds === 'number' && isFinite(seconds) && seconds > 0) timeline = seconds;
       }
     } catch (err) {}
+    // The runtime mutes the page videos; their sound is played by the app (see motion-audio).
+    var videos = [];
+    try { if (typeof window.__orbitMotionSpec === 'function') videos = window.__orbitMotionSpec().videos || []; } catch (err) {}
     reply({
       source: '${MESSAGE_SOURCE}',
       type: 'spec',
@@ -166,7 +169,8 @@ const PROBE_JS = `(function () {
       metaWidth: metaWidth,
       metaHeight: metaHeight,
       timeline: timeline,
-      seek: !!(api && typeof api.seek === 'function')
+      seek: !!(api && typeof api.seek === 'function'),
+      videos: videos
     });
   } catch (err) {
     reply({ source: '${MESSAGE_SOURCE}', type: 'error', message: String((err && err.message) || err) });
@@ -224,7 +228,9 @@ export function MotionViewer({ piece }: PieceViewerProps) {
 
   // The sound: the plan comes from the desktop (which resolves manifest, loose file, gain and
   // fades); a piece without audio, or a plan that does not load, simply stays silent.
-  const [tracks, setTracks] = useState<AudioTrack[]>([])
+  const [planTracks, setTracks] = useState<AudioTrack[]>([])
+  const [videoTracks, setVideoTracks] = useState<AudioTrack[]>([])
+  const tracks = useMemo(() => [...planTracks, ...videoTracks], [planTracks, videoTracks])
   useEffect(() => {
     let cancelled = false
     fetch(audioPlanUrl(piece.url))
@@ -322,6 +328,7 @@ export function MotionViewer({ piece }: PieceViewerProps) {
       if (reply.type !== 'spec') return
       const next = resolveSpec(reply as Record<string, unknown>, piece.count)
       setSpec(next)
+      setVideoTracks(tracksFromVideoFacts((reply as { videos?: unknown }).videos))
       if (!next?.seekable) setPlaying(false)
     },
     [piece.count],

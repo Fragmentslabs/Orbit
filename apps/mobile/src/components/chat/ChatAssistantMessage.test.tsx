@@ -220,12 +220,32 @@ describe('ChatAssistantMessage — audio and video', () => {
     expect(audio.player.play).toHaveBeenCalled()
   })
 
-  it('video with src becomes a 16:9 player with native controls', () => {
+  it('video with src becomes a 16:9 player with native controls once the desktop says it is playable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ state: 'ready' }) })))
     renderMessage([videoPart(VIDEO_SRC)])
 
-    expect(screen.getByTestId('video-part')).toBeTruthy()
+    expect(await screen.findByTestId('video-part')).toBeTruthy()
     expect(screen.getByTestId('video-view')).toBeTruthy()
     expect(screen.queryByTestId('video-part-unavailable')).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the preparing state, not the player, while the desktop converts an AV1 video', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ state: 'preparing', progress: 0.5 }) })))
+    renderMessage([videoPart(VIDEO_SRC)])
+
+    expect(await screen.findByTestId('video-gate-preparing')).toBeTruthy()
+    expect(screen.queryByTestId('video-view')).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('says so when the conversion failed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ state: 'failed', message: 'no space' }) })))
+    renderMessage([videoPart(VIDEO_SRC)])
+
+    expect(await screen.findByTestId('video-gate-failed')).toBeTruthy()
+    expect(screen.getByText('no space')).toBeTruthy()
+    vi.unstubAllGlobals()
   })
 })
 
