@@ -160,6 +160,13 @@
     "usage_one": "{{count}} item · {{size}}",
     "usage_other": "{{count}} items · {{size}}",
     "fileUnavailable": "File unavailable on the computer",
+    "pieceGone": "This piece no longer exists on the computer",
+    "pieceGoneHint": "Its files were deleted. You can remove the entry from the gallery.",
+    "removeEntry": "Remove from gallery",
+    "videoPreparing": "Preparing video for the phone…",
+    "videoPreparingPercent": "Preparing video for the phone… {{percent}}%",
+    "videoFailed": "Could not convert this video for the phone",
+    "missingTile": "Missing",
     "kind": {
       "all": "All",
       "image": "Image",

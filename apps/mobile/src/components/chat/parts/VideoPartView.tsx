@@ -20,6 +20,7 @@ import type { VideoPart } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { UnavailablePart } from './UnavailablePart'
+import { VideoGate } from '~/components/media/video-gate'
 
 function VideoPlayerCard({ part, src }: { part: VideoPart; src: string }) {
   const { t } = useTranslation()
@@ -105,7 +106,20 @@ export function VideoPartView({ part }: { part: VideoPart }) {
       />
     )
   }
-  return <VideoPlayerCard part={part} src={src} />
+  // AV1/VP9 downloads are converted to H.264 on the desktop first: the stage shows the progress
+  // (or the failure) in place of the player until the copy is ready.
+  return (
+    <VideoGate
+      url={src}
+      fallback={(content) => (
+        <View testID="video-part-preparing" className="mt-2 w-full overflow-hidden rounded-lg" style={{ backgroundColor: '#000' }}>
+          <View style={styles.stage}>{content}</View>
+        </View>
+      )}
+    >
+      <VideoPlayerCard part={part} src={src} />
+    </VideoGate>
+  )
 }
 
 const fill = { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } as const

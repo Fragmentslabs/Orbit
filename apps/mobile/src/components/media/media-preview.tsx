@@ -66,7 +66,7 @@ export function MediaPreview({
         {entry ? (
           <>
             <View style={s.viewer}>
-              <EntryViewer entry={entry} onExpand={onExpand} />
+              <EntryViewer entry={entry} onExpand={onExpand} onRemove={() => onDelete(entry)} />
               {/* Arrows only when there is somewhere to go. */}
               {chain && index > 0 ? (
                 <Pressable onPress={() => onStep(-1)} accessibilityLabel={t('media.previousVersion')} style={[s.arrow, { left: 10 }]}>

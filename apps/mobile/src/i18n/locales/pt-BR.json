@@ -160,6 +160,13 @@
     "usage_one": "{{count}} item · {{size}}",
     "usage_other": "{{count}} itens · {{size}}",
     "fileUnavailable": "Arquivo indisponível no computador",
+    "pieceGone": "Esta peça não existe mais no computador",
+    "pieceGoneHint": "Os arquivos foram apagados. Você pode remover a entrada da galeria.",
+    "removeEntry": "Remover da galeria",
+    "videoPreparing": "Preparando o vídeo para o celular…",
+    "videoPreparingPercent": "Preparando o vídeo para o celular… {{percent}}%",
+    "videoFailed": "Não foi possível converter este vídeo para o celular",
+    "missingTile": "Ausente",
     "kind": {
       "all": "Todos",
       "image": "Imagem",

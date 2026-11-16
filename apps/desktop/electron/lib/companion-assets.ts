@@ -25,6 +25,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readArtifactAsset, readMedia } from './media'
 import { resolveAudioFile } from './audio-store'
 import { videoFilePath } from './video/store'
+import { VIDEO_STATE_FILE, phoneVideo, phoneVideoFile } from './video/phone-video'
+import { MOTION_THREE_PREFIX, findThreeRoot, resolveThreeFile } from './video/motion-three'
+import { MOTION_THREE_HELPER, MOTION_THREE_HELPER_PATH } from './video/motion-three-helper'
+import { app } from 'electron'
 import { getMotion, resolveMotionFile } from './video/motion-store'
 import { motionAudioTracks } from './video/motion-audio'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './video/motion-runtime'
@@ -125,6 +129,11 @@ async function motionAudioPlanAsset(folder: string): Promise<ResolvedAsset> {
         fadeIn: track.fadeIn,
         fadeOut: track.fadeOut,
         loop: track.loop === true,
+        // What the phone can express with a volume envelope: the bed that ducks under the front tracks
+        // and the author's volume curve. EQ/compressor/filters/master only exist in the render.
+        duck: track.duck === true,
+        ...(track.duck && track.duckSettings ? { duckSettings: track.duckSettings } : {}),
+        automation: track.fx?.automation ?? [],
       })),
   }
   return {
@@ -132,6 +141,20 @@ async function motionAudioPlanAsset(folder: string): Promise<ResolvedAsset> {
     contentType: CONTENT_TYPES['.json'],
     cache: CACHE_REWRITABLE,
   }
+}
+
+/** `/__orbit-three/…`: the helper module or a file of the `three` package the app ships. */
+async function motionThreeAsset(pathname: string): Promise<ResolvedAsset | null> {
+  const js = CONTENT_TYPES['.js']
+  if (pathname === MOTION_THREE_PREFIX + MOTION_THREE_HELPER_PATH) {
+    return { buffer: Buffer.from(MOTION_THREE_HELPER, 'utf8'), contentType: js, cache: CACHE_REWRITABLE }
+  }
+  const root = findThreeRoot(typeof app?.getAppPath === 'function' ? app.getAppPath() : process.cwd())
+  const file = root ? resolveThreeFile(root, pathname.split('?')[0]) : null
+  if (!file) return null
+  const raw = await fsp.readFile(file).catch(() => null)
+  // The package never changes under a running app: the phone may keep it.
+  return raw ? { buffer: raw, contentType: js, cache: 'private, max-age=3600' } : null
 }
 
 /** Relative path of a piece's entry (motion/slides), with `/`. */
@@ -255,7 +278,16 @@ async function resolveAsset(
     }
 
     case 'video': {
-      const file = await videoFilePath(id)
+      const source = await videoFilePath(id)
+      if (!source) return null
+      // The phone asks the state first (it starts the H.264 copy when the source is AV1/VP9 …).
+      if (relative === VIDEO_STATE_FILE) {
+        const { state } = await phoneVideo(source).catch((error: unknown) => ({
+          state: { state: 'failed', message: error instanceof Error ? error.message : String(error) } as const,
+        }))
+        return { buffer: Buffer.from(JSON.stringify(state), 'utf8'), contentType: CONTENT_TYPES['.json'], cache: CACHE_REWRITABLE }
+      }
+      const file = await phoneVideoFile(source)
       if (!file) return null
       return { file, contentType: contentTypeOf(file), cache: CACHE_REWRITABLE }
     }
@@ -273,6 +305,9 @@ async function resolveAsset(
       if (`/${relative}` === MOTION_RUNTIME_PATH) {
         return { buffer: Buffer.from(MOTION_RUNTIME, 'utf8'), contentType: CONTENT_TYPES['.js'], cache: CACHE_REWRITABLE }
       }
+      // three.js and the `orbit-three` helper the import map points at: the same files the desktop's
+      // scheme handler serves. Without them every `import 'three'` of a piece is a 404 here.
+      if (`/${relative}`.startsWith(MOTION_THREE_PREFIX)) return motionThreeAsset(`/${relative}`)
       const file = resolveMotionFile(entry.folder, relative || entryRelative(entry.folder, entry.entry))
       if (!file) return null
       if (base && token && /\.html?$/i.test(file)) {

@@ -6,6 +6,8 @@ import type { LucideIcon } from 'lucide-react-native'
 import type { MediaEntry, MediaKind } from '@orbit/shared'
 import { entryTitle, kindOf } from '~/lib/media'
 import { useTokens } from '~/components/list/parts'
+import { isMissingPiece } from '~/lib/media-availability'
+import { useTranslation } from 'react-i18next'
 import { InlineAudio } from './entry-viewer'
 
 /** The icon of each type — the badge on every tile, as on the desktop. */
@@ -50,7 +52,9 @@ export const MediaTile = memo(function MediaTile({
   onLongPress: () => void
 }) {
   const tokens = useTokens()
+  const { t } = useTranslation()
   const kind = kindOf(entry)
+  const missing = isMissingPiece(entry)
   const KindIcon = KIND_ICON[kind]
   const [playing, setPlaying] = useState(false)
   const stop = useCallback(() => setPlaying(false), [])
@@ -82,6 +86,17 @@ export const MediaTile = memo(function MediaTile({
             {entryTitle(entry)}
           </Text>
           {playing && entry.url ? <InlineAudio url={entry.url} onEnd={stop} /> : null}
+        </View>
+      ) : missing ? (
+        // The registry no longer knows the piece: dim the tile and say so (opening it offers to remove it).
+        <View style={[s.center, { opacity: 0.55 }]} testID="media-tile-missing">
+          <ImageOff size={22} color={tokens.mutedForeground} />
+          <Text numberOfLines={2} style={[s.title, { color: tokens.foreground }]}>
+            {entryTitle(entry)}
+          </Text>
+          <Text numberOfLines={1} style={[s.title, { color: tokens.mutedForeground, fontSize: 10 }]}>
+            {t('media.missingTile')}
+          </Text>
         </View>
       ) : entry.thumbUrl && (kind === 'motion' || kind === 'design' || kind === 'slides') ? (
         // The piece's own face, as on the desktop; the icon and title are only for pieces without one.

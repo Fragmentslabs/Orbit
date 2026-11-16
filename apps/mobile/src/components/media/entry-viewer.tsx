@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { Image } from 'expo-image'
-import { ImageOff, Maximize2, Music, Pause, Play } from 'lucide-react-native'
+import { ImageOff, Maximize2, Music, Pause, Play, Trash2 } from 'lucide-react-native'
 import { VIEWERS } from '~/components/chat/pieces/viewers'
 import { useTranslation } from 'react-i18next'
 import type { MediaEntry } from '@orbit/shared'
@@ -10,6 +10,8 @@ import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-au
 import { WebView } from 'react-native-webview'
 import { canOpen, entryTitle, kindOf } from '~/lib/media'
 import { useTokens } from '~/components/list/parts'
+import { isPieceKind, usePieceAvailability } from '~/lib/media-availability'
+import { VideoGate } from './video-gate'
 
 function formatClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
@@ -39,9 +41,52 @@ function PageViewer({ url }: { url: string }) {
 }
 
 /** Video: the native expo-video player, with the system controls. */
-function VideoViewer({ url }: { url: string }) {
+function VideoPlayerView({ url }: { url: string }) {
   const player = useVideoPlayer(url)
   return <VideoView player={player} style={s.fill} contentFit="contain" nativeControls />
+}
+
+function VideoViewer({ url }: { url: string }) {
+  // The player only mounts once the desktop says the file is playable on iOS (AV1 → H.264 copy).
+  return (
+    <VideoGate url={url}>
+      <VideoPlayerView url={url} />
+    </VideoGate>
+  )
+}
+
+/** The piece (or its file) is gone: say so, and offer to drop the entry. */
+function GoneState({ onRemove }: { onRemove?: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <View style={s.center} testID="piece-gone">
+      <ImageOff size={28} color="#fff" />
+      <Text style={s.audioTitle}>{t('media.pieceGone')}</Text>
+      <Text style={s.audioTime}>{t('media.pieceGoneHint')}</Text>
+      {onRemove ? (
+        <Pressable onPress={onRemove} accessibilityRole="button" style={s.removeBtn} testID="piece-gone-remove">
+          <Trash2 size={15} color="#fff" />
+          <Text style={s.removeText}>{t('media.removeEntry')}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
+/** A piece's player; swapped for the "no longer exists" state if the desktop answers 404/410. */
+function PieceEntry({ entry, onRemove }: { entry: MediaEntry; onRemove?: () => void }) {
+  const kind = kindOf(entry) as 'motion' | 'design' | 'slides'
+  const url = entry.url as string
+  // The player mounts at once (its own loading state shows immediately); the check runs beside it.
+  const availability = usePieceAvailability(url)
+  if (availability === 'gone') return <GoneState onRemove={onRemove} />
+  const Viewer = VIEWERS[kind]
+  const seconds = entry.durationMs ? Math.max(1, Math.round(entry.durationMs / 1000)) : undefined
+  return (
+    <Viewer
+      piece={{ kind, id: entry.motionId ?? entry.designId ?? entry.slidesId ?? entry.id, url, title: entryTitle(entry), ...(kind === 'motion' && seconds ? { count: seconds } : {}) }}
+    />
+  )
 }
 
 /** Audio: there is no image to show, so the card becomes a minimal player. */
@@ -69,11 +114,13 @@ function AudioViewer({ url, title }: { url: string; title: string }) {
 }
 
 /** What opens in place of the preview, chosen by the type of the entry. */
-export function EntryViewer({ entry, onExpand }: { entry: MediaEntry; onExpand: () => void }) {
+export function EntryViewer({ entry, onExpand, onRemove }: { entry: MediaEntry; onExpand: () => void; onRemove?: () => void }) {
   const { t } = useTranslation()
   const kind = kindOf(entry)
   if (!canOpen(entry)) {
-    // Piece missing from the desktop registry: the item is in the index but the file is not.
+    // A piece missing from the desktop registry: say it no longer exists and offer to drop the entry.
+    if (isPieceKind(kind)) return <GoneState onRemove={onRemove} />
+    // Anything else: the item is in the index but the file is not.
     return (
       <View style={s.center}>
         <ImageOff size={28} color="#fff" />
@@ -96,15 +143,7 @@ export function EntryViewer({ entry, onExpand }: { entry: MediaEntry; onExpand: 
   if (kind === 'audio') return <AudioViewer url={url} title={entryTitle(entry)} />
   // The pieces have their own players (clock, ruler, screens, slides): the same ones the chat
   // opens, so a motion from the gallery plays instead of sitting there as a still page.
-  if (kind === 'motion' || kind === 'design' || kind === 'slides') {
-    const Viewer = VIEWERS[kind]
-    const seconds = entry.durationMs ? Math.max(1, Math.round(entry.durationMs / 1000)) : undefined
-    return (
-      <Viewer
-        piece={{ kind, id: entry.motionId ?? entry.designId ?? entry.slidesId ?? entry.id, url, title: entryTitle(entry), ...(kind === 'motion' && seconds ? { count: seconds } : {}) }}
-      />
-    )
-  }
+  if (isPieceKind(kind)) return <PieceEntry entry={entry} onRemove={onRemove} />
   // The rest is page: artifact and document (.html preview).
   return <PageViewer url={url} />
 }
@@ -132,6 +171,8 @@ const s = StyleSheet.create({
   audioWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
   audioTitle: { color: '#fff', fontSize: 15, fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
   audioPlay: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  removeBtn: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6, paddingHorizontal: 16, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  removeText: { color: '#fff', fontSize: 13.5, fontWeight: '500' },
   audioTime: { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
   expandBadge: { position: 'absolute', bottom: 16, right: 16, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
 })
