@@ -151,11 +151,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           tasksByPipeline: Record<string, Task[]>
           templates: PhaseTemplate[]
         }
+        // A desktop on another build may omit a field; keep the shapes the screens iterate over.
         set({
-          projects: data.projects,
-          pipelines: data.pipelines,
-          tasksByPipeline: data.tasksByPipeline,
-          templates: data.templates,
+          projects: data.projects ?? [],
+          pipelines: data.pipelines ?? [],
+          tasksByPipeline: data.tasksByPipeline ?? {},
+          templates: data.templates ?? [],
           loaded: true,
           error: null,
         })

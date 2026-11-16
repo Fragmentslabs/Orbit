@@ -1,12 +1,15 @@
 import type { PieceRef } from '@orbit/shared'
 import { X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import { useEffect, useState } from 'react'
 import { Modal, Pressable, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 import { VIEWERS } from './viewers'
+import { StageLoading } from './viewers/kit'
 
 /**
  * The open piece — the equivalent of the desktop side panel.
@@ -22,10 +25,29 @@ export function PieceViewer({ piece, onClose }: { piece: PieceRef; onClose: () =
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const Viewer = VIEWERS[piece.kind]
+  // The modal is status-bar translucent: without the insets the header sits under the clock.
+  const insets = useSafeAreaInsets()
+
+  // The viewer mounts once the sheet is on screen (`onShow`); the timer is the net for a platform
+  // that never reports it.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 450)
+    return () => clearTimeout(timer)
+  }, [])
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View className="flex-1" style={{ backgroundColor: tokens.background }}>
+    <Modal
+      visible
+      animationType="slide"
+      onShow={() => setMounted(true)}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View
+        className="flex-1"
+        style={{ backgroundColor: tokens.background, paddingTop: insets.top, paddingBottom: insets.bottom }}
+      >
         <View
           className="flex-row items-center gap-2 border-b px-3 py-2.5"
           style={{ borderColor: tokens.border }}
@@ -61,7 +83,11 @@ export function PieceViewer({ piece, onClose }: { piece: PieceRef; onClose: () =
           </View>
         </View>
 
-        <Viewer piece={piece} />
+        {/* The sheet slides in empty and the heavy part (WebView, probe) is born after: mounting it
+            in the same frame froze the animation and the card looked dead. */}
+        <View className="flex-1">
+          {mounted ? <Viewer piece={piece} /> : <StageLoading label={t('parts.preview.loading')} />}
+        </View>
       </View>
     </Modal>
   )

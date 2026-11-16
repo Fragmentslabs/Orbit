@@ -18,7 +18,7 @@
  * touch): nothing is drawn over it beyond the outer bars.
  */
 import { AlertCircle, ChevronLeft, ChevronRight, Frame, RotateCw } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -26,37 +26,30 @@ import {
   ScrollView,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 import { PieceView } from '../../PieceView'
 
+import { BarButton, Stage, ViewerBar, fitScript, fitSize, useStageBox } from './kit'
 import type { PieceViewerProps } from './index'
 
 /** One screen of the canvas: the `.html` file and the title it has in the index. */
 export interface DesignScreen {
   file: string
   title?: string
+  /** Size of the artboard on the canvas, so it is shown whole at its own proportions. */
+  width?: number
+  height?: number
 }
 
 /** Name of the index inside the canvas folder — the end of `piece.url`. */
 const INDEX_FILE = 'canvas.json'
 
-/**
- * Measurements of what is NOT the screen, so the WebView receives what is left of the window:
- * the bar of the shell (`PieceViewer`: a 32 button + padding + border), the inner bar
- * of `PieceView` with its margin, the row of arrows and the strip of
- * chips. Below that the screen does not fit and becomes a seal.
- */
-const SHELL_HEADER = 54
-const PIECE_CHROME = 41
-const NAV_ROW = 44
-const STRIP_ROW = 60
-const MIN_VIEW_HEIGHT = 140
+/** Height of the row of screen chips above the bar. */
+const STRIP_ROW = 44
 
 function isScreenFile(file: string): boolean {
   const segments = file.split('/')
@@ -70,6 +63,12 @@ function boardTitle(value: unknown): string | undefined {
 }
 
 /** A loose piece of the canvas (an element with no frame) is not a screen of the piece. */
+function boardSize(value: unknown): { width?: number; height?: number } {
+  const board = (value ?? {}) as { w?: unknown; h?: unknown }
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
+  return ok(board.w) && ok(board.h) ? { width: board.w, height: board.h } : {}
+}
+
 function isLoose(value: unknown): boolean {
   return Boolean(value && typeof value === 'object' && (value as { free?: unknown }).free === true)
 }
@@ -102,7 +101,7 @@ export function parseDesignCanvas(raw: unknown): DesignScreen[] {
     if (typeof file !== 'string' || !isScreenFile(file) || seen.has(file)) return
     if (!Object.prototype.hasOwnProperty.call(boards, file) || isLoose(boards[file])) return
     seen.add(file)
-    screens.push({ file, title: boardTitle(boards[file]) })
+    screens.push({ file, title: boardTitle(boards[file]), ...boardSize(boards[file]) })
   }
 
   if (Array.isArray(canvas.order)) for (const file of canvas.order) push(file)
@@ -172,8 +171,9 @@ function StateBox({ children, testID }: { children: ReactNode; testID?: string }
 export function DesignViewer({ piece }: PieceViewerProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const { height: windowHeight } = useWindowDimensions()
-  const insets = useSafeAreaInsets()
+  const { box, onLayout: onStageLayout } = useStageBox()
+  const injectRef = useRef<((js: string) => void) | null>(null)
+  const [loads, setLoads] = useState(0)
 
   const [status, setStatus] = useState<Status>('loading')
   const [screens, setScreens] = useState<DesignScreen[]>([])
@@ -239,10 +239,22 @@ export function DesignViewer({ piece }: PieceViewerProps) {
   const screen = screens[index]
   const src = screen ? artboardUrl(piece.url, screen.file) : null
 
-  const viewHeight = Math.max(
-    MIN_VIEW_HEIGHT,
-    windowHeight - insets.top - insets.bottom - SHELL_HEADER - PIECE_CHROME - NAV_ROW - STRIP_ROW,
+  // The artboard is a fixed-size page: it is shown whole, at its own proportions, as large as the
+  // stage allows. `zoom` (not `transform`) so the page reflows to the scaled size.
+  const fit = useMemo(
+    () => (screen?.width && screen.height ? fitSize(box, { width: screen.width, height: screen.height }) : null),
+    [box, screen],
   )
+  const fitScale = fit?.scale ?? null
+  useEffect(() => {
+    if (loads === 0 || fitScale === null) return
+    injectRef.current?.(fitScript(fitScale))
+  }, [loads, fitScale])
+
+  const handleReady = useCallback((inject: (js: string) => void) => {
+    injectRef.current = inject
+    setLoads((n) => n + 1)
+  }, [])
 
   const goTo = useCallback(
     (next: number) => {
@@ -322,95 +334,83 @@ export function DesignViewer({ piece }: PieceViewerProps) {
   return (
     <View className="flex-1">
       {/* The screen itself: only it is mounted, and the interaction is all its own. */}
-      <PieceView
-        src={src}
-        title={screenLabel(screen)}
-        poster={piece.cover}
-        revision={0}
-        height={viewHeight}
-        expandable={false}
-        loadingLabel={t('parts.preview.loading')}
-        errorLabel={t('parts.preview.error')}
-      />
+      <Stage onLayout={onStageLayout} size={fit}>
+        <PieceView
+          src={src}
+          title={screenLabel(screen)}
+          poster={piece.cover}
+          revision={0}
+          bare
+          loadingLabel={t('parts.preview.loading')}
+          errorLabel={t('parts.preview.error')}
+          onReady={handleReady}
+        />
+      </Stage>
 
-      <View className="flex-row items-center justify-center gap-4 px-3" style={{ height: NAV_ROW }}>
-        <Pressable
+      {/* The "screen select": the strip scrolls horizontally, the open screen stays marked, and a
+          tap jumps straight to it. Only when there is more than one screen to choose from. */}
+      {screens.length > 1 ? (
+        <ScrollView
+          testID="design-screens"
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, height: STRIP_ROW }}
+          contentContainerStyle={{ alignItems: 'center', gap: 6, paddingHorizontal: 12 }}
+        >
+          {screens.map((item, i) => {
+            const active = i === index
+            const label = screenLabel(item)
+            return (
+              <Pressable
+                key={item.file}
+                testID={`design-screen-${i}`}
+                onPress={() => setSelected(item.file)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={t('pieces.open', { title: label })}
+                className="rounded-full border px-3 py-1.5"
+                style={{
+                  backgroundColor: active ? withAlpha(tokens.primary, 0.18) : tokens.card,
+                  borderColor: active ? tokens.primary : tokens.border,
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  className="text-xs"
+                  style={{ color: active ? tokens.foreground : tokens.mutedForeground, maxWidth: 160 }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+      ) : null}
+
+      <ViewerBar>
+        <BarButton
           testID="design-prev"
+          icon={ChevronLeft}
+          label={prev ? t('pieces.open', { title: screenLabel(prev) }) : t('pieces.open', { title: screenLabel(screen) })}
           onPress={() => goTo(index - 1)}
           disabled={!prev}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !prev }}
-          accessibilityLabel={prev ? t('pieces.open', { title: screenLabel(prev) }) : undefined}
-          hitSlop={10}
-          className="h-8 w-8 items-center justify-center rounded-full"
-          style={{ backgroundColor: tokens.muted, opacity: prev ? 1 : 0.4 }}
-        >
-          <ChevronLeft size={16} color={tokens.foreground} />
-        </Pressable>
-
-        <Text testID="design-counter" className="text-xs" style={{ color: tokens.mutedForeground }}>
-          {index + 1} / {screens.length}
-        </Text>
-
-        <Pressable
+        />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text testID="design-counter" className="text-xs font-medium" style={{ color: tokens.mutedForeground }}>
+            {index + 1} / {screens.length}
+          </Text>
+          <Text numberOfLines={1} className="text-xs" style={{ color: tokens.foreground }}>
+            {screenLabel(screen)}
+          </Text>
+        </View>
+        <BarButton
           testID="design-next"
+          icon={ChevronRight}
+          label={next ? t('pieces.open', { title: screenLabel(next) }) : t('pieces.open', { title: screenLabel(screen) })}
           onPress={() => goTo(index + 1)}
           disabled={!next}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !next }}
-          accessibilityLabel={next ? t('pieces.open', { title: screenLabel(next) }) : undefined}
-          hitSlop={10}
-          className="h-8 w-8 items-center justify-center rounded-full"
-          style={{ backgroundColor: tokens.muted, opacity: next ? 1 : 0.4 }}
-        >
-          <ChevronRight size={16} color={tokens.foreground} />
-        </Pressable>
-      </View>
-
-      {/* The "screen select": the strip scrolls horizontally, the open screen stays
-          marked, and a tap jumps straight to it. The home indicator band
-          counts toward the height of the strip (the screen already discounted it from its own height),
-          otherwise the chips would sit under it. */}
-      <ScrollView
-        testID="design-screens"
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ height: STRIP_ROW + insets.bottom }}
-        contentContainerStyle={{
-          alignItems: 'center',
-          gap: 6,
-          paddingHorizontal: 12,
-          paddingBottom: insets.bottom,
-        }}
-      >
-        {screens.map((item, i) => {
-          const active = i === index
-          const label = screenLabel(item)
-          return (
-            <Pressable
-              key={item.file}
-              testID={`design-screen-${i}`}
-              onPress={() => setSelected(item.file)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={t('pieces.open', { title: label })}
-              className="rounded-full border px-2.5 py-1"
-              style={{
-                backgroundColor: active ? withAlpha(tokens.primary, 0.18) : tokens.card,
-                borderColor: active ? tokens.primary : tokens.border,
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                className="text-[11px]"
-                style={{ color: active ? tokens.foreground : tokens.mutedForeground, maxWidth: 140 }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          )
-        })}
-      </ScrollView>
+        />
+      </ViewerBar>
     </View>
   )
 }

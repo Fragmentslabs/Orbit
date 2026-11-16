@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { MessageSquare } from "lucide-react"
 import type { AnalyticsSession, AnalyticsSummary } from "@shared/analytics"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,6 +8,8 @@ import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { formatCost, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
+import { sessionIcon } from "@/src/components/agent-meta"
+import { useAgents } from "@/src/stores/agents-store"
 import { Card, EmptyNote } from "./usage-ui"
 import { formatDayLabel, formatDuration, projectName } from "./usage-utils"
 
@@ -48,7 +51,9 @@ export function SessionList({ sessions, data, compact, showDay }: {
   const locale = i18n.language
   const open = useOpenSession()
   const existing = useEnvSessions()
-  const alive = useMemo(() => new Set(existing.map((s) => s.id)), [existing])
+  // The chat's own icon, as in the sidebar (a specialist or an agent of the person wears its own).
+  useAgents()
+  const byId = useMemo(() => new Map(existing.map((s) => [s.id, s])), [existing])
 
   if (sessions.length === 0) return <p className="px-4 pb-4 text-xs text-muted-foreground">{t("usage.noData")}</p>
 
@@ -59,7 +64,9 @@ export function SessionList({ sessions, data, compact, showDay }: {
   return (
     <div>
       {sessions.map((s) => {
-        const openable = alive.has(s.id)
+        const live = byId.get(s.id)
+        const openable = live !== undefined
+        const Icon = (live && sessionIcon(live)) || MessageSquare
         const project = data.byProject.find((p) => p.projectId === s.projectId)
         const when = showDay ? `${formatDayLabel(s.date, locale)} ${formatTime(s.startAt, locale)}` : formatTime(s.startAt, locale)
         return (
@@ -76,7 +83,10 @@ export function SessionList({ sessions, data, compact, showDay }: {
             )}
           >
             <span className="text-muted-foreground">{when}</span>
-            <span className="truncate">{s.title || t("usage.sessions.untitled")}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="truncate">{s.title || t("usage.sessions.untitled")}</span>
+            </span>
             {!compact && <span className="hidden truncate text-muted-foreground @[44rem]:block">{project ? projectName(project, t) : "—"}</span>}
             {!compact && <span className="hidden truncate text-muted-foreground @[44rem]:block">{s.modelId}</span>}
             {!compact && <span className="hidden text-right text-muted-foreground @[44rem]:block">{s.messages}</span>}

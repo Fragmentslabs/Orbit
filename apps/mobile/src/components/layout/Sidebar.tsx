@@ -11,13 +11,12 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
+import { childSessionIcon, sessionIcon } from '~/lib/session-icon'
 import {
   MessageSquare,
-  MessagesSquare,
   Terminal,
   BrainCircuit,
   BarChart3,
-  Bot,
   Puzzle,
   Images,
   Settings,
@@ -89,8 +88,6 @@ type ChatListSection = SectionListData<ChatListItem> & {
     | 'chats-group'
     | 'chats'
     | 'chats-empty'
-    | 'routines-group'
-    | 'routines'
     | 'archived-group'
     | 'archived'
     /** ACTIVE folder that holds archived chats — read-only grouping. */
@@ -240,9 +237,9 @@ export function Sidebar() {
 
   // ─── Accordion groupers (same logic as the desktop: Folders and Chats open
   // by default, Archived collapsed; state in memory only) ────────────────────
-  const [groupsExpanded, setGroupsExpanded] = useState({ folders: true, chats: true, routines: true, archived: false })
+  const [groupsExpanded, setGroupsExpanded] = useState({ folders: true, chats: true, archived: false })
 
-  const toggleGroup = useCallback((key: 'folders' | 'chats' | 'routines' | 'archived') => {
+  const toggleGroup = useCallback((key: 'folders' | 'chats' | 'archived') => {
     setGroupsExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
@@ -436,7 +433,7 @@ export function Sidebar() {
 
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
 
-  // ─── Grouped chat list: pinned / folders / chats / routines / archived ─────
+  // ─── Grouped chat list: pinned / folders / chats / archived ─────
   const {
     pinned,
     folderGroups,
@@ -444,7 +441,6 @@ export function Sidebar() {
     archivedFolderGroups,
     archivedMirrorGroups,
     archivedLoose,
-    routineSessions,
   } = useMemo(() => {
     // Position of a chat = activity of its block (itself OR the most recent
     // nested sub-chat/worker) — same rule as the desktop's app-sidebar: moving
@@ -452,22 +448,14 @@ export function Sidebar() {
     // on the main chat.
     const activity = sessionActivityMap(sessions)
     const activityOf = (s: SessionInfo) => activity.get(s.id) ?? s.updatedAt
-    // Routine chats leave the normal listing: they live in the "Routines" group
-    // right below, and would show up duplicated (and drown the recents) if they
-    // also went into "Chats" or into the folders — same criterion as the
-    // desktop's app-sidebar.
-    const modeSessions = sessions.filter((s) => s.mode === mode && !s.parentId)
-    // "Routines" group of the active mode: the session of each execution
-    // inherits the routine's mode (scheduler.ts), so the chat sidebar lists only
-    // the chat routines and the code one only the code ones. No archived filter:
-    // routine chats do not go into the "Archived" group, so archiving one would
-    // make it vanish from the whole sidebar.
-    const routineSessions = modeSessions
-      .filter((s) => !!s.routineId)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-    const activeSessions = modeSessions.filter((s) => !s.archived && !s.routineId)
+    // Routine chats never show up here: each routine has ONE chat and it lives in the Routines
+    // screen. The executions are its children (parentId), already out of the listing.
+    // A fragment's (or artifact's) own chat belongs to it, not to the list (same rule as the desktop's
+    // isEmbeddedArtifactChat) — it only shows as a subchat, which `parentId` already keeps apart.
+    const modeSessions = sessions.filter((s) => s.mode === mode && !s.parentId && !s.routineId && !s.artifact && !s.fragment)
+    const activeSessions = modeSessions.filter((s) => !s.archived)
     const archivedSessions = modeSessions
-      .filter((s) => s.archived && !s.routineId)
+      .filter((s) => s.archived)
       .sort((a, b) => b.updatedAt - a.updatedAt)
     const modeFolders = folders.filter((f) => f.mode === mode)
     // An archived folder leaves the "Folders" group and goes to "Archived" with
@@ -538,7 +526,6 @@ export function Sidebar() {
       archivedFolderGroups,
       archivedMirrorGroups,
       archivedLoose,
-      routineSessions,
     }
   }, [sessions, folders, mode])
 
@@ -614,14 +601,6 @@ export function Sidebar() {
       }
     }
 
-    // ── "Routines" group of the active mode (accordion, only when it has content) ──
-    if (routineSessions.length > 0) {
-      out.push({ kind: 'routines-group', data: [] })
-      if (groupsExpanded.routines) {
-        out.push({ kind: 'routines', data: routineSessions })
-      }
-    }
-
     // ── "Archived" group (accordion, only when there is content) ──
     if (
       archivedFolderGroups.length > 0 ||
@@ -668,7 +647,6 @@ export function Sidebar() {
     archivedFolderGroups,
     archivedMirrorGroups,
     archivedLoose,
-    routineSessions,
     expandedFolders,
     expandedMirrors,
     groupsExpanded,
@@ -687,7 +665,7 @@ export function Sidebar() {
         error={status[child.id] === 'error'}
         unread={unreadCounts[child.id] > 0}
         pinned={child.pinned}
-        icon={child.orchestration?.role === 'worker' ? Bot : MessagesSquare}
+        icon={childSessionIcon(child)}
         selectionMode={selectionMode}
         selected={selectedIds.has(child.id)}
         onPress={() => handleOpenSession(child.id)}
@@ -756,6 +734,7 @@ export function Sidebar() {
         unread={unreadCounts[session.id] > 0}
         indented={listSection.kind === 'folder' || listSection.kind === 'archived-folder'}
         pinned={session.pinned}
+        icon={sessionIcon(session)}
         selectionMode={selectionMode}
         selected={selectedIds.has(session.id)}
         childSessions={children}
@@ -809,16 +788,6 @@ export function Sidebar() {
           label={t('sidebar.chats')}
           expanded={groupsExpanded.chats}
           onToggle={() => toggleGroup('chats')}
-          tokens={tokens}
-        />
-      )
-    }
-    if (listSection.kind === 'routines-group') {
-      return (
-        <AccordionHeader
-          label={t('sidebar.routines')}
-          expanded={groupsExpanded.routines}
-          onToggle={() => toggleGroup('routines')}
           tokens={tokens}
         />
       )

@@ -58,6 +58,12 @@ export interface PieceViewProps {
   height?: number
   /** Shows the expand button to full screen. Default true. */
   expandable?: boolean
+  /**
+   * Only the page: no frame, no title bar, no full-screen layer, and it fills its parent
+   * instead of taking `height`. For the piece viewers, whose shell already draws the header and
+   * the controls — a second title bar inside the stage said the same thing twice.
+   */
+  bare?: boolean
   /** Extra content right below the host (the document buttons, for example). */
   footer?: ReactNode
   /** Label of the empty state (missing URL). */
@@ -97,6 +103,7 @@ export function PieceView({
   revision,
   height = 320,
   expandable = true,
+  bare = false,
   footer,
   emptyLabel,
   loadingLabel,
@@ -234,36 +241,8 @@ export function PieceView({
     return <UnavailablePart title={title} label={emptyText} testID="piece-empty" />
   }
 
-  return (
-    <>
-      <View
-        className="mt-2 w-full overflow-hidden rounded-lg"
-        style={{ borderWidth: 1, borderColor: tokens.border }}
-      >
-        <View
-          className="flex-row items-center gap-2 px-3 py-2"
-          style={{ backgroundColor: tokens.muted }}
-        >
-          <Text
-            numberOfLines={1}
-            className="flex-1 text-xs font-medium"
-            style={{ color: tokens.foreground }}
-          >
-            {title ?? ''}
-          </Text>
-          {expandable ? (
-            <Pressable
-              onPress={() => setFullscreen(true)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={t('parts.preview.expand')}
-            >
-              <Maximize2 size={14} color={tokens.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View style={{ height }}>
+  const stage = (
+        <View style={bare ? { flex: 1 } : { height }}>
           {state !== 'error' && renderWeb(false)}
 
           {state === 'loading' ? (
@@ -277,7 +256,7 @@ export function PieceView({
                   accessibilityIgnoresInvertColors
                 />
               ) : null}
-              <View style={styles.overlayScrim}>
+              <View style={[styles.overlayScrim, bare && { backgroundColor: tokens.background }]}>
                 <ActivityIndicator color={tokens.primary} accessibilityLabel={loadingText} />
               </View>
             </View>
@@ -314,6 +293,40 @@ export function PieceView({
             </View>
           ) : null}
         </View>
+  )
+
+  if (bare) return stage
+
+  return (
+    <>
+      <View
+        className="mt-2 w-full overflow-hidden rounded-lg"
+        style={{ borderWidth: 1, borderColor: tokens.border }}
+      >
+        <View
+          className="flex-row items-center gap-2 px-3 py-2"
+          style={{ backgroundColor: tokens.muted }}
+        >
+          <Text
+            numberOfLines={1}
+            className="flex-1 text-xs font-medium"
+            style={{ color: tokens.foreground }}
+          >
+            {title ?? ''}
+          </Text>
+          {expandable ? (
+            <Pressable
+              onPress={() => setFullscreen(true)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={t('parts.preview.expand')}
+            >
+              <Maximize2 size={14} color={tokens.mutedForeground} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {stage}
 
         {footer}
       </View>

@@ -1,5 +1,4 @@
 import type { PieceRef } from '@orbit/shared'
-import { Image } from 'expo-image'
 import { ChevronRight, Film, Frame, Presentation } from 'lucide-react-native'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,20 +10,17 @@ import { useThemeStore } from '~/stores/theme-store'
 import { PieceViewer } from './PieceViewer'
 
 /**
- * The piece card — a single one, for motion, design and slides.
+ * The piece card — a single one, for motion, design and slides, in the shape of the
+ * desktop's: a tinted square with the type icon, the name and one quiet line under it
+ * ("Motion · 32s"), and a chevron. A conversation with the three types stacked keeps the
+ * same rhythm because nothing changes between them but the icon and the words.
  *
- * The geometry is fixed on purpose (72 tall, cover 56×56): an answer with
- * the three types stacked cannot become a staircase of different heights.
- * What changes between them is the icon and the pill with the type name, not the shape.
- *
- * Nothing here loads a WebView. The card is image, text and a tap — the piece is only
+ * Nothing here loads a WebView. The card is icon, text and a tap — the piece is only
  * mounted when the person opens it (`PieceViewer`). That is what keeps a long
  * conversation with ten pieces costing the same as one with none.
  */
 
 const KIND_ICON = { motion: Film, design: Frame, slides: Presentation } as const
-
-export const PIECE_CARD_HEIGHT = 72
 
 export function PieceCard({ piece }: { piece: PieceRef }) {
   const { t } = useTranslation()
@@ -47,6 +43,7 @@ export function PieceCard({ piece }: { piece: PieceRef }) {
             count: piece.count,
           })
         : null
+  const subtitle = meta ? `${kindLabel} · ${meta}` : kindLabel
 
   return (
     <>
@@ -54,59 +51,23 @@ export function PieceCard({ piece }: { piece: PieceRef }) {
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={t('pieces.open', { title })}
-        className="w-full flex-row items-center gap-3 rounded-xl border px-2.5"
-        style={{
-          height: PIECE_CARD_HEIGHT,
-          borderColor: tokens.border,
-          backgroundColor: tokens.card,
-        }}
+        className="my-2.5 min-h-14 w-full flex-row items-center gap-2.5 rounded-xl border px-3 py-2"
+        style={{ borderColor: tokens.border, backgroundColor: tokens.card }}
       >
-        {piece.cover ? (
-          <Image
-            source={{ uri: piece.cover }}
-            style={{ width: 56, height: 56, borderRadius: 10 }}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        ) : (
-          // No cover (an old piece, or the desktop did not generate a frame): the icon of the
-          // type in a tinted square. Better than a hole, and the card keeps
-          // the same size.
-          <View
-            className="items-center justify-center rounded-[10px]"
-            style={{ width: 56, height: 56, backgroundColor: tokens.muted }}
-          >
-            <Icon size={20} color={tokens.mutedForeground} />
-          </View>
-        )}
+        <View
+          className="items-center justify-center rounded-[10px]"
+          style={{ width: 36, height: 36, backgroundColor: tokens.muted }}
+        >
+          <Icon size={18} color={tokens.primary} />
+        </View>
 
-        <View className="flex-1 justify-center gap-1">
-          <View className="flex-row items-center gap-1.5">
-            <Icon size={13} color={tokens.primary} />
-            <Text
-              numberOfLines={1}
-              className="shrink text-sm font-medium"
-              style={{ color: tokens.foreground }}
-            >
-              {title}
-            </Text>
-            <View
-              className="rounded px-1.5 py-[1px]"
-              style={{ backgroundColor: tokens.muted }}
-            >
-              <Text
-                className="text-[9px] font-semibold uppercase tracking-wide"
-                style={{ color: tokens.mutedForeground }}
-              >
-                {kindLabel}
-              </Text>
-            </View>
-          </View>
-          {meta ? (
-            <Text className="text-[11px]" style={{ color: tokens.mutedForeground }}>
-              {meta}
-            </Text>
-          ) : null}
+        <View className="flex-1 justify-center gap-0.5">
+          <Text numberOfLines={1} className="text-sm font-medium" style={{ color: tokens.foreground }}>
+            {title}
+          </Text>
+          <Text numberOfLines={1} className="text-xs" style={{ color: tokens.mutedForeground }}>
+            {subtitle}
+          </Text>
         </View>
 
         <ChevronRight size={16} color={tokens.mutedForeground} />

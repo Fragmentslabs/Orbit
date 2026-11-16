@@ -107,3 +107,17 @@ describe("entity block", () => {
     expect(parseOrbitUi(line({ source: "javascript:alert(1)" }), false).blocks).toHaveLength(0)
   })
 })
+
+describe("parseOrbitUi pretty-printed", () => {
+  it("reads one object spread over several lines", () => {
+    const code = '{"type":"steps","items":[\n{"title":"A","note":"x, {y}"},\n{"title":"B"}\n]}\n' + callout
+    const { blocks } = parseOrbitUi(code, false)
+    expect(blocks.map((b) => b.type)).toEqual(["steps", "callout"])
+  })
+
+  it("is pending while a multi-line object is still arriving", () => {
+    const { blocks, pending } = parseOrbitUi('{"type":"steps","items":[\n{"title":"A"},', true)
+    expect(blocks).toHaveLength(0)
+    expect(pending).toBe(true)
+  })
+})

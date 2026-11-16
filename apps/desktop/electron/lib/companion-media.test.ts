@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { rewriteMediaPart, rewriteMediaUrl, rewriteMessage, rewriteMessages } from './companion-media'
+import { pieceLookupOf, rewriteMediaPart, rewriteMediaUrl, rewriteMessage, rewriteMessages } from './companion-media'
 import type { ChatMessage, MessagePart } from '@shared/chat'
 
 /**
@@ -201,5 +201,50 @@ describe('rewriteMessage / rewriteMessages', () => {
     expect(out[0]).toBe(withoutMedia)
     expect(out[1]).not.toBe(withMedia)
     expect(out[2]).not.toBe(withVideo)
+  })
+})
+
+describe('piece tools without an id in the result', () => {
+  const tool = (over: Record<string, unknown>) =>
+    ({ id: 'p1', type: 'tool', state: 'completed', ...over }) as MessagePart
+
+  it('reads what the call addresses: the report name, the title or the path', () => {
+    const lookup = (part: MessagePart) => (part.type === 'tool' ? pieceLookupOf(part) : null)
+    expect(
+      lookup(tool({ tool: 'motion_write', input: { name: 'caixa' }, output: 'Motion "caixa-dagua" is open in the Motion tab' })),
+    ).toMatchObject({ kind: 'motion', name: 'caixa-dagua' })
+    expect(lookup(tool({ tool: 'slides_write', input: { title: 'Orbit em 12 slides' } }))).toMatchObject({
+      kind: 'slides',
+      name: 'Orbit em 12 slides',
+    })
+    expect(lookup(tool({ tool: 'design_preview', input: { path: 'proj/capa' } }))).toMatchObject({
+      kind: 'design',
+      path: 'proj/capa',
+    })
+    expect(lookup(tool({ tool: 'bash', input: { path: 'x' } }))).toBeNull()
+  })
+
+  it('builds the piece from an id the resolver put in the input, with the count from the report', () => {
+    const part = tool({
+      tool: 'design_edit',
+      input: { name: 'capa', id: 'dsg_abc123' },
+      output: 'Design "capa" is open in the Design tab of the right panel with 4 artboards: …',
+    })
+    expect(rewriteMediaPart(part, BASE, token)).toMatchObject({
+      piece: { kind: 'design', id: 'dsg_abc123', title: 'capa', count: 4 },
+    })
+  })
+})
+
+describe('web images (orbit-web://)', () => {
+  it('rewrites a cached web image to the web scope', () => {
+    const part = { id: 'p', type: 'image', src: 'orbit-web://0123456789.webp' } as MessagePart
+    const out = rewriteMediaPart(part, BASE, token) as { src: string }
+    expect(out.src).toBe(`${BASE}/api/file/web/0123456789.webp/tok-web-0123456789.webp`)
+  })
+
+  it('refuses names outside the cache pattern', () => {
+    const part = { id: 'p', type: 'image', src: 'orbit-web://../x.webp' } as MessagePart
+    expect(rewriteMediaPart(part, BASE, token)).toBeNull()
   })
 })

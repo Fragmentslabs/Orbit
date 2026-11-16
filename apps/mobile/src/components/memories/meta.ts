@@ -1,3 +1,4 @@
+import { BookOpen, Clock, Folder, Gem, type LucideIcon } from 'lucide-react-native'
 import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from '@orbit/shared'
 import i18n from '~/i18n'
 
@@ -13,6 +14,14 @@ export const KIND_COLOR: Record<MemoryKind, string> = {
   seasonal: '#f59e0b',
   general: '#8b5cf6',
   project: '#10b981',
+}
+
+/** Icon per kind — same as the desktop's KIND_ICON, so the row and the filter chip say the same thing. */
+export const KIND_ICON: Record<MemoryKind, LucideIcon> = {
+  core: Gem,
+  seasonal: Clock,
+  general: BookOpen,
+  project: Folder,
 }
 
 export function categoryLabel(category: ProjectCategory): string {

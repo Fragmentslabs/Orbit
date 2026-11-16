@@ -15,6 +15,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { hostname } from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { measureMotionLayers } from './video/motion-layers'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow } from 'electron'
@@ -28,12 +29,11 @@ import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import type { McpConfig } from '@shared/mcp'
-import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
+import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia, updateMediaEntry } from './media'
 import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
-import { getMotion } from './video/motion-store'
+import { getMotion, registeredMotionUrl } from './video/motion-store'
 import { getDesign } from './design/design-store'
-import { readDesignCanvas } from './design/design-canvas'
 import { getSlides } from './slides/slides-store'
 import { mediaKind, type MediaEntry } from '@shared/media'
 
@@ -485,11 +485,6 @@ function documentBase(id: string): string {
   return id.replace(/\.(md|html|pdf|docx|png)$/, '')
 }
 
-/** Relative path of a piece's entry, with `/`. */
-function relativeEntry(folder: string, entry: string): string {
-  return path.relative(folder, entry).split(path.sep).join('/')
-}
-
 /**
  * The URL the phone should open for this entry — one per TYPE, because each
  * one lives in a different scope of the asset server:
@@ -513,31 +508,63 @@ async function mediaEntryUrl(req: IncomingMessage, entry: MediaEntry): Promise<s
       return fileUrlFor(req, 'artifact', `${documentBase(entry.id)}.html`)
     case 'audio':
       return fileUrlFor(req, 'audio', entry.id)
-    case 'video':
-      return fileUrlFor(req, 'video', entry.id)
+    case 'video': {
+      // The gallery id (`vdo_….mp4`) is the record's; the player's registry is keyed by the id in
+      // `videoUrl` (`orbit-video://vid_…`). Asking for the record's id was a 404 for every old video.
+      const registered = /^orbit-video:\/\/([^/?#]+)/.exec(entry.videoUrl ?? '')?.[1]
+      return fileUrlFor(req, 'video', registered ?? entry.id)
+    }
     case 'motion': {
       if (!entry.motionId) return undefined
       const motion = await getMotion(entry.motionId)
       if (!motion) return undefined
-      return fileUrlFor(req, 'motion', entry.motionId, relativeEntry(motion.folder, motion.entry))
+      // The piece's bare address, the same one the chat hands out: the phone's piece player
+      // derives the audio plan and the assets from it, and the server resolves the entry itself.
+      return fileUrlFor(req, 'motion', entry.motionId)
     }
     case 'design': {
       if (!entry.designId) return undefined
       const design = await getDesign(entry.designId)
       if (!design) return undefined
-      // canvas.json is the index (data) — the page is the first artboard.
-      const first = await readDesignCanvas(design.folder)
-        .then((canvas) => canvas.order[0] ?? null)
-        .catch(() => null)
-      return fileUrlFor(req, 'design', entry.designId, first ?? 'canvas.json')
+      // The phone's design viewer reads the canvas and chooses the screen itself.
+      return fileUrlFor(req, 'design', entry.designId, 'canvas.json')
     }
     case 'slides': {
       if (!entry.slidesId) return undefined
       const slides = await getSlides(entry.slidesId)
       if (!slides) return undefined
-      return fileUrlFor(req, 'slides', entry.slidesId, relativeEntry(slides.folder, slides.entry))
+      return fileUrlFor(req, 'slides', entry.slidesId)
     }
   }
+}
+
+/**
+ * Duration of a motion piece, in ms. It is not in the gallery record and not in the file either
+ * (`duration=auto` is resolved from the timeline when the page runs), so the only honest source is
+ * the same measurement the desktop tab makes. That costs an offscreen window, so the list never
+ * waits for it: pieces without a duration are measured one at a time in the background and the
+ * result is written into the record — the next refresh already carries it.
+ */
+const measuring = new Set<string>()
+let measureChain: Promise<void> = Promise.resolve()
+
+function measureMotionDuration(entry: MediaEntry): void {
+  const motionId = entry.motionId
+  if (!motionId || measuring.has(entry.id)) return
+  measuring.add(entry.id)
+  measureChain = measureChain.then(async () => {
+    try {
+      const url = await registeredMotionUrl(motionId)
+      if (!url) return
+      const layers = await measureMotionLayers(motionId, url)
+      const ms = Math.round((layers.durationInFrames / (layers.fps || 30)) * 1000)
+      if (ms > 0) await updateMediaEntry(entry.id, { durationMs: ms })
+    } catch {
+      // A piece that does not load stays without a duration; it is tried again on the next list.
+    } finally {
+      measuring.delete(entry.id)
+    }
+  })
 }
 
 async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
@@ -545,7 +572,18 @@ async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
   jsonResponse(
     res,
     200,
-    await Promise.all(entries.map(async (entry) => ({ ...entry, url: await mediaEntryUrl(req, entry) }))),
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (mediaKind(entry) === 'motion' && !entry.durationMs) measureMotionDuration(entry)
+        const kind = mediaKind(entry)
+        // The cover lives with the artifacts (same folder, same scope), so the signed URL is the artifact's.
+        const thumbUrl =
+          entry.thumb && (kind === 'motion' || kind === 'design' || kind === 'slides')
+            ? fileUrlFor(req, 'artifact', entry.thumb)
+            : undefined
+        return { ...entry, url: await mediaEntryUrl(req, entry), ...(thumbUrl ? { thumbUrl } : {}) }
+      }),
+    ),
   )
 }
 

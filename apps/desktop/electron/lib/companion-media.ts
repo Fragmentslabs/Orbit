@@ -17,6 +17,8 @@ import type { ChatMessage, MessagePart, PieceKind, ToolPart } from '@shared/chat
 
 /** Only the ids we generate ourselves, and only image formats. */
 const MEDIA_URL_RE = /^orbit-media:\/\/([a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif))$/
+/** Web image cache (web-images/store.ts): `<10 hex>.webp`. */
+const WEB_URL_RE = /^orbit-web:\/\/([a-f0-9]{10}\.webp)$/
 /** Same pattern as SAFE_AUDIO_ID (media.ts) — the id IS the file name. */
 const AUDIO_URL_RE = /^orbit-audio:\/\/(aud_[a-z0-9]+\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac))$/
 /** Same pattern as SAFE_VIDEO_ID (video/store.ts). */
@@ -34,6 +36,7 @@ export type AssetScope =
   | 'motion'
   | 'design'
   | 'slides'
+  | 'web'
 
 /**
  * Tools that write a piece. What they return is not media: it is an interactive UI
@@ -43,16 +46,54 @@ export type AssetScope =
 const PIECE_TOOLS: Record<string, PieceKind> = {
   motion_write: 'motion',
   motion_edit: 'motion',
+  motion_preview: 'motion',
   design_write: 'design',
   design_edit: 'design',
+  design_preview: 'design',
   slides_write: 'slides',
   slides_edit: 'slides',
+  slides_preview: 'slides',
 }
 
 /** Piece id in the tool result — JSON when possible, regex when it comes loose. */
 const PIECE_ID_RE = /\b((?:mv|dsg|sld)_[a-z0-9]+)\b/
 
-function pieceIdOf(part: ToolPart): string | undefined {
+/** What a piece tool call addresses: the id when it carries one, else the path or the name. */
+export interface PieceLookup {
+  kind: PieceKind
+  id?: string
+  path?: string
+  name?: string
+}
+
+const ID_PREFIX: Record<PieceKind, string> = { motion: 'mv_', design: 'dsg_', slides: 'sld_' }
+const NAME_IN_REPORT: Record<PieceKind, RegExp> = {
+  motion: /Motion "([^"]+)"/,
+  design: /Design "([^"]+)"/,
+  slides: /Deck "([^"]+)"/,
+}
+
+/**
+ * How the desktop card finds its piece, without the id: the tools address it by `path` (code
+ * mode) or by `name`/`title` (chat mode, one folder per conversation), and real tool results
+ * carry no id at all. The caller resolves the lookup against the registry (companion-pieces.ts).
+ */
+export function pieceLookupOf(part: ToolPart): PieceLookup | null {
+  const kind = PIECE_TOOLS[part.tool]
+  if (!kind) return null
+  const input = part.input ?? {}
+  const str = (key: string) => (typeof input[key] === 'string' && input[key] ? (input[key] as string) : undefined)
+  const id = str('id')?.startsWith(ID_PREFIX[kind]) ? str('id') : undefined
+  const path = str('path') ?? str('target') ?? str('file')
+  const reported = part.output ? NAME_IN_REPORT[kind].exec(part.output)?.[1] : undefined
+  const name = kind === 'slides' ? (str('title') ?? str('name') ?? reported) : (reported ?? str('name'))
+  if (!id && !path && !name) return null
+  return { kind, id, path, name: name?.trim() || undefined }
+}
+
+export function pieceIdOf(part: ToolPart): string | undefined {
+  const fromInput = pieceLookupOf(part)?.id
+  if (fromInput) return fromInput
   const output = part.output
   if (!output) return undefined
   try {
@@ -63,6 +104,20 @@ function pieceIdOf(part: ToolPart): string | undefined {
     // output in running text: falls into the regex below
   }
   return PIECE_ID_RE.exec(output)?.[1]
+}
+
+/** Duration (motion), screens (design) or slides, as the tool report states them. */
+function pieceCountOf(kind: PieceKind, output: string | undefined): number | undefined {
+  // A write that threw reports a size that is not the piece's (a stray 980 s loop, say).
+  if (!output || output.includes('[error]')) return undefined
+  const match =
+    kind === 'motion'
+      ? /\(([\d.]+)\s*s\)/.exec(output)
+      : kind === 'design'
+        ? /with (\d+) artboards?/.exec(output)
+        : /with (\d+) slides?/.exec(output)
+  const n = match ? Number(match[1]) : NaN
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined
 }
 
 export type MediaTokenFactory = (scope: AssetScope, id: string) => string
@@ -125,7 +180,9 @@ export function rewriteMediaPart(
   token: MediaTokenFactory,
 ): MessagePart | null {
   if (part.type === 'image') {
-    const src = rewriteMediaUrl(part.src, base, token)
+    const src =
+      rewriteMediaUrl(part.src, base, token) ??
+      rewriteScopedUrl(part.src, 'web', WEB_URL_RE, base, token)
     return src ? { ...part, src } : null
   }
   if (part.type === 'file') {
@@ -164,8 +221,12 @@ export function rewriteMediaPart(
       kind === 'design'
         ? `${assetUrl('design', id, base, token)}/canvas.json`
         : assetUrl(kind, id, base, token)
-    const title = typeof part.input?.title === 'string' ? part.input.title : part.title
-    return { ...part, piece: { kind, id, url, ...(title ? { title } : {}) } }
+    const title =
+      (typeof part.input?.title === 'string' ? part.input.title : undefined) ??
+      pieceLookupOf(part)?.name ??
+      part.title
+    const count = pieceCountOf(kind, part.output)
+    return { ...part, piece: { kind, id, url, ...(title ? { title } : {}), ...(count ? { count } : {}) } }
   }
   return null
 }

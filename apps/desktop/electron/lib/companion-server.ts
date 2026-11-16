@@ -93,6 +93,7 @@ import {
   rewriteMessage as rewriteMessageMedia,
   rewriteMessages as rewriteMessagesMedia,
 } from './companion-media'
+import { hasUnresolvedPiece, resolvePart, resolvePieceIds } from './companion-pieces'
 import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
@@ -588,6 +589,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           extraDirectories: s.extraDirectories,
           parentId: s.parentId,
           routineId: s.routineId,
+          routineChat: s.routineChat,
+          // What kind of chat it is: a fragment's own chat, a specialist (motion, design) or an
+          // agent of the person. The phone draws the same icon as the desktop's sidebar from these.
+          fragment: s.fragment,
+          profile: s.profile,
+          artifact: s.artifact,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           orchestration: s.orchestration,
@@ -675,7 +682,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         // A desktop peer keeps the orbit-* addresses: its own main proxies them
         // through the pinned TLS connection (peers/remote-assets.ts), so no signed
         // URL ever crosses the network in plain HTTP.
-        const rewritten = client.kind === 'desktop' ? page : (rewriteMessages(page, mediaBaseUrl(client)) ?? page)
+        const resolved = client.kind === 'desktop' ? page : await resolvePieceIds(page, req.sessionId)
+        const rewritten = client.kind === 'desktop' ? page : (rewriteMessages(resolved, mediaBaseUrl(client)) ?? resolved)
         sendResponse(ws, requestId, true, rewritten)
         break
       }
@@ -975,11 +983,16 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
       case 'analytics:summary': {
         const range = req.range ?? '7d'
-        // The phone gets the compact summary. A desktop shows the same Usage page
-        // as the app, so it asks for the detailed one (and may filter by mode).
+        // The phone gets the compact summary unless its usage screen asks for the detailed one
+        // (deltas, sessions). A desktop shows the same Usage page as the app, so it always gets
+        // the detailed one (and may filter by mode).
         const analytics = await computeAnalytics(
           range,
-          client.kind === 'desktop' ? { detailed: true, mode: req.mode } : undefined,
+          client.kind === 'desktop'
+            ? { detailed: true, mode: req.mode }
+            : req.detailed
+              ? { detailed: true }
+              : undefined,
         )
         sendResponse(ws, requestId, true, analytics)
         break
@@ -1121,9 +1134,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
           // Same rewriting as sessions:unrevert: the reverted message cannot
           // come back with a raw orbit-media:// to the app.
+          const resolved = await resolvePieceIds(messages, req.sessionId)
           sendResponse(ws, requestId, true, {
             revert: revertState,
-            messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
+            messages: rewriteMessages(resolved, mediaBaseUrl(client)) ?? resolved,
           })
         } else {
           sendResponse(ws, requestId, false, undefined, tNow('companion.server.revertFailed'))
@@ -1146,8 +1160,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
           // `result` describes what came back and what stayed intact due to a conflict —
           // the mobile shows the warning when there is a conflict.
+          const resolved = await resolvePieceIds(messages, req.sessionId)
           sendResponse(ws, requestId, true, {
-            messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
+            messages: rewriteMessages(resolved, mediaBaseUrl(client)) ?? resolved,
             result,
           })
         } else {
@@ -1268,6 +1283,13 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'routines:run': {
         const sessionId = await routines.runNow(req.id)
         sendResponse(ws, requestId, true, sessionId)
+        break
+      }
+
+      case 'routines:chat': {
+        const session = await routines.chatSession(req.id)
+        if (session) sendResponse(ws, requestId, true, session)
+        else sendResponse(ws, requestId, false, undefined, 'Routine not found')
         break
       }
 
@@ -1765,24 +1787,58 @@ function clientHostFromReq(req: IncomingMessage): string {
  * every authenticated companion.
  */
 export function forwardChatEvent(event: ChatEvent): void {
+  // The piece tools carry no id in their input or result: the main resolves it against the
+  // registry (the phone cannot), which is async. Only events with such a part wait for it.
+  const pending =
+    event.type === 'message'
+      ? hasUnresolvedPiece([event.message])
+      : event.type === 'messages'
+        ? hasUnresolvedPiece(event.messages)
+        : event.type === 'part'
+          ? hasUnresolvedPiece([{ parts: [event.part] } as ChatMessage])
+          : false
+  if (!pending) {
+    sendChatEvent(event, event)
+    return
+  }
+  const sessionId = (event as { sessionId: string }).sessionId
+  void (async () => {
+    let resolved: ChatEvent = event
+    try {
+      if (event.type === 'message') {
+        resolved = { ...event, message: (await resolvePieceIds([event.message], sessionId))[0] }
+      } else if (event.type === 'messages') {
+        resolved = { ...event, messages: await resolvePieceIds(event.messages, sessionId) }
+      } else if (event.type === 'part') {
+        resolved = { ...event, part: await resolvePart(event.part, sessionId) }
+      }
+    } catch {
+      // the card is a nicety: the raw event still goes out
+    }
+    sendChatEvent(event, resolved)
+  })()
+}
+
+/** `raw` goes to a desktop peer untouched; the phones get `resolved` with its addresses signed. */
+function sendChatEvent(raw: ChatEvent, resolved: ChatEvent): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     if (client.kind === 'desktop') {
       // Raw: the peer's main proxies orbit-* (see messages:get).
-      client.ws.send(wrap({ type: 'chat:event', event } as CompanionEvent))
+      client.ws.send(wrap({ type: 'chat:event', event: raw } as CompanionEvent))
       continue
     }
     const base = mediaBaseUrl(client)
-    let out: ChatEvent = event
-    if (event.type === 'message') {
-      const rewritten = rewriteMessage(event.message, base)
-      if (rewritten) out = { ...event, message: rewritten }
-    } else if (event.type === 'messages') {
-      const rewritten = rewriteMessages(event.messages, base)
-      if (rewritten) out = { ...event, messages: rewritten }
-    } else if (event.type === 'part') {
-      const rewritten = rewriteMediaPart(event.part, base)
-      if (rewritten) out = { ...event, part: rewritten }
+    let out: ChatEvent = resolved
+    if (resolved.type === 'message') {
+      const rewritten = rewriteMessage(resolved.message, base)
+      if (rewritten) out = { ...resolved, message: rewritten }
+    } else if (resolved.type === 'messages') {
+      const rewritten = rewriteMessages(resolved.messages, base)
+      if (rewritten) out = { ...resolved, messages: rewritten }
+    } else if (resolved.type === 'part') {
+      const rewritten = rewriteMediaPart(resolved.part, base)
+      if (rewritten) out = { ...resolved, part: rewritten }
     }
     client.ws.send(wrap({ type: 'chat:event', event: out } as CompanionEvent))
   }

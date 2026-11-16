@@ -1,28 +1,42 @@
 /**
- * Routines screen — mirror of the desktop's RoutinesView: one list of routines,
- * with the "New routine" button at the top. Creation and detail are routes of
- * their own: /routines/new and /routines/[id].
+ * Routines screen — mirror of the desktop's RoutinesView: search and the list/agenda switch, the
+ * numbers, the rows and the foot line. "New" opens the menu that leads to the creation chat first
+ * (or the form). Opening a routine is the /routines/[id] route.
  */
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, FlatList, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CalendarClock, Plus } from 'lucide-react-native'
+import { CalendarClock, CalendarDays, Clock, List, Plus } from 'lucide-react-native'
+import { isFinishedOnce } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 import { useRoutinesStore } from '~/stores/routines-store'
-import { getThemeTokens } from '~/lib/theme-tokens'
-import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
-import { RoutineCard } from '~/components/routines/routine-card'
+import { RoutineRow } from '~/components/routines/routine-row'
+import { RoutinesAgenda } from '~/components/routines/routines-agenda'
+import { CreateSheet } from '~/components/list/create-sheet'
+import { CountLine, FootLine, HeaderButton, ListHeader, SearchField, Segment, Stat, useTokens } from '~/components/list/parts'
+import { describeSchedule } from '~/lib/schedule'
+import { formatCost } from '~/lib/format'
+import { useStartCreationChat } from '~/hooks/useCreationChat'
+
+const DAY_MS = 86_400_000
 
 export default function RoutinesScreen() {
   const { t } = useTranslation()
   const router = useRouter()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const tokens = useTokens()
   const routines = useRoutinesStore((s) => s.routines)
+  const runs = useRoutinesStore((s) => s.runs)
   const loading = useRoutinesStore((s) => s.loading)
   const loaded = useRoutinesStore((s) => s.loaded)
   const load = useRoutinesStore((s) => s.load)
+  const startCreation = useStartCreationChat()
+
+  const [query, setQuery] = useState('')
+  const [layout, setLayout] = useState<'list' | 'agenda'>('list')
+  const [creating, setCreating] = useState(false)
+  const [now] = useState(() => Date.now())
 
   useEffect(() => {
     void load()
@@ -41,117 +55,118 @@ export default function RoutinesScreen() {
     })()
   }, [])
 
-  const listed = useMemo(
-    () => [...routines].sort((a, b) => b.createdAt - a.createdAt),
-    [routines],
-  )
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const sorted = [...routines].sort((a, b) => b.createdAt - a.createdAt)
+    if (!q) return sorted
+    return sorted.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.prompt.toLowerCase().includes(q) ||
+        describeSchedule(r.schedule, t).toLowerCase().includes(q),
+    )
+  }, [routines, query, t])
 
-  const createNew = useCallback(() => {
-    router.push('/(main)/routines/new')
-  }, [router])
+  const stats = useMemo(() => {
+    const byId = new Set(routines.map((r) => r.id))
+    const mine = runs.filter((r) => byId.has(r.routineId))
+    return {
+      active: routines.filter((r) => r.active).length,
+      running: new Set(mine.filter((r) => r.status === 'running').map((r) => r.routineId)).size,
+      failures: mine.filter((r) => r.status === 'error' && r.startedAt >= now - 7 * DAY_MS).length,
+      cost: mine.filter((r) => r.startedAt >= now - 30 * DAY_MS).reduce((sum, r) => sum + r.cost, 0),
+      finished: routines.filter((r) => isFinishedOnce(r)).length,
+    }
+  }, [routines, runs, now])
+
+  const open = useCallback((id: string) => router.push(`/(main)/routines/${id}`), [router])
+  const openForm = useCallback(() => router.push('/(main)/routines/new'), [router])
+
+  const counts = [
+    t('routines.list.count', { count: routines.length }),
+    t('routines.list.countActive', { count: stats.active }),
+    ...(stats.running > 0 ? [t('routines.list.countRunning', { count: stats.running })] : []),
+  ].join(' · ')
 
   return (
     <SafeScreen style={s.container}>
-      {/* Header: title + "New routine" button at the top */}
-      <View style={[s.header, { borderBottomColor: tokens.border }]}>
-        <Pressable onPress={() => router.back()} style={s.headerBtn}>
-          <ArrowLeft size={22} color={tokens.foreground} />
-        </Pressable>
-        <View style={s.headerTitle}>
-          <Text style={[s.headerTitleText, { color: tokens.foreground }]}>{t('routines.title')}</Text>
+      <ListHeader
+        title={t('routines.title')}
+        subtitle={t('routines.headerSubtitle')}
+        onBack={() => router.back()}
+        right={<HeaderButton icon={Plus} label={t('routines.list.newShort')} onPress={() => setCreating(true)} />}
+      />
+
+      {!loaded && loading ? (
+        <View style={s.center}>
+          <ActivityIndicator color={tokens.primary} />
         </View>
-        <Pressable onPress={createNew} style={[s.newButton, { backgroundColor: tokens.primary }]}>
-          <Plus size={15} color={tokens.primaryForeground} />
-          <Text style={[s.newButtonText, { color: tokens.primaryForeground }]}>{t('routines.list.new')}</Text>
-        </Pressable>
-      </View>
-
-      <View style={s.body}>
-        <Text style={[s.subtitle, { color: tokens.mutedForeground }]}>{t('routines.subtitle')}</Text>
-
-        {!loaded && loading ? (
-          <View style={s.centerBox}>
-            <ActivityIndicator color={tokens.primary} />
+      ) : routines.length === 0 ? (
+        <View style={s.center}>
+          <CalendarClock size={36} color={tokens.mutedForeground} style={{ opacity: 0.5 }} />
+          <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('routines.list.emptyTitle')}</Text>
+          <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('routines.list.emptySubtitle')}</Text>
+          <Pressable onPress={() => setCreating(true)} style={[s.emptyBtn, { borderColor: tokens.border }]}>
+            <CalendarClock size={15} color={tokens.foreground} />
+            <Text style={{ fontSize: 13, fontWeight: '500', color: tokens.foreground }}>{t('routines.list.createFirst')}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={s.bar}>
+            <SearchField value={query} onChange={setQuery} placeholder={t('routines.list.search')} />
+            <Segment
+              value={layout}
+              onChange={setLayout}
+              items={[
+                { key: 'list', icon: List, label: t('routines.view.list') },
+                { key: 'agenda', icon: CalendarDays, label: t('routines.view.agenda') },
+              ]}
+            />
           </View>
-        ) : listed.length === 0 ? (
-          <View style={s.centerBox}>
-            <CalendarClock size={36} color={tokens.mutedForeground} style={{ opacity: 0.5 }} />
-            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('routines.list.emptyTitle')}</Text>
-            <Text style={[s.emptyDescription, { color: tokens.mutedForeground }]}>
-              {t('routines.list.emptySubtitle')}
-            </Text>
-            <Pressable onPress={createNew} style={[s.emptyButton, { borderColor: tokens.border }]}>
-              <CalendarClock size={15} color={tokens.foreground} />
-              <Text style={[s.emptyButtonText, { color: tokens.foreground }]}>{t('routines.list.createFirst')}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <FlatList
-            data={listed}
-            keyExtractor={(r) => r.id}
-            renderItem={({ item }) => (
-              <View style={{ marginBottom: 10 }}>
-                <RoutineCard routine={item} onOpen={() => router.push(`/(main)/routines/${item.id}`)} />
+
+          {layout === 'list' ? (
+            <>
+              <View style={s.stats}>
+                <Stat label={t('routines.summary.active')} value={t('routines.summary.activeOf', { active: stats.active, total: routines.length })} />
+                <Stat label={t('routines.summary.failures')} value={String(stats.failures)} bad={stats.failures > 0} />
+                <Stat label={t('routines.summary.spent')} value={formatCost(stats.cost)} />
               </View>
-            )}
-            contentContainerStyle={{ paddingBottom: 32 }}
-            refreshControl={
-              <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={tokens.primary} />
-            }
-          />
-        )}
-      </View>
+              <CountLine>{counts}</CountLine>
+              {filtered.length === 0 ? (
+                <Text style={[s.noResults, { color: tokens.mutedForeground, borderColor: tokens.border }]}>
+                  {t('routines.list.noResults', { query: query.trim() })}
+                </Text>
+              ) : (
+                <FlatList
+                  data={filtered}
+                  keyExtractor={(r) => r.id}
+                  renderItem={({ item }) => <RoutineRow routine={item} onOpen={() => open(item.id)} />}
+                  contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
+                  style={{ flex: 1 }}
+                  refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={tokens.primary} />}
+                />
+              )}
+              <FootLine icon={Clock} text={t('routines.list.tail')} />
+            </>
+          ) : (
+            <RoutinesAgenda routines={filtered} onOpen={open} />
+          )}
+        </>
+      )}
+
+      <CreateSheet kind="routine" open={creating} onClose={() => setCreating(false)} onChat={(text) => void startCreation('routine', text)} onForm={openForm} />
     </SafeScreen>
   )
 }
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  headerBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitleText: { fontSize: 16, fontWeight: '600' },
-  modeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  modeBadgeText: { fontSize: 11, fontWeight: '500' },
-  newButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  newButtonText: { fontSize: 13, fontWeight: '600' },
-
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
-  subtitle: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
-
-  centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 28 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 28 },
   emptyTitle: { fontSize: 15, fontWeight: '600' },
-  emptyDescription: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginTop: 6,
-  },
-  emptyButtonText: { fontSize: 13, fontWeight: '500' },
+  emptyText: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 44, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, marginTop: 6 },
+  bar: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  stats: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 },
+  noResults: { margin: 16, padding: 24, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, textAlign: 'center', fontSize: 12.5 },
 })

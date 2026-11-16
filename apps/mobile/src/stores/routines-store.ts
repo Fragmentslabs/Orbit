@@ -47,6 +47,8 @@ interface RoutinesState {
   /** Removes the routine + the chats of its executions + the metrics. */
   remove: (id: string) => Promise<void>
   runNow: (id: string) => Promise<string | null>
+  /** The routine's ONE chat: the desktop creates it on first use and syncs every execution into it. */
+  openChat: (id: string) => Promise<string | null>
   /** Discards the metrics of executions whose chat no longer exists. */
   prune: (liveSessionIds: string[]) => Promise<void>
 
@@ -157,6 +159,18 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
     const res = await wsClient.send({ type: 'routines:run', id })
     if (!res.ok) return null
     return (res.data as string | null) ?? null
+  },
+
+  openChat: async (id) => {
+    const { wsClient } = useConnectionStore.getState()
+    const res = await wsClient.send({ type: 'routines:chat', id })
+    const session = res.ok ? (res.data as { id: string } | null) : null
+    if (!session) return null
+    // The chat may have just been born on the desktop; the list needs to know it before the screen opens.
+    if (!useSessionStore.getState().sessions.some((s) => s.id === session.id)) {
+      await useSessionStore.getState().fetchSessions()
+    }
+    return session.id
   },
 
   prune: async (liveSessionIds) => {

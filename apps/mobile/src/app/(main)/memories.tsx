@@ -4,18 +4,20 @@
  * core+seasonal+general; code shows project+general with a project filter).
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet, InteractionManager } from 'react-native'
+import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
+import { ArrowLeft, Check, ChevronDown, Folder, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory, MemoryKind } from '@orbit/shared'
 import { matchesProjectFilter, searchMemories, visibleIn } from '@orbit/shared'
 import { useMemoryStore } from '~/stores/memory-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
-import { MemoryCard } from '~/components/memories/MemoryCard'
+import { MemoryRow } from '~/components/memories/MemoryRow'
 import { MemoryGraph } from '~/components/memories/MemoryGraph'
 import { prewarmGraphLayout, stopGraphLayout } from '~/components/memories/use-graph-layout'
-import { lastActivity } from '~/components/memories/meta'
+import { KIND_COLOR, KIND_ICON, kindLabel, lastActivity } from '~/components/memories/meta'
+import { BottomSheet } from '~/components/ui/bottom-sheet'
+import { CountLine } from '~/components/list/parts'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -36,7 +38,10 @@ export default function MemoriesScreen() {
 
   const [query, setQuery] = useState('')
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
+  const [projectPicker, setProjectPicker] = useState(false)
   const [tab, setTab] = useState<'list' | 'graph'>('list')
+  // Kind chips of the LIST only — the graph keeps showing the whole pool.
+  const [kindFilter, setKindFilter] = useState<MemoryKind | typeof ALL_PROJECTS>(ALL_PROJECTS)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Arrival by citation in the conversation (`/memories?id=mem_xxx`): opens straight in the graph
@@ -92,12 +97,39 @@ export default function MemoriesScreen() {
     return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
   }, [pool, queryAdiada])
 
+  // The kind chips count what the active tab shows: the searched list, or the whole pool of the graph
+  // (which highlights the search instead of hiding).
+  const kindBase = tab === 'list' ? filtered : pool
+  const kindCounts = useMemo(() => {
+    const counts = new Map<MemoryKind, number>()
+    for (const m of kindBase) counts.set(m.kind, (counts.get(m.kind) ?? 0) + 1)
+    return counts
+  }, [kindBase])
+  const showKinds = kindCounts.size > 1
+  const showProjects = mode === 'code' && projects.length > 1
+  // A kind that is no longer in the view (another project, another search) stops filtering.
+  const activeKind = kindFilter !== ALL_PROJECTS && kindCounts.has(kindFilter) ? kindFilter : ALL_PROJECTS
+  const listed = useMemo(
+    () => (activeKind === ALL_PROJECTS ? filtered : filtered.filter((m) => m.kind === activeKind)),
+    [filtered, activeKind],
+  )
+  // Same chips on the graph: the kind narrows the pool it draws (the layout itself is untouched).
+  const graphPool = useMemo(
+    () => (activeKind === ALL_PROJECTS ? pool : pool.filter((m) => m.kind === activeKind)),
+    [pool, activeKind],
+  )
+
   // Warms up the graph layout with the list still in front: when the toggle is
-  // pressed, most of the time it is already ready (or nearly). It waits for the
-  // interactions so as not to fight for frames with the screen transition.
+  // pressed, most of the time it is already ready (or nearly). It waits for an idle moment so as
+  // not to fight for frames with the screen transition (InteractionManager is deprecated; the
+  // timer is the fallback where requestIdleCallback is missing).
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => prewarmGraphLayout(pool))
-    return () => task.cancel()
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(() => prewarmGraphLayout(pool))
+      return () => cancelIdleCallback(id)
+    }
+    const timer = setTimeout(() => prewarmGraphLayout(pool), 300)
+    return () => clearTimeout(timer)
   }, [pool])
 
   // Left the memories screen: there is no point in keeping the grind going in the background.
@@ -123,8 +155,8 @@ export default function MemoriesScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: Memory }) => (
-      <View style={{ marginBottom: 10 }}>
-        <MemoryCard
+      <View>
+        <MemoryRow
           memory={item}
           related={relatedByMemory.get(item.id) ?? NO_RELATED}
           onSelectRelated={openInGraph}
@@ -134,7 +166,7 @@ export default function MemoriesScreen() {
     [relatedByMemory, NO_RELATED, openInGraph],
   )
 
-  const empty = (tab === 'graph' ? pool : filtered).length === 0
+  const empty = (tab === 'graph' ? graphPool : listed).length === 0
 
   return (
     <SafeScreen style={s.container}>
@@ -143,7 +175,10 @@ export default function MemoriesScreen() {
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('memoriesScreen.title')}</Text>
+        <View style={{ flex: 1, minWidth: 0, paddingLeft: 6 }}>
+          <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('memoriesScreen.title')}</Text>
+          <Text numberOfLines={1} style={{ fontSize: 12, color: tokens.mutedForeground }}>{t('memoriesScreen.subtitle')}</Text>
+        </View>
         <Pressable onPress={() => void fetch()} disabled={loading} style={s.headerBtn}>
           <Spin active={loading}>
             <RefreshCw size={18} color={tokens.mutedForeground} />
@@ -187,35 +222,54 @@ export default function MemoriesScreen() {
           </View>
         </View>
 
-        {/* Project filter (code mode, 2+ projects) */}
-        {mode === 'code' && projects.length > 1 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ flexGrow: 0 }}
-            contentContainerStyle={s.projectChips}
-          >
-            <Pressable
-              onPress={() => setProjectFilter(ALL_PROJECTS)}
-              style={[s.projectChip, projectFilter === ALL_PROJECTS && { backgroundColor: tokens.primary, borderColor: tokens.primary }]}
-            >
-              <Text style={[s.projectChipText, { color: tokens.mutedForeground }, projectFilter === ALL_PROJECTS && { color: tokens.primaryForeground }]}>
-                {t('memoriesScreen.allProjects')}
-              </Text>
-            </Pressable>
-            {projects.map((p) => (
+        {/* One row of filters: the kinds (list only) and, in code mode with 2+ projects, the project picker. */}
+        {(showKinds || showProjects) && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipsScroll} contentContainerStyle={s.chips}>
+            {showKinds && (
+              <>
+                <Pressable
+                  onPress={() => setKindFilter(ALL_PROJECTS)}
+                  accessibilityState={{ selected: activeKind === ALL_PROJECTS }}
+                  style={[s.kindChip, { borderColor: tokens.border }, activeKind === ALL_PROJECTS && { backgroundColor: tokens.muted, borderColor: tokens.muted }]}
+                >
+                  <Text style={{ fontSize: 13.5, color: activeKind === ALL_PROJECTS ? tokens.foreground : tokens.mutedForeground }}>
+                    {t('memoriesScreen.allKinds')} <Text style={{ fontSize: 12, opacity: 0.8 }}>{kindBase.length}</Text>
+                  </Text>
+                </Pressable>
+                {kinds.filter((k) => kindCounts.has(k)).map((k) => {
+                  const KindIcon = KIND_ICON[k]
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => setKindFilter(k)}
+                      accessibilityState={{ selected: activeKind === k }}
+                      style={[s.kindChip, { borderColor: tokens.border }, activeKind === k && { backgroundColor: tokens.muted, borderColor: tokens.muted }]}
+                    >
+                      <KindIcon size={14} color={KIND_COLOR[k]} />
+                      <Text style={{ fontSize: 13.5, color: activeKind === k ? tokens.foreground : tokens.mutedForeground }}>
+                        {kindLabel(k)} <Text style={{ fontSize: 12, opacity: 0.8 }}>{kindCounts.get(k)}</Text>
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </>
+            )}
+            {showProjects && (
               <Pressable
-                key={p.id}
-                onPress={() => setProjectFilter(p.id)}
-                style={[s.projectChip, projectFilter === p.id && { backgroundColor: tokens.primary, borderColor: tokens.primary }]}
+                onPress={() => setProjectPicker(true)}
+                accessibilityRole="button"
+                style={[s.kindChip, { borderColor: projectFilter === ALL_PROJECTS ? tokens.border : tokens.primary }]}
               >
-                <Text style={[s.projectChipText, { color: tokens.mutedForeground }, projectFilter === p.id && { color: tokens.primaryForeground }]}>
-                  {p.name}
+                <Folder size={14} color={projectFilter === ALL_PROJECTS ? tokens.mutedForeground : tokens.primary} />
+                <Text numberOfLines={1} style={{ maxWidth: 140, fontSize: 13.5, color: projectFilter === ALL_PROJECTS ? tokens.mutedForeground : tokens.foreground }}>
+                  {projectFilter === ALL_PROJECTS ? t('memoriesScreen.projectPicker') : (projects.find((p) => p.id === projectFilter)?.name ?? '')}
                 </Text>
+                <ChevronDown size={14} color={tokens.mutedForeground} />
               </Pressable>
-            ))}
+            )}
           </ScrollView>
         )}
+        {tab === 'list' && !empty && <CountLine>{t('memoriesScreen.count', { count: listed.length })}</CountLine>}
 
         {/* Content */}
         {empty ? (
@@ -231,7 +285,7 @@ export default function MemoriesScreen() {
           </View>
         ) : tab === 'list' ? (
           <FlatList
-            data={filtered}
+            data={listed}
             keyExtractor={keyOf}
             renderItem={renderItem}
             // Cards have variable height (markdown, tags, actions), so there is no
@@ -249,7 +303,7 @@ export default function MemoriesScreen() {
           />
         ) : (
           <MemoryGraph
-            pool={pool}
+            pool={graphPool}
             allById={byId}
             query={query}
             selectedId={selectedId}
@@ -257,6 +311,27 @@ export default function MemoriesScreen() {
           />
         )}
       </View>
+
+      <BottomSheet open={projectPicker} onClose={() => setProjectPicker(false)} title={<Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('memoriesScreen.projectPicker')}</Text>}>
+        {[{ id: ALL_PROJECTS, name: t('memoriesScreen.allProjects') }, ...projects].map((p) => (
+          <Pressable
+            key={p.id}
+            onPress={() => {
+              setProjectFilter(p.id)
+              setProjectPicker(false)
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: projectFilter === p.id }}
+            style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: tokens.accent }]}
+          >
+            <Folder size={16} color={tokens.mutedForeground} />
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, color: tokens.foreground }}>
+              {p.name}
+            </Text>
+            {projectFilter === p.id ? <Check size={16} color={tokens.primary} /> : null}
+          </Pressable>
+        ))}
+      </BottomSheet>
     </SafeScreen>
   )
 }
@@ -271,10 +346,10 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
-  headerBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '600' },
 
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 },
+  body: { flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 8 },
 
   controls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchBox: {
@@ -284,7 +359,9 @@ const s = StyleSheet.create({
     gap: 8,
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    height: 48,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   searchInput: { flex: 1, fontSize: 14, paddingVertical: 6 },
   tabs: {
@@ -293,16 +370,14 @@ const s = StyleSheet.create({
     padding: 3,
     gap: 3,
   },
-  tabBtn: { width: 36, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  tabBtn: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 
-  projectChips: { flexDirection: 'row', gap: 6 },
-  projectChip: {
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  projectChipText: { fontSize: 12, fontWeight: '500' },
+  chipsScroll: { flexGrow: 0, flexShrink: 0 },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 4 },
+  sheetTitle: { fontSize: 17, fontWeight: '600', paddingVertical: 8 },
+  // The row bleeds 8px past the sheet's margin for the pressed highlight, so its text lines up with the title.
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 12 },
+  kindChip: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 40, borderRadius: 99, borderWidth: 1, paddingHorizontal: 13 },
 
   emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 32 },
   emptyTitle: { fontSize: 14, fontWeight: '600' },

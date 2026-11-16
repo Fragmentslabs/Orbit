@@ -29,6 +29,17 @@ const harness = vi.hoisted(() => ({
   web: { current: null as Record<string, any> | null },
 }))
 
+// jsdom never lays anything out, so the stage would stay unmeasured and the piece unfitted:
+// the box is given directly (a 390x700 stage under the header).
+vi.mock('./kit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./kit')>()),
+  useStageBox: () => ({ box: { width: 390, height: 700 }, onLayout: () => {} }),
+}))
+
+// No sound in these tests: the plan fetch answers "nothing" and the native player is inert.
+vi.mock('expo-audio', () => ({ createAudioPlayer: vi.fn(), setAudioModeAsync: vi.fn() }))
+vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => null })))
+
 vi.mock('react-native-webview', async () => {
   const React = await import('react')
   const { View } = await import('react-native')

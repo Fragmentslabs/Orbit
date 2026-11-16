@@ -67,6 +67,8 @@ export type AssetScope =
   | 'motion'
   | 'design'
   | 'slides'
+  /** Image of the web cache (`<hash>.webp`): `orbit-web://` does not exist on the phone. */
+  | 'web'
   /** A file of the font library (`<hash>.woff2`): `orbit-font://` does not
    *  exist on the phone, and it is what the `<style>` of `font_use` references. */
   | 'font'
@@ -79,6 +81,7 @@ const SCOPES: readonly AssetScope[] = [
   'motion',
   'design',
   'slides',
+  'web',
   'font',
 ]
 

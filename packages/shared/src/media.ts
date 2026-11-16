@@ -67,6 +67,9 @@ export interface MediaEntry {
   /** URL ready to display. On the desktop it comes from `assetUrl`; on the companion the
    *  server fills it with http://host/api/media/<id>?t=<signed token>. */
   url?: string
+  /** Only on the companion, in motion, design and slides: signed URL of the cover (`thumb`), so the
+   *  phone's grid shows the piece's face as the desktop does. */
+  thumbUrl?: string
   /** Absolute path on disk — the source of truth to read/delete the file,
    *  since images and artifacts live in different directories. */
   path: string

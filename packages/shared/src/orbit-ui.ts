@@ -290,18 +290,59 @@ function parseLine(line: string): OrbitUiBlock | null {
 }
 
 /**
- * Reads the content of the fence. A complete and valid line becomes a block; an invalid one is
- * discarded. The LAST line of a still open fence may be half written:
+ * Splits the fence into JSON objects. The contract is one object per line, but the
+ * model often pretty-prints a block over several lines (`{"type":"steps","items":[` …
+ * `]}`); tracking the brace depth (aware of strings) keeps both forms working.
+ * `open` is true when the last chunk never closed — still arriving in the stream.
+ */
+function splitObjects(code: string): { chunks: string[]; open: boolean } {
+  const chunks: string[] = []
+  let depth = 0
+  let inString = false
+  let escaped = false
+  let start = -1
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === "{") {
+      if (depth === 0) start = i
+      depth++
+    } else if (ch === "}" && depth > 0) {
+      depth--
+      if (depth === 0) chunks.push(code.slice(start, i + 1))
+    }
+  }
+  if (depth > 0) chunks.push(code.slice(start))
+  return { chunks, open: depth > 0 }
+}
+
+/**
+ * Reads the content of the fence. A complete and valid object becomes a block; an invalid one is
+ * discarded. The LAST object of a still open fence may be half written:
  * if it does not close as valid JSON yet, it is `pending`, not an error.
  */
 export function parseOrbitUi(code: string, isIncomplete: boolean): OrbitUiParse {
-  const lines = code.split("\n").map((line) => line.trim()).filter(Boolean)
+  const { chunks, open } = splitObjects(code)
   const blocks: OrbitUiBlock[] = []
   let pending = false
-  lines.forEach((line, index) => {
-    const block = parseLine(line)
+  chunks.forEach((chunk, index) => {
+    const isLast = index === chunks.length - 1
+    const block = open && isLast ? null : parseLine(chunk.replace(/\s*\n\s*/g, " "))
     if (block) blocks.push(block)
-    else if (isIncomplete && index === lines.length - 1) pending = true
+    else if (isIncomplete && isLast) pending = true
+    else if (open && isLast) {
+      // Unbalanced in a closed fence: salvage the lines that stand on their own.
+      for (const line of chunk.split("\n")) {
+        const salvaged = parseLine(line.trim())
+        if (salvaged) blocks.push(salvaged)
+      }
+    }
   })
   return { blocks, pending }
 }

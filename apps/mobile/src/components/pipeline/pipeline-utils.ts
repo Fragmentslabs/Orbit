@@ -7,15 +7,14 @@ import type { TFunction } from 'i18next'
  * (the prompt stays in English, like the app's other prompts); the user's own
  * phases use whatever the user wrote.
  *
- * The label family comes from `kind`, not from `i18nKey`: the i18nKey is the
- * persisted template id (Portuguese, kept for old stored templates), while the
- * kind is the English enum the translation files are keyed by.
+ * The translation family is the template's `i18nKey` (development, validation, security,
+ * review, infra, research) — the same key the desktop uses.
  */
 export function templateLabel(tpl: PhaseTemplate, t: TFunction): { name: string; description: string } {
   return tpl.i18nKey && !tpl.custom
     ? {
-        name: t(`pipeline.phase.${tpl.kind}.name`),
-        description: t(`pipeline.phase.${tpl.kind}.description`),
+        name: t(`pipeline.phase.${tpl.i18nKey}.name`, { defaultValue: tpl.name }),
+        description: t(`pipeline.phase.${tpl.i18nKey}.description`, { defaultValue: tpl.description }),
       }
     : { name: tpl.name, description: tpl.description }
 }
@@ -27,7 +26,6 @@ export function fromTemplate(tpl: PhaseTemplate, t: TFunction): PhaseChoice {
     ...templateLabel(tpl, t),
     prompt: tpl.prompt,
     tools: [...tpl.tools],
-    kind: tpl.kind,
   }
 }
 

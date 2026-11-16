@@ -1,376 +1,39 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, Pressable, SectionList, RefreshControl, StyleSheet, Alert, useWindowDimensions } from 'react-native'
+/**
+ * Tools screen — mirror of the desktop's Tools page: the sections as tabs (MCP servers, skills),
+ * a search, rows with a state tile and pill, and ONE "Add" button that opens the menu leading to the
+ * creation chat first. Tapping a row opens its detail on this same screen. (Hooks and the
+ * integrations of the desktop are not reachable from the phone.)
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { View, Text, FlatList, RefreshControl, Alert, StyleSheet } from 'react-native'
 import { useConfirm } from '~/components/ui/confirm-dialog'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useRouter } from 'expo-router'
-import {
-  ArrowLeft,
-  Puzzle,
-  Server,
-  Sparkles,
-  Globe,
-  Terminal,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  Pencil,
-  Trash2,
-  RefreshCw,
-  KeyRound,
-  MoreHorizontal,
-  FileUp,
-  MessageSquare,
-  FileText,
-} from 'lucide-react-native'
+import { FileUp, Info, Plus, Puzzle } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import type { Skill, McpServerStatus, McpConnectionState, McpServerConfig, SkillProposal } from '@orbit/shared'
+import type { McpServerConfig, Skill } from '@orbit/shared'
 import { useToolsStore } from '~/stores/tools-store'
-import { useSessionStore } from '~/stores/session-store'
-import { useDraftInput } from '~/stores/draft-input-store'
-import { getThemeTokens } from '~/lib/theme-tokens'
-import { useThemeStore } from '~/stores/theme-store'
-import i18n from '~/i18n'
-import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { SkillFormModal } from '~/components/chat/SkillFormModal'
 import { SkillContentModal } from '~/components/chat/SkillContentModal'
 import { McpServerFormModal } from '~/components/chat/McpServerFormModal'
+import { CreateSheet } from '~/components/list/create-sheet'
+import { CountLine, FootLine, HeaderButton, ListHeader, PageTabs, SearchField, StatePill, useTokens } from '~/components/list/parts'
+import { FilterChips, ProposalsBanner, ProposalsSheet, ServerRow, SkillRow, serverTone, useServerLabel } from '~/components/tools/tools-parts'
+import { ServerDetail, SkillDetail } from '~/components/tools/tools-detail'
+import { useStartCreationChat } from '~/hooks/useCreationChat'
 
-function ConnectionDot({ state }: { state: McpConnectionState }) {
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const color =
-    state === 'connected' ? '#22c55e'
-    : state === 'connecting' || state === 'unauthorized' ? '#f59e0b'
-    : state === 'error' ? '#ef4444'
-    : tokens.mutedForeground
-  const size = 8
-  return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
-}
-
-/**
- * OAuth server that still depends on the user: it was never authorized on the desktop
- * or the server went back to asking for authorization. Connected/disabled have nothing
- * to authorize, so the action goes away.
- */
-function needsAuth(server: McpServerStatus): boolean {
-  if (!server.usesOAuth) return false
-  if (server.state === 'connected' || server.state === 'disabled') return false
-  return !server.authorized || server.state === 'unauthorized'
-}
-
-/** "..." menu anchored to the trigger of each card. */
-function McpServerCard({
-  server,
-  onEdit,
-  onDelete,
-  onReconnect,
-  onAuthorize,
-}: {
-  server: McpServerStatus
-  onEdit: (config: McpServerConfig) => void
-  onDelete: (name: string) => void
-  onReconnect: (name?: string) => void
-  onAuthorize: (name: string) => void
-}) {
-  const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const windowWidth = useWindowDimensions().width
-  const triggerRef = useRef<View>(null)
-  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null)
-
-  const openMenu = () => {
-    triggerRef.current?.measure((_x, _y, w, h, px, py) => {
-      setMenuAnchor({ top: py + h + 4, right: windowWidth - px - w })
-    })
-  }
-
-  const authPending = needsAuth(server)
-
-  const menuItems: ActionMenuItem[] = [
-    ...(authPending
-      ? [{
-          icon: KeyRound,
-          label: server.authorized ? t('toolsScreen.reauthorize') : t('toolsScreen.authorize'),
-          onPress: () => onAuthorize(server.config.name),
-        }]
-      : []),
-    { icon: RefreshCw, label: t('toolsScreen.reconnect'), onPress: () => onReconnect(server.config.name) },
-    { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(server.config) },
-    { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(server.config.name) },
-  ]
-
-  return (
-    <View style={[s.serverCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-      <View style={s.serverHeader}>
-        <Server size={15} color={tokens.mutedForeground} />
-        <Text style={[s.serverName, { color: tokens.foreground }]} numberOfLines={1}>
-          {server.config.name}
-        </Text>
-        <View style={[s.stateBadge, { backgroundColor: tokens.muted }]}>
-          <ConnectionDot state={server.state} />
-          <Text style={[s.stateLabel, { color: tokens.mutedForeground }]}>
-            {stateLabel(server.state)}
-          </Text>
-        </View>
-        <Pressable ref={triggerRef} onPress={openMenu} hitSlop={10} style={s.menuTrigger}>
-          <MoreHorizontal size={18} color={tokens.mutedForeground} />
-        </Pressable>
-      </View>
-      {server.error && (
-        <Text
-          style={[s.serverError, { color: server.state === 'unauthorized' ? '#f59e0b' : '#ef4444' }]}
-          numberOfLines={3}
-        >
-          {server.error}
-        </Text>
-      )}
-      {authPending && (
-        <View style={s.authRow}>
-          <Pressable
-            onPress={() => onAuthorize(server.config.name)}
-            style={[s.authBtn, { borderColor: tokens.border, backgroundColor: tokens.muted }]}
-          >
-            <KeyRound size={12} color={tokens.foreground} />
-            <Text style={[s.authBtnText, { color: tokens.foreground }]}>
-              {server.authorized ? t('toolsScreen.reauthorize') : t('toolsScreen.authorize')}
-            </Text>
-          </Pressable>
-          {/* The OAuth redirect is the loopback of the desktop: the login happens
-              necessarily in the computer's browser. */}
-          <Text style={[s.authHint, { color: tokens.mutedForeground }]}>
-            {t('toolsScreen.authorizeHint')}
-          </Text>
-        </View>
-      )}
-      <View style={[s.serverMeta, { borderTopColor: tokens.border }]}>
-        <View style={s.serverType}>
-          {server.config.type === 'http' ? (
-            <Globe size={11} color={tokens.mutedForeground} />
-          ) : (
-            <Terminal size={11} color={tokens.mutedForeground} />
-          )}
-          <Text style={[s.serverMetaText, { color: tokens.mutedForeground }]} numberOfLines={1}>
-            {server.config.type === 'http' ? server.config.url : server.config.command}
-          </Text>
-        </View>
-      </View>
-
-      {server.toolNames.length > 0 && (
-        <Pressable
-          onPress={() => setToolsOpen((o) => !o)}
-          style={[s.toolsToggle, { borderTopColor: tokens.border }]}
-        >
-          <Text style={[s.toolsToggleText, { color: tokens.mutedForeground }]}>
-            {t('toolsScreen.toolsCount', { count: server.toolNames.length })}
-          </Text>
-          {toolsOpen ? (
-            <ChevronDown size={14} color={tokens.mutedForeground} />
-          ) : (
-            <ChevronRight size={14} color={tokens.mutedForeground} />
-          )}
-        </Pressable>
-      )}
-      {toolsOpen && server.toolNames.length > 0 && (
-        <View style={[s.toolsList, { borderTopColor: tokens.border }]}>
-          {server.toolNames.map((tool) => (
-            <Text key={tool} style={[s.toolName, { color: tokens.foreground }]}>{tool}</Text>
-          ))}
-        </View>
-      )}
-
-      <ActionMenu visible={menuAnchor !== null} onClose={() => setMenuAnchor(null)} items={menuItems} anchor={menuAnchor ?? undefined} />
-    </View>
-  )
-}
-
-function SkillCard({
-  skill,
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  skill: Skill
-  onView: (skill: Skill) => void
-  onEdit: (skill: Skill) => void
-  onDelete: (slug: string) => void
-}) {
-  const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const windowWidth = useWindowDimensions().width
-  const triggerRef = useRef<View>(null)
-  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null)
-
-  const openMenu = () => {
-    triggerRef.current?.measure((_x, _y, w, h, px, py) => {
-      setMenuAnchor({ top: py + h + 4, right: windowWidth - px - w })
-    })
-  }
-
-  const menuItems: ActionMenuItem[] = [
-    { icon: Eye, label: t('toolsScreen.view'), onPress: () => onView(skill) },
-    // Native skills of the app are read-only: to customize, the user
-    // creates a skill of their own with the same slug.
-    ...(skill.source === 'builtin'
-      ? []
-      : [
-          { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(skill) },
-          { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(skill.slug) },
-        ]),
-  ]
-
-  return (
-    <View style={[s.skillCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-      <View style={s.skillRow}>
-        <View style={[s.skillIconWrap, { backgroundColor: tokens.muted }]}>
-          <Sparkles size={14} color={tokens.mutedForeground} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[s.skillName, { color: tokens.foreground }]} numberOfLines={1}>{skill.name}</Text>
-          {skill.description && (
-            <Text style={[s.skillDesc, { color: tokens.mutedForeground }]} numberOfLines={2}>{skill.description}</Text>
-          )}
-        </View>
-        <View style={[s.sourceBadge, { backgroundColor: tokens.muted }]}>
-          <Text style={[s.sourceLabel, { color: tokens.mutedForeground }]}>
-            {skill.source === 'builtin'
-              ? t('toolsScreen.builtin')
-              : skill.source === 'global'
-                ? t('toolsScreen.global')
-                : t('toolsScreen.project')}
-          </Text>
-        </View>
-        <Pressable ref={triggerRef} onPress={openMenu} hitSlop={10} style={s.menuTrigger}>
-          <MoreHorizontal size={18} color={tokens.mutedForeground} />
-        </Pressable>
-      </View>
-      <View style={[s.skillFooter, { borderTopColor: tokens.border }]}>
-        <Text style={[s.skillSlug, { color: tokens.mutedForeground }]}>@{skill.slug}</Text>
-        {skill.scripts && skill.scripts.length > 0 && (
-          <Text style={[s.skillScripts, { color: tokens.mutedForeground }]}>
-            {t('toolsScreen.scriptsCount', { count: skill.scripts.length })}
-          </Text>
-        )}
-      </View>
-
-      <ActionMenu visible={menuAnchor !== null} onClose={() => setMenuAnchor(null)} items={menuItems} anchor={menuAnchor ?? undefined} />
-    </View>
-  )
-}
-
-// ─── Create Skill Dropdown ────────────────────────────────────────────────────
-
-function useCreateOptions() {
-  const { t } = useTranslation()
-  return [
-    { id: 'create' as const, icon: FileText, label: t('toolsScreen.createManually') },
-    { id: 'import' as const, icon: FileUp, label: t('toolsScreen.importFile') },
-    { id: 'ask' as const, icon: MessageSquare, label: t('toolsScreen.askOrbitToCreate') },
-  ]
-}
-
-function CreateSkillDropdown({
-  onCreate,
-  onImport,
-  onAskOrbit,
-}: {
-  onCreate: () => void
-  onImport: () => void
-  onAskOrbit: () => void
-}) {
-  const { t } = useTranslation()
-  const CREATE_OPTIONS = useCreateOptions()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const [open, setOpen] = useState(false)
-
-  const handleSelect = (id: string) => {
-    setOpen(false)
-    if (id === 'create') onCreate()
-    else if (id === 'import') onImport()
-    else if (id === 'ask') onAskOrbit()
-  }
-
-  return (
-    <View style={{ position: 'relative' }}>
-      <Pressable onPress={() => setOpen((o) => !o)} style={[s.sectionBtn, { backgroundColor: tokens.primary }]}>
-        <Plus size={14} color={tokens.primaryForeground} />
-        <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.create')}</Text>
-        <ChevronDown size={12} color={tokens.primaryForeground} />
-      </Pressable>
-
-      {open && (
-        <>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
-          <View style={[s.dropdown, { backgroundColor: tokens.card, borderColor: tokens.border }]}>
-            {CREATE_OPTIONS.map((opt) => {
-              const Icon = opt.icon
-              return (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => handleSelect(opt.id)}
-                  style={[s.dropdownItem, { borderBottomColor: tokens.border }]}
-                >
-                  <Icon size={15} color={tokens.mutedForeground} />
-                  <Text style={[s.dropdownItemText, { color: tokens.foreground }]}>{opt.label}</Text>
-                </Pressable>
-              )
-            })}
-          </View>
-        </>
-      )}
-    </View>
-  )
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function stateLabel(state: McpConnectionState): string {
-  switch (state) {
-    case 'connected': return i18n.t('toolsScreen.stateConnected')
-    case 'connecting': return i18n.t('toolsScreen.stateConnecting')
-    case 'error': return i18n.t('toolsScreen.stateError')
-    case 'disabled': return i18n.t('toolsScreen.stateDisabled')
-    case 'unauthorized': return i18n.t('toolsScreen.stateUnauthorized')
-  }
-}
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
-
-type ToolsItem =
-  | { kind: 'pending'; proposal: SkillProposal }
-  | { kind: 'mcp'; server: McpServerStatus }
-  | { kind: 'skill'; skill: Skill }
-  | { kind: 'skills-empty' }
-
-interface ToolsSection {
-  kind: 'pending' | 'mcp' | 'skills'
-  title: string
-  data: ToolsItem[]
-}
-
-function itemKey(item: ToolsItem, index: number): string {
-  if (item.kind === 'pending') return `pending:${item.proposal.slug}`
-  if (item.kind === 'mcp') return `mcp:${item.server.config.name}`
-  if (item.kind === 'skill') return `skill:${item.skill.slug}`
-  return `skills-empty:${index}`
-}
-
-function SectionGap() {
-  return <View style={{ height: 16 }} />
-}
-
-function ItemGap() {
-  return <View style={{ height: 8 }} />
-}
+type Tab = 'mcp' | 'skills'
+type SkillFilter = 'all' | 'mine' | 'builtin'
+type Selected = { kind: 'mcp'; name: string } | { kind: 'skill'; slug: string } | null
 
 export default function ToolsScreen() {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const router = useRouter()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const setDraft = useDraftInput((s) => s.setDraft)
+  const tokens = useTokens()
+  const labelOf = useServerLabel()
   const skills = useToolsStore((s) => s.skills)
   const mcpServers = useToolsStore((s) => s.mcpServers)
   const pending = useToolsStore((s) => s.pending)
@@ -381,11 +44,17 @@ export default function ToolsScreen() {
   const hydrateCache = useToolsStore((s) => s.hydrateCache)
   const removeSkill = useToolsStore((s) => s.removeSkill)
   const importSkill = useToolsStore((s) => s.importSkill)
-  const saveMcpConfig = useToolsStore((s) => s.saveMcpConfig)
   const reconnectMcp = useToolsStore((s) => s.reconnectMcp)
   const authorizeMcp = useToolsStore((s) => s.authorizeMcp)
-  const createSession = useSessionStore((s) => s.createSession)
+  const saveMcpConfig = useToolsStore((s) => s.saveMcpConfig)
+  const startCreation = useStartCreationChat()
 
+  const [tab, setTab] = useState<Tab>('mcp')
+  const [query, setQuery] = useState('')
+  const [skillFilter, setSkillFilter] = useState<SkillFilter>('all')
+  const [selected, setSelected] = useState<Selected>(null)
+  const [adding, setAdding] = useState(false)
+  const [proposalsOpen, setProposalsOpen] = useState(false)
   const [skillFormOpen, setSkillFormOpen] = useState(false)
   const [editSkill, setEditSkill] = useState<Skill | undefined>(undefined)
   const [viewSkill, setViewSkill] = useState<Skill | null>(null)
@@ -402,16 +71,40 @@ export default function ToolsScreen() {
     void load()
   }, [hydrateCache, load])
 
-  const isEmpty = skills.length === 0 && mcpServers.length === 0 && pending.length === 0 && !loading
+  const mine = useMemo(() => skills.filter((sk) => sk.source !== 'builtin'), [skills])
+  const builtin = useMemo(() => skills.filter((sk) => sk.source === 'builtin'), [skills])
+  const needle = query.trim().toLowerCase()
 
-  const handleCreateSkill = () => {
-    setEditSkill(undefined)
+  const visibleServers = useMemo(() => {
+    // What needs the user first (error, authorization), then by name — as the desktop's rows.
+    const rank = (tone: ReturnType<typeof serverTone>['tone']) => ({ bad: 0, warn: 1, run: 2, ok: 3, idle: 4 })[tone]
+    return mcpServers
+      .filter((sv) => !needle || [sv.config.name, sv.config.url, sv.config.command, ...sv.toolNames].some((f) => f?.toLowerCase().includes(needle)))
+      .sort((a, b) => rank(serverTone(a).tone) - rank(serverTone(b).tone) || a.config.name.localeCompare(b.config.name))
+  }, [mcpServers, needle])
+
+  const visibleSkills = useMemo(() => {
+    const base = skillFilter === 'mine' ? mine : skillFilter === 'builtin' ? builtin : skills
+    return base.filter((sk) => !needle || [sk.name, sk.slug, sk.description].some((f) => f?.toLowerCase().includes(needle)))
+  }, [skills, mine, builtin, skillFilter, needle])
+
+  const selectedServer = selected?.kind === 'mcp' ? mcpServers.find((sv) => sv.config.name === selected.name) : undefined
+  const selectedSkill = selected?.kind === 'skill' ? skills.find((sk) => sk.slug === selected.slug) : undefined
+  // If the thing under the detail was removed (here or on the desktop), the list shows again.
+
+  const pickTab = (next: Tab) => {
+    setTab(next)
+    setQuery('')
+  }
+
+  const openSkillForm = (skill?: Skill) => {
+    setEditSkill(skill)
     setSkillFormOpen(true)
   }
 
-  const handleEditSkill = (skill: Skill) => {
-    setEditSkill(skill)
-    setSkillFormOpen(true)
+  const openMcpForm = (config?: McpServerConfig) => {
+    setEditMcp(config)
+    setMcpFormOpen(true)
   }
 
   const handleDeleteSkill = async (slug: string) => {
@@ -423,6 +116,19 @@ export default function ToolsScreen() {
       destructive: true,
     })
     if (ok) void removeSkill(slug)
+  }
+
+  const handleDeleteMcp = async (name: string) => {
+    const ok = await confirm({
+      title: t('toolsScreen.deleteServerTitle'),
+      description: t('toolsScreen.deleteServerBody', { name }),
+      confirmLabel: t('toolsScreen.delete'),
+      cancelLabel: t('toolsScreen.cancel'),
+      destructive: true,
+    })
+    if (!ok) return
+    const remaining = mcpServers.filter((sv) => sv.config.name !== name).map((sv) => sv.config)
+    await saveMcpConfig({ servers: remaining })
   }
 
   const handleImportSkill = async () => {
@@ -443,173 +149,107 @@ export default function ToolsScreen() {
     }
   }
 
-  const handleAskOrbit = async () => {
-    setDraft(null, '/create-skill ')
-    try {
-      const created = await createSession('chat')
-      if (created) {
-        useDraftInput.getState().adopt(created.id)
-        router.replace(`/(main)/chat/${created.id}`)
-      }
-    } catch {
-      router.replace('/(main)')
-    }
-  }
+  const subtitle = [t('toolsScreen.serversN', { count: mcpServers.length }), t('toolsScreen.skillsN', { count: skills.length })].join(' · ')
+  const connected = mcpServers.filter((sv) => sv.state === 'connected').length
 
-  const handleEditMcp = (config: McpServerConfig) => {
-    setEditMcp(config)
-    setMcpFormOpen(true)
-  }
-
-  const handleDeleteMcp = async (name: string) => {
-    const ok = await confirm({
-      title: t('toolsScreen.deleteServerTitle'),
-      description: t('toolsScreen.deleteServerBody', { name }),
-      confirmLabel: t('toolsScreen.delete'),
-      cancelLabel: t('toolsScreen.cancel'),
-      destructive: true,
-    })
-    if (!ok) return
-    const filtered = mcpServers.map((s) => s.config).filter((c) => c.name !== name)
-    await saveMcpConfig({ servers: filtered })
-  }
-
-  // A SectionList instead of the ScrollView with three nested .map(): before
-  // all the cards (skills, MCP servers, proposals) mounted at once when
-  // opening the screen. Each card carries its own border and there is a gap of 8 between
-  // them, so virtualizing does not break the visual grouping.
-  const sections = useMemo<ToolsSection[]>(() => {
-    if (isEmpty) return []
-    const out: ToolsSection[] = []
-    if (pending.length > 0) {
-      out.push({
-        kind: 'pending',
-        title: t('toolsScreen.pendingProposals', { count: pending.length }),
-        data: pending.map((proposal) => ({ kind: 'pending', proposal })),
-      })
-    }
-    if (mcpServers.length > 0) {
-      out.push({
-        kind: 'mcp',
-        title: t('toolsScreen.mcpServers', { count: mcpServers.length }),
-        data: mcpServers.map((server) => ({ kind: 'mcp', server })),
-      })
-    }
-    // Skills always appears (header with the create button); empty becomes a
-    // placeholder row, as in the previous ScrollView.
-    out.push({
-      kind: 'skills',
-      title: t('toolsScreen.skills', { count: skills.length }),
-      data:
-        skills.length > 0
-          ? skills.map((skill) => ({ kind: 'skill', skill }))
-          : [{ kind: 'skills-empty' }],
-    })
-    return out
-  }, [isEmpty, pending, mcpServers, skills, t])
-
-  const renderItem = useCallback(
-    ({ item }: { item: ToolsItem }) => {
-      if (item.kind === 'skills-empty') {
-        return (
-          <View style={s.emptyBox}>
-            <Sparkles size={24} color={tokens.mutedForeground} />
-            <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
-              {t('toolsScreen.noSkillsYet')}
-            </Text>
-          </View>
-        )
-      }
-      const card =
-        item.kind === 'pending' ? (
-          <PendingProposalCard proposal={item.proposal} />
-        ) : item.kind === 'mcp' ? (
-          <McpServerCard
-            server={item.server}
-            onEdit={handleEditMcp}
-            onDelete={handleDeleteMcp}
-            onReconnect={(name) => void reconnectMcp(name)}
-            onAuthorize={(name) => void authorizeMcp(name)}
-          />
+  // ── Detail of a server or a skill ──
+  if (selected && (selectedServer || selectedSkill)) {
+    const server = selectedServer
+    const tone = server ? serverTone(server) : null
+    return (
+      <SafeScreen style={s.container}>
+        <ListHeader
+          title={server ? server.config.name : `@${selectedSkill!.slug}`}
+          subtitle={server ? t('toolsScreen.serverSubtitle', { type: server.config.type }) : selectedSkill!.source === 'builtin' ? t('toolsScreen.pillBuiltin') : t('toolsScreen.sourceMine')}
+          onBack={() => setSelected(null)}
+          right={tone ? <View style={{ marginRight: 8 }}><StatePill state={tone.tone} label={labelOf(tone.label)} /></View> : undefined}
+        />
+        {server ? (
+          <ServerDetail server={server} onEdit={openMcpForm} onDelete={(name) => void handleDeleteMcp(name)} onReconnect={(name) => void reconnectMcp(name)} onAuthorize={(name) => void authorizeMcp(name)} />
         ) : (
-          <SkillCard
-            skill={item.skill}
-            onView={setViewSkill}
-            onEdit={handleEditSkill}
-            onDelete={handleDeleteSkill}
-          />
-        )
-      return <View style={s.itemRow}>{card}</View>
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers are stable enough for the list
-    [tokens, t],
-  )
-
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: ToolsSection }) => (
-      <View style={[s.sectionHeaderRow, { backgroundColor: tokens.background }]}>
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{section.title}</Text>
-        {section.kind === 'mcp' && (
-          <Pressable
-            onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }}
-            style={[s.sectionBtn, { backgroundColor: tokens.primary }]}
-          >
-            <Plus size={14} color={tokens.primaryForeground} />
-            <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.add')}</Text>
-          </Pressable>
+          <SkillDetail skill={selectedSkill!} onViewAll={setViewSkill} onEdit={openSkillForm} onDelete={(slug) => void handleDeleteSkill(slug)} />
         )}
-        {section.kind === 'skills' && (
-          <CreateSkillDropdown
-            onCreate={handleCreateSkill}
-            onImport={handleImportSkill}
-            onAskOrbit={handleAskOrbit}
-          />
-        )}
-      </View>
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tokens, t],
-  )
+        <SkillFormModal visible={skillFormOpen} onClose={() => setSkillFormOpen(false)} edit={editSkill} />
+        <SkillContentModal visible={viewSkill !== null} onClose={() => setViewSkill(null)} skill={viewSkill} />
+        <McpServerFormModal visible={mcpFormOpen} onClose={() => setMcpFormOpen(false)} edit={editMcp} />
+      </SafeScreen>
+    )
+  }
 
+  const empty = mcpServers.length === 0 && skills.length === 0 && pending.length === 0 && !loading
   return (
     <SafeScreen style={s.container}>
-      <View style={[s.header, { borderBottomColor: tokens.border }]}>
-        <Pressable onPress={() => router.back()} style={s.headerBtn}>
-          <ArrowLeft size={22} color={tokens.foreground} />
-        </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('toolsScreen.title')}</Text>
-        <View style={s.headerBtn} />
-      </View>
-
-      <SectionList
-        style={{ flex: 1 }}
-        sections={sections}
-        keyExtractor={itemKey}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        SectionSeparatorComponent={SectionGap}
-        ItemSeparatorComponent={ItemGap}
-        contentContainerStyle={{ paddingBottom: 48 }}
-        stickySectionHeadersEnabled={false}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews
-        refreshControl={
-          <RefreshControl refreshing={loading || importing} onRefresh={load} tintColor={tokens.primary} />
-        }
-        ListEmptyComponent={
-          <View style={s.emptyBox}>
-            <Puzzle size={32} color={tokens.mutedForeground} />
-            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('toolsScreen.emptyTitle')}</Text>
-            <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
-              {t('toolsScreen.emptyDesc')}
-            </Text>
-          </View>
-        }
+      <ListHeader title={t('toolsScreen.title')} subtitle={subtitle} onBack={() => router.back()} right={<HeaderButton icon={Plus} label={t('toolsScreen.add')} onPress={() => setAdding(true)} />} />
+      <PageTabs
+        value={tab}
+        onChange={pickTab}
+        items={[
+          { key: 'mcp', label: t('toolsScreen.tabServers'), count: mcpServers.length },
+          { key: 'skills', label: t('toolsScreen.tabSkills'), count: skills.length },
+        ]}
       />
 
-      {/* Modals */}
+      {empty ? (
+        <View style={s.center}>
+          <Puzzle size={36} color={tokens.mutedForeground} style={{ opacity: 0.5 }} />
+          <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('toolsScreen.emptyTitle')}</Text>
+          <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('toolsScreen.emptyDesc')}</Text>
+        </View>
+      ) : (
+        <>
+          {pending.length > 0 ? <ProposalsBanner count={pending.length} first={pending[0]} onOpen={() => setProposalsOpen(true)} /> : null}
+          <View style={s.bar}>
+            <SearchField value={query} onChange={setQuery} placeholder={tab === 'mcp' ? t('toolsScreen.searchServers') : t('toolsScreen.searchSkills')} />
+          </View>
+          {tab === 'skills' ? (
+            <FilterChips
+              value={skillFilter}
+              onChange={setSkillFilter}
+              items={[
+                { key: 'all', label: t('toolsScreen.filterAll'), count: skills.length },
+                { key: 'mine', label: t('toolsScreen.filterMine'), count: mine.length },
+                { key: 'builtin', label: t('toolsScreen.filterBuiltin'), count: builtin.length },
+              ]}
+            />
+          ) : null}
+          <CountLine>{tab === 'mcp'
+              ? [t('toolsScreen.serversN', { count: mcpServers.length }), t('toolsScreen.connectedN', { count: connected })].join(' · ')
+              : [t('toolsScreen.skillsN', { count: skills.length }), t('toolsScreen.mineN', { count: mine.length })].join(' · ')}</CountLine>
+
+          {tab === 'mcp' ? (
+            <FlatList
+              data={visibleServers}
+              keyExtractor={(sv) => sv.config.name}
+              renderItem={({ item }) => <ServerRow server={item} onOpen={() => setSelected({ kind: 'mcp', name: item.config.name })} />}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
+              refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={tokens.primary} />}
+              ListEmptyComponent={<Text style={[s.noResults, { color: tokens.mutedForeground, borderColor: tokens.border }]}>{needle ? t('toolsScreen.noResults', { query: query.trim() }) : t('toolsScreen.emptyDesc')}</Text>}
+            />
+          ) : (
+            <FlatList
+              data={visibleSkills}
+              keyExtractor={(sk) => sk.slug}
+              renderItem={({ item }) => <SkillRow skill={item} onOpen={() => setSelected({ kind: 'skill', slug: item.slug })} />}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
+              refreshControl={<RefreshControl refreshing={loading || importing} onRefresh={load} tintColor={tokens.primary} />}
+              ListEmptyComponent={<Text style={[s.noResults, { color: tokens.mutedForeground, borderColor: tokens.border }]}>{needle ? t('toolsScreen.noResults', { query: query.trim() }) : t('toolsScreen.noSkillsYet')}</Text>}
+            />
+          )}
+          {tab === 'mcp' ? <FootLine icon={Info} text={t('toolsScreen.footServers')} /> : null}
+        </>
+      )}
+
+      <CreateSheet
+        kind={tab === 'mcp' ? 'mcp' : 'skill'}
+        open={adding}
+        onClose={() => setAdding(false)}
+        onChat={(text) => void startCreation(tab === 'mcp' ? 'mcp' : 'skill', text)}
+        onForm={() => (tab === 'mcp' ? openMcpForm() : openSkillForm())}
+        extra={tab === 'skills' ? [{ key: 'import', icon: FileUp, title: t('toolsScreen.importFile'), hint: t('toolsScreen.importHint'), onPress: () => void handleImportSkill() }] : undefined}
+      />
+      <ProposalsSheet open={proposalsOpen && pending.length > 0} proposals={pending} onClose={() => setProposalsOpen(false)} />
       <SkillFormModal visible={skillFormOpen} onClose={() => setSkillFormOpen(false)} edit={editSkill} />
       <SkillContentModal visible={viewSkill !== null} onClose={() => setViewSkill(null)} skill={viewSkill} />
       <McpServerFormModal visible={mcpFormOpen} onClose={() => setMcpFormOpen(false)} edit={editMcp} />
@@ -617,200 +257,11 @@ export default function ToolsScreen() {
   )
 }
 
-function PendingProposalCard({ proposal }: { proposal: SkillProposal }) {
-  const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const approveSkill = useToolsStore((s) => s.approveSkill)
-  const discardSkill = useToolsStore((s) => s.discardSkill)
-
-  return (
-    <View style={[s.pendingCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Sparkles size={14} color={tokens.primary} />
-        <Text style={[s.pendingTitle, { color: tokens.foreground }]}>{proposal.name}</Text>
-      </View>
-      {proposal.description && (
-        <Text style={[s.pendingDesc, { color: tokens.mutedForeground }]} numberOfLines={2}>{proposal.description}</Text>
-      )}
-      <Text style={[s.pendingSlug, { color: tokens.mutedForeground }]}>@{proposal.slug}</Text>
-      {proposal.files && proposal.files.length > 0 && (
-        <Text style={[s.pendingFiles, { color: tokens.mutedForeground }]}>
-          {t('toolsScreen.extraFiles', { count: proposal.files.length })}
-        </Text>
-      )}
-      <View style={[s.pendingActions, { borderTopColor: tokens.border }]}>
-        <Pressable onPress={() => void discardSkill(proposal.slug)} style={[s.pendingBtn, { borderColor: tokens.border }]}>
-          <Text style={[s.pendingBtnText, { color: tokens.foreground }]}>{t('toolsScreen.dismiss')}</Text>
-        </Pressable>
-        <Pressable onPress={() => void approveSkill(proposal.slug)} style={[s.pendingBtn, { backgroundColor: tokens.primary }]}>
-          <Text style={[s.pendingBtnText, { color: '#fff' }]}>{t('toolsScreen.addSkill')}</Text>
-        </Pressable>
-      </View>
-    </View>
-  )
-}
-
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  headerBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '600' },
-
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  sectionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  sectionBtnText: { fontSize: 13, fontWeight: '500' },
-  itemRow: { marginHorizontal: 16 },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-
-  emptyBox: { alignItems: 'center', gap: 10, paddingVertical: 60, paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  emptyDesc: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
-
-  serverCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
-  serverHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  serverName: { flex: 1, fontSize: 13, fontWeight: '600' },
-  stateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  stateLabel: { fontSize: 10, fontWeight: '600' },
-  menuTrigger: { padding: 2 },
-  serverError: { fontSize: 11, paddingHorizontal: 12, paddingBottom: 6 },
-  authRow: { paddingHorizontal: 12, paddingBottom: 8, gap: 4 },
-  authBtn: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  authBtnText: { fontSize: 12, fontWeight: '600' },
-  authHint: { fontSize: 10, lineHeight: 14 },
-  serverMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-  },
-  serverType: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
-  serverMetaText: { fontSize: 10, fontFamily: 'monospace', flexShrink: 1 },
-  toolsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderTopWidth: 1,
-  },
-  toolsToggleText: { fontSize: 11, fontWeight: '500' },
-  toolsList: { paddingHorizontal: 12, paddingVertical: 6, gap: 4, borderTopWidth: 1 },
-  toolName: { fontSize: 11, fontFamily: 'monospace', paddingVertical: 1 },
-
-  skillCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
-  skillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  skillIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  skillName: { fontSize: 13, fontWeight: '600' },
-  skillDesc: { fontSize: 11, lineHeight: 16 },
-  sourceBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  sourceLabel: { fontSize: 10, fontWeight: '600' },
-  skillFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderTopWidth: 1,
-  },
-  skillSlug: { fontSize: 10, fontFamily: 'monospace' },
-  skillScripts: { fontSize: 10 },
-
-  pendingCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 6 },
-  pendingTitle: { fontSize: 14, fontWeight: '600' },
-  pendingDesc: { fontSize: 12, lineHeight: 16 },
-  pendingSlug: { fontSize: 11, fontFamily: 'monospace' },
-  pendingFiles: { fontSize: 11 },
-  pendingActions: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingTop: 10,
-    marginTop: 2,
-    borderTopWidth: 1,
-  },
-  pendingBtn: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  pendingBtnText: { fontSize: 12, fontWeight: '600' },
-
-  dropdown: {
-    position: 'absolute',
-    top: 40,
-    right: 0,
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: 200,
-    zIndex: 100,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  dropdownItemText: { fontSize: 14, fontWeight: '500' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 28 },
+  emptyTitle: { fontSize: 15, fontWeight: '600' },
+  emptyText: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  bar: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  noResults: { margin: 16, padding: 24, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, textAlign: 'center', fontSize: 12.5 },
 })

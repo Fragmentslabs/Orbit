@@ -58,7 +58,7 @@ export interface MessagesResponse {
 /** Most recent session that is not archived and not a worker — its model is the default
  *  of the next new chat. */
 function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
-  return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  return sessions.filter((s) => !s.archived && !s.parentId && !s.routineId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
 }
 
 /** Effective model of the session: per-chat override > global default. A new chat

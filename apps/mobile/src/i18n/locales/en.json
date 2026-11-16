@@ -179,15 +179,26 @@
       "script": "Script",
       "batch": "Batch"
     },
-    "period": {
-      "all": "Any time",
-      "today": "24h",
-      "week": "7 days",
-      "month": "30 days"
+    "close": "Close",
+    "select": "Select",
+    "selectHint": "Tap to mark",
+    "itemsCount_one": "{{count}} item",
+    "itemsCount_other": "{{count}} items",
+    "previousVersion": "Previous version",
+    "nextVersion": "Next version",
+    "versions": "{{count}} versions",
+    "filters": {
+      "show": "Filters",
+      "hide": "Hide filters",
+      "kind": "Type",
+      "scope": "Scope"
     },
-    "project": {
-      "all": "All projects",
-      "none": "No project"
+    "scope": {
+      "all": "Everything",
+      "session": "This conversation",
+      "folder": "Folder: {{name}}",
+      "project": "Project: {{name}}",
+      "loose": "No folder or project"
     }
   },
   "chatHeader": {
@@ -986,7 +997,7 @@
     "reconnect": "Reconnect",
     "edit": "Edit",
     "delete": "Delete",
-    "view": "View",
+    "view": "Ver",
     "global": "Global",
     "project": "Project",
     "builtin": "Built-in",
@@ -1020,7 +1031,54 @@
     "deleteServerBody": "Delete \"{{name}}\"?",
     "authorize": "Authorize",
     "reauthorize": "Reauthorize",
-    "authorizeHint": "The browser opens on your computer — finish signing in there."
+    "authorizeHint": "The browser opens on your computer — finish signing in there.",
+    "tabServers": "MCP servers",
+    "tabSkills": "Skills",
+    "searchServers": "Search server or tool",
+    "searchSkills": "Search skill",
+    "filterAll": "All",
+    "filterMine": "Mine",
+    "filterBuiltin": "Built-in",
+    "noResults": "Nothing found for \"{{query}}\".",
+    "footServers": "The servers run on the computer.",
+    "pillAuthorize": "Authorize",
+    "serverMetaTools": "{{type}} · {{count}} tools",
+    "serverMetaAuth": "{{type}} · needs authorization",
+    "serverSubtitle": "MCP server · {{type}}",
+    "connection": "Connection",
+    "type": "Type",
+    "address": "Address",
+    "command": "Command",
+    "autoReconnect": "Reconnect on its own",
+    "yes": "Yes",
+    "no": "No",
+    "permission": "Permission",
+    "permAsk": "Ask",
+    "permApprove": "Approve",
+    "permFull": "Full",
+    "permDefault": "App default",
+    "toolsTitle": "Tools",
+    "searchTools": "Search tool",
+    "noTools": "No tools exposed.",
+    "skillSubtitle": "{{source}}",
+    "skillSubtitleScripts": "{{source}} · {{count}} scripts",
+    "sourceMine": "Your skill",
+    "instructions": "Instructions",
+    "seeAll": "See all",
+    "builtinNote": "Built-in skills are read-only. To customize one, create your own with the same name.",
+    "proposalsBanner_one": "{{count}} skill proposed by Orbit",
+    "proposalsBanner_other": "{{count}} skills proposed by Orbit",
+    "proposalsSheet": "Orbit proposals",
+    "importHint": "Bring a .skill or .md file from somewhere else.",
+    "serversN_one": "{{count}} server",
+    "serversN_other": "{{count}} servers",
+    "connectedN_one": "{{count}} connected",
+    "connectedN_other": "{{count}} connected",
+    "skillsN_one": "{{count}} skill",
+    "skillsN_other": "{{count}} skills",
+    "mineN_one": "{{count}} yours",
+    "mineN_other": "{{count}} yours",
+    "pillBuiltin": "Built-in"
   },
   "usageScreen": {
     "title": "Usage",
@@ -1050,7 +1108,95 @@
     "projectMeta": "{{sessions}} chats · {{tokens}} · {{cost}}",
     "sessions": "Sessions",
     "sessionsInPeriod": "Sessions in period",
-    "peakHour": "Peak hour"
+    "peakHour": "Peak hour",
+    "navOverview": "Overview",
+    "navModels": "Models",
+    "navProjects": "Projects",
+    "navSessions": "Sessions",
+    "navRhythm": "Rhythm",
+    "headerActive_one": "{{count}} active day",
+    "headerActive_other": "{{count}} active days",
+    "periodTitle": "Period",
+    "rangeTodayFull": "Today",
+    "range7dFull": "Last 7 days",
+    "range30dFull": "Last 30 days",
+    "rangeTotalHint": "Everything Orbit has recorded",
+    "rangeCustomHint": "Pick dates",
+    "cardTokens": "Tokens",
+    "cardOrbitHours": "Orbit hours",
+    "cardYourHours": "Your hours",
+    "cardCost": "Cost",
+    "noComparison": "no previous period",
+    "metricHours": "Hours",
+    "metricTokens": "Tokens",
+    "metricCost": "Cost",
+    "perDayTitle": "Usage per day",
+    "perDayTotal": "Total: {{total}}",
+    "modelsTitle": "Models",
+    "projectsTitle": "Projects",
+    "seeAll": "See all",
+    "others": "Others ({{count}})",
+    "averagesTitle": "Averages",
+    "averagesSpan": "{{days}} days in the period, {{active}} with activity",
+    "avgPerActiveDay": "Per active day",
+    "avgPerSession": "Per session",
+    "avgPerMessage": "Per message",
+    "avgCostPerHour": "Cost per hour",
+    "avgYourHours": "Your hours per active day",
+    "avgMessages_one": "{{count}} message",
+    "avgMessages_other": "{{count}} messages",
+    "avgTokens": "{{value}} tokens",
+    "modelRowMeta": "{{messages}} msgs · {{hours}} · {{cost}}",
+    "hoursInProjects": "Hours in projects",
+    "sortBy": "Sort by",
+    "sessionsCount_one": "{{count}} session",
+    "sessionsCount_other": "{{count}} sessions",
+    "projectTotals": "In the period: {{tokens}} tokens · {{cost}}",
+    "hoursNote": "Hours add up Orbit's working time and yours. Tap to see how they are counted.",
+    "sessionsTitle": "Sessions",
+    "sessionsSubtitle": "{{shown}} of {{total}}, newest first",
+    "sessionsNeedUpdate": "Update Orbit Desktop to see the list of sessions here.",
+    "untitled": "Untitled",
+    "byWeekday": "Hours per weekday",
+    "byWeekdayHint": "Adding up the whole period",
+    "currentStreak": "Current streak",
+    "longestStreak": "Longest streak",
+    "daysCount_one": "{{count}} day",
+    "daysCount_other": "{{count}} days",
+    "activeOf": "{{active}} of {{total}}",
+    "modelsHint": "Tap a model to see where and when it was used.",
+    "replies": "Replies",
+    "ofTotal": "{{pct}}% of total",
+    "tokensEach": "{{value}} per reply",
+    "costPerMillion": "US$ per 1M tokens",
+    "costPerHour": "Cost per hour",
+    "avgPeriod": "period average",
+    "hoursPerDay": "Hours per day",
+    "whereUsed": "Where it was used",
+    "recentSessions": "Recent sessions",
+    "projectsHint": "Orbit's hours and yours on each project. Tap one to see its history.",
+    "projSessions": "Sessions",
+    "sessionsSearch": "Search sessions…",
+    "sessionsAllProjects": "All projects",
+    "sessionsCountOf": "{{shown}} of {{total}} sessions",
+    "sessionsShowMore": "Show more",
+    "sessionsOpen": "Open the conversation",
+    "sessionsDeleted": "The conversation was deleted",
+    "summary": {
+      "loading": "Summarizing…",
+      "hide": "Hide summary",
+      "generated": "Summary written by the auxiliary model",
+      "error": {
+        "no-aux-model": "Set up an auxiliary model in Orbit Desktop to generate summaries.",
+        "nothing": "There is no work to summarize here.",
+        "failed": "Could not generate the summary."
+      },
+      "short": "Summarize"
+    },
+    "modelSub": "{{provider}} · {{count}} replies",
+    "peakDay": "Peak: {{value}}",
+    "eachSession": "{{value}} per session",
+    "modelsUsed": "Models used"
   },
   "connectionErrors": {
     "invalid_pin": "Invalid PIN. Check the PIN shown on Orbit Desktop.",
@@ -1259,7 +1405,34 @@
       "saving": "Saving…",
       "delete": "Delete",
       "deleteTitle": "Delete routine",
-      "deleteDescription": "\"{{title}}\" and ALL sessions it generated will be deleted. This cannot be undone."
+      "deleteDescription": "\"{{title}}\" and ALL sessions it generated will be deleted. This cannot be undone.",
+      "newShort": "New",
+      "search": "Search routine, text or time",
+      "count_one": "{{count}} routine",
+      "count_other": "{{count}} routines",
+      "countActive_one": "{{count}} active",
+      "countActive_other": "{{count}} active",
+      "countRunning_one": "{{count}} running",
+      "countRunning_other": "{{count}} running",
+      "state": {
+        "running": "Running",
+        "failed": "Failed",
+        "finished": "Finished",
+        "paused": "Paused",
+        "ok": "Active"
+      },
+      "noResults": "No routine for \"{{query}}\".",
+      "tail": "Routines run while Orbit is open on the computer."
+    },
+    "chat": {
+      "title": "Routine chat",
+      "subtitle": "One conversation: every run arrives in it as a message.",
+      "open": "Open chat",
+      "lastRun": "Last run: {{when}}",
+      "never": "It has not run yet.",
+      "failed": "The last run failed",
+      "opening": "Opening…",
+      "error": "Could not open the chat. Check the connection to the desktop."
     },
     "runs": {
       "title": "Runs",
@@ -1269,6 +1442,28 @@
       "ok": "Completed",
       "error": "Failed",
       "tokens": "{{value}} tokens"
+    },
+    "headerSubtitle": "What Orbit does on its own, at the right time",
+    "view": {
+      "list": "List",
+      "agenda": "Agenda"
+    },
+    "summary": {
+      "active": "Active",
+      "activeOf": "{{active}} of {{total}}",
+      "failures": "Failures, 7 days",
+      "spent": "Spent, 30 days"
+    },
+    "agenda": {
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "nothing": "Nothing scheduled for this day.",
+      "kind": {
+        "ok": "Finished",
+        "error": "Failed",
+        "running": "Running now",
+        "next": "Scheduled"
+      }
     }
   },
   "memoriesScreen": {
@@ -1279,7 +1474,13 @@
     "emptyYet": "No memories yet",
     "emptyTrySearch": "Try other search terms.",
     "emptyChatHint": "Chat with Brain enabled and Orbit will start remembering facts and preferences automatically.",
-    "emptyCodeHint": "Work on a project with Brain enabled and Orbit memorizes decisions, conventions, and structure."
+    "emptyCodeHint": "Work on a project with Brain enabled and Orbit memorizes decisions, conventions, and structure.",
+    "subtitle": "What Orbit remembers about you and your projects",
+    "allKinds": "All",
+    "count_one": "{{count}} memory · most recent first",
+    "count_other": "{{count}} memories · most recent first",
+    "rowHint": "Opens the whole memory, with edit and delete",
+    "projectPicker": "Project"
   },
   "pipeline": {
     "title": "Pipelines",
@@ -1413,6 +1614,10 @@
       "infra": {
         "name": "Infra",
         "description": "Deploy and environment checklist"
+      },
+      "research": {
+        "name": "Research",
+        "description": "Investigates the question in the code and on the web, and records what it found"
       }
     },
     "newTask": "New task",
@@ -1495,7 +1700,40 @@
     "archived": "Delivered",
     "modelChip": "Pipeline model",
     "plan_loading": "Planning…",
-    "planFailed": "The planner could not propose tasks."
+    "planFailed": "The planner could not propose tasks.",
+    "headerSubtitle": "Phases Orbit goes through on each task",
+    "tabPipelines": "Pipelines",
+    "tabPhases": "Phases",
+    "search": "Search pipeline, phase, folder or branch",
+    "noResults": "No pipeline for \"{{query}}\".",
+    "list": {
+      "newShort": "New",
+      "count_one": "{{count}} pipeline",
+      "count_other": "{{count}} pipelines",
+      "runningCount": "{{count}} running",
+      "failedCount_one": "{{count}} failure",
+      "failedCount_other": "{{count}} failures",
+      "running": "{{count}} running",
+      "failed_one": "{{count}} failed",
+      "failed_other": "{{count}} failed",
+      "done": "Done",
+      "idle": "Idle",
+      "pausedCount_one": "{{count}} paused",
+      "pausedCount_other": "{{count}} paused",
+      "tasksOf": "{{done}}/{{total}} tasks",
+      "tail": "Tap a pipeline to open its board."
+    },
+    "stats": {
+      "pipelines": "Pipelines",
+      "tasks": "Tasks",
+      "running": "Running",
+      "failed": "Failures",
+      "spentFooter": "{{cost}} in 30 days"
+    },
+    "phaseLibrary": {
+      "empty": "No phase yet.",
+      "default": "Default"
+    }
   },
   "workspace": {
     "title": "Folder & branch",
@@ -1586,5 +1824,66 @@
   },
   "subchatNotice": {
     "noResult": "No text answer."
+  },
+  "creation": {
+    "recommended": "Recommended",
+    "examples": "Or start from an example",
+    "close": "Close",
+    "routine": {
+      "sheetTitle": "New routine",
+      "chatTitle": "Describe it in the chat",
+      "chatHint": "Opens a new chat with the start of the sentence ready. You complete it, Orbit asks what is missing and shows a card for you to confirm.",
+      "formTitle": "Fill in the form",
+      "formHint": "Name, schedule, folder and model, field by field.",
+      "starter": "I want a routine that [what it does], [when: days and times, or what should trigger it].",
+      "example1Label": "Daily PR summary",
+      "example1Text": "I want a routine that summarizes the open PRs of the repository, Monday to Friday at 8:30.",
+      "example2Label": "Periodic backup",
+      "example2Text": "I want a routine that backs up the folder [which folder], every 6 hours.",
+      "example3Label": "One-off reminder",
+      "example3Text": "I want a routine that reminds me to [what], once, on [date] at [time]."
+    },
+    "pipeline": {
+      "sheetTitle": "New pipeline",
+      "chatTitle": "Describe it in the chat",
+      "chatHint": "Tell the project and the phases. Orbit builds the pipeline, asks what is missing and shows a card for you to confirm.",
+      "formTitle": "Fill in the form",
+      "formHint": "Name, folder, phases and integrations, field by field.",
+      "starter": "I want a pipeline for [the project or folder], with the phases [e.g.: plan, implement, review].",
+      "example1Label": "Plan → Implement → Review",
+      "example1Text": "I want a pipeline for [the project or folder], with the phases plan, implement and review.",
+      "example2Label": "Spec → Code → Tests",
+      "example2Text": "I want a pipeline for [the project or folder], with the phases spec, code and tests.",
+      "example3Label": "Brief → Layout → Publish",
+      "example3Text": "I want a pipeline for [the project or folder], with the phases brief, layout and publish."
+    },
+    "skill": {
+      "sheetTitle": "Add skill",
+      "chatTitle": "Describe it in the chat",
+      "chatHint": "Tell what the skill should know; Orbit writes it and shows a proposal for you to approve.",
+      "formTitle": "Create manually",
+      "formHint": "Name, description and instructions, field by field.",
+      "starter": "/create-skill I want a skill that teaches [what it should know or do], to use when [when it applies].",
+      "example1Label": "Review PRs",
+      "example1Text": "/create-skill I want a skill that reviews pull requests with the team standard: build, tests and the diff.",
+      "example2Label": "Summarize a meeting",
+      "example2Text": "/create-skill I want a skill that summarizes a meeting into bullets, with decisions and owners.",
+      "example3Label": "Commit messages",
+      "example3Text": "/create-skill I want a skill that writes commit messages in the [which] standard."
+    },
+    "mcp": {
+      "sheetTitle": "Add server",
+      "chatTitle": "Describe it in the chat",
+      "chatHint": "Say which service you want to connect; Orbit asks what is missing and builds the setup.",
+      "formTitle": "Fill in the form",
+      "formHint": "Name, type, command or address, field by field.",
+      "starter": "I want to connect [the service or tool] to Orbit through MCP.",
+      "example1Label": "GitHub",
+      "example1Text": "I want to connect GitHub to Orbit through MCP.",
+      "example2Label": "Notion",
+      "example2Text": "I want to connect Notion to Orbit through MCP.",
+      "example3Label": "Database",
+      "example3Text": "I want to connect a [which] database to Orbit through MCP."
+    }
   }
 }

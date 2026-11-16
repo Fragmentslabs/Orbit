@@ -109,10 +109,15 @@ afterEach(() => {
 describe('parseDesignCanvas', () => {
   it('reads the screens in index order', () => {
     expect(parseDesignCanvas(THREE)).toEqual([
-      { file: 'Home.html', title: 'Home' },
-      { file: 'Pricing.html', title: undefined },
-      { file: 'Signup.html', title: 'Signup form' },
+      { file: 'Home.html', title: 'Home', width: 390, height: 844 },
+      { file: 'Pricing.html', title: undefined, width: 390, height: 844 },
+      { file: 'Signup.html', title: 'Signup form', width: 390, height: 844 },
     ])
+  })
+
+  it('an artboard with no usable size has none (the viewer then fills the stage)', () => {
+    const screens = parseDesignCanvas(canvas(['A.html'], { 'A.html': { x: 0, y: 0, w: 0, h: 'x' } }))
+    expect(screens).toEqual([{ file: 'A.html', title: undefined }])
   })
 
   it('ignores what is in the order without an artboard, and does not repeat', () => {

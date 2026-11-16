@@ -24,34 +24,26 @@ import { Pause, Play, Repeat } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 import { PieceView } from '../../PieceView'
 
+import { BarButton, Stage, StageLoading, ViewerBar, fitScript, fitSize, useStageBox } from './kit'
+import { audioPlanUrl, parseAudioPlan, useMotionAudio, type AudioTrack } from './motion-audio'
 import type { PieceViewerProps } from './index'
 
 /** The default fps of the contract (`MOTION_FPS` of the desktop runtime). */
 const DEFAULT_FPS = 30
 /** Mark of the messages of this screen — the piece may post others, and they are not ours. */
 const MESSAGE_SOURCE = 'orbit-motion-player'
-/** Frame of the host: `mt-2` + the title bar of `PieceView` + the borders. */
-const HOST_CHROME = 42
-/** Control bar, without the bottom inset. */
-const CONTROLS_HEIGHT = 52
-/** Below this the piece stops being seen; better a low stage than none. */
-const MIN_STAGE = 120
-
 export interface MotionSpec {
   /** Frames per second declared by the piece (or the default of the contract). */
   fps: number
@@ -202,31 +194,7 @@ export function seekScript(frame: number): string {
 true;`
 }
 
-/**
- * Scales the document of the piece to fit the stage.
- *
- * The composition is a fixed-size page (1920×1080 in the common case), so on a
- * phone the WebView would show only its corner. `zoom` on `<html>` reflows the
- * document to the right visual size — unlike `transform`, which would scale it
- * without shrinking the scrollable area. The `<meta viewport>` exists so the WebView does not
- * use the virtual 980px viewport of the Android "desktop" mode.
- */
-export function fitScript(scale: number): string {
-  return `(function () {
-  try {
-    var head = document.head || document.documentElement;
-    var meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'viewport');
-      head.appendChild(meta);
-    }
-    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
-    document.documentElement.style.zoom = '${scale.toFixed(4)}';
-  } catch (err) {}
-})();
-true;`
-}
+export { fitScript }
 
 interface PageReply {
   source?: unknown
@@ -236,12 +204,9 @@ interface PageReply {
 export function MotionViewer({ piece }: PieceViewerProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const insets = useSafeAreaInsets()
-  const dimensions = useWindowDimensions()
 
-  // Space the shell gave the viewer (flex:1, already without the full-screen header).
-  // Measured instead of deduced: the header is not from this screen and would change the calculation.
-  const [box, setBox] = useState<{ width: number; height: number } | null>(null)
+  // Space the stage got, measured instead of deduced: the shell's header is not ours.
+  const { box, onLayout: onStageLayout } = useStageBox()
   const [spec, setSpec] = useState<MotionSpec | null>(null)
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -257,17 +222,34 @@ export function MotionViewer({ piece }: PieceViewerProps) {
   const injectRef = useRef<((js: string) => void) | null>(null)
   const frameRef = useRef(0)
 
-  const stageWidth = Math.max(0, box?.width ?? dimensions.width)
-  const stageHeight = Math.max(
-    MIN_STAGE,
-    (box?.height ?? dimensions.height - 120) - CONTROLS_HEIGHT - HOST_CHROME - insets.bottom,
-  )
+  // The sound: the plan comes from the desktop (which resolves manifest, loose file, gain and
+  // fades); a piece without audio, or a plan that does not load, simply stays silent.
+  const [tracks, setTracks] = useState<AudioTrack[]>([])
+  useEffect(() => {
+    let cancelled = false
+    fetch(audioPlanUrl(piece.url))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled) setTracks(parseAudioPlan(body, piece.url))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [piece.url])
+
+  // The composition is a fixed-size page: it is shown at its own proportions, as large as the
+  // stage allows, centered — letterboxed, never cropped. Until the probe answers it fills.
+  const fit = useMemo(() => (spec ? fitSize(box, spec) : null), [box, spec])
+  const fitScale = fit?.scale ?? null
 
   const duration = spec ? spec.frames / spec.fps : piece.count ?? 0
   const position = spec ? frame / spec.fps : 0
   const canSeek = Boolean(spec?.seekable) && !broken
   const ratio = spec && spec.frames > 1 ? Math.min(1, Math.max(0, frame / (spec.frames - 1))) : 0
   const timeLabel = `${formatTime(position)} / ${duration > 0 ? formatTime(duration) : '–:–'}`
+
+  useMotionAudio(tracks, playing, position)
 
   // Mirror of the frame for the play clock: the effect reads the starting value
   // when it begins, and a stale state would make the first tick jump.
@@ -307,11 +289,9 @@ export function MotionViewer({ piece }: PieceViewerProps) {
   // Framing: only after knowing the size of the document (the probe answered)
   // and redone when the stage changes — rotating the phone changes the scale.
   useEffect(() => {
-    if (!spec || loads === 0 || stageWidth <= 0) return
-    const scale = Math.min(stageWidth / spec.width, stageHeight / spec.height)
-    if (!(scale > 0) || !Number.isFinite(scale)) return
-    injectRef.current?.(fitScript(scale))
-  }, [spec, loads, stageWidth, stageHeight])
+    if (loads === 0 || fitScale === null) return
+    injectRef.current?.(fitScript(fitScale))
+  }, [loads, fitScale])
 
   const handleReady = useCallback((inject: (js: string) => void) => {
     injectRef.current = inject
@@ -395,8 +375,7 @@ export function MotionViewer({ piece }: PieceViewerProps) {
         src={piece.url}
         title={piece.title}
         revision={0}
-        height={stageHeight}
-        expandable={false}
+        bare
         loadingLabel={t('parts.preview.loading')}
         errorLabel={t('parts.preview.error')}
         onReady={handleReady}
@@ -407,48 +386,37 @@ export function MotionViewer({ piece }: PieceViewerProps) {
         }}
       />
     ),
-    [piece.url, piece.title, stageHeight, t, handleReady, handleMessage],
+    [piece.url, piece.title, t, handleReady, handleMessage],
   )
 
-  return (
-    <View
-      className="flex-1"
-      onLayout={(event) =>
-        setBox({
-          width: event.nativeEvent.layout.width,
-          height: event.nativeEvent.layout.height,
-        })
-      }
-    >
-      {stage}
+  // The page paints at its own 1920px size for a moment, before the probe answers and the framing
+  // lands: the loading face stays over it until the piece is placed (or the probe gave up).
+  const [gaveUp, setGaveUp] = useState(false)
+  useEffect(() => {
+    if (loads === 0) return
+    const timer = setTimeout(() => setGaveUp(true), 2500)
+    return () => clearTimeout(timer)
+  }, [loads])
+  const placed = gaveUp || broken || (spec !== null && (fit === null || loads > 0))
 
-      <View
-        className="flex-row items-center gap-2 px-3"
-        style={{
-          height: CONTROLS_HEIGHT + insets.bottom,
-          paddingBottom: insets.bottom,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: tokens.border,
-          backgroundColor: tokens.background,
-        }}
-      >
-        <Pressable
+  return (
+    <View className="flex-1">
+      <View className="flex-1">
+        <Stage onLayout={onStageLayout} size={fit}>
+          {stage}
+        </Stage>
+        {placed ? null : <StageLoading label={t('parts.preview.loading')} />}
+      </View>
+
+      <ViewerBar>
+        <BarButton
           testID="motion-play"
+          icon={playing ? Pause : Play}
+          label={t(playing ? 'pieces.motion.pause' : 'pieces.motion.play')}
           onPress={togglePlay}
           disabled={!canSeek}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSeek }}
-          accessibilityLabel={t(playing ? 'pieces.motion.pause' : 'pieces.motion.play')}
-          className="h-9 w-9 items-center justify-center rounded-full"
-          style={{ backgroundColor: tokens.muted, opacity: canSeek ? 1 : 0.4 }}
-        >
-          {playing ? (
-            <Pause size={16} color={tokens.foreground} />
-          ) : (
-            <Play size={16} color={tokens.foreground} />
-          )}
-        </Pressable>
+          filled
+        />
 
         {/* The ruler: touch and drag become a frame. `locationX` already comes relative to the
             track, so the ratio x/width is the progress itself. */}
@@ -498,18 +466,14 @@ export function MotionViewer({ piece }: PieceViewerProps) {
           {timeLabel}
         </Text>
 
-        <Pressable
+        <BarButton
           testID="motion-loop"
+          icon={Repeat}
+          label={t('configSheet.loop')}
           onPress={() => setLoop((prev) => !prev)}
-          hitSlop={8}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: loop }}
-          accessibilityLabel={t('configSheet.loop')}
-          className="h-8 w-8 items-center justify-center rounded-full"
-        >
-          <Repeat size={15} color={loop ? tokens.foreground : tokens.mutedForeground} />
-        </Pressable>
-      </View>
+          active={loop}
+        />
+      </ViewerBar>
     </View>
   )
 }

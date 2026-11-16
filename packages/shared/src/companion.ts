@@ -418,6 +418,11 @@ export interface GetAnalyticsRequest {
   range?: AnalyticsRange
   /** Desktops only: restrict the usage to one workspace mode. */
   mode?: 'chat' | 'code'
+  /**
+   * The detailed summary (previous period, last year, the list of sessions) — what the phone's
+   * usage screen shows next to the compact numbers. Desktops always get it.
+   */
+  detailed?: boolean
 }
 
 /** Desktops only: "what was done" of a project/day, written by the aux model on THIS machine. */
@@ -650,6 +655,15 @@ export interface DeleteRoutineRequest {
 /** "Run now" — the same execution the scheduler does, without touching the schedule. */
 export interface RunRoutineRequest {
   type: 'routines:run'
+  id: string
+}
+
+/**
+ * The routine's ONE chat (`routine_<id>`): created on first use and with every execution already
+ * synced into it as a message. The answer is that session — the app opens it as any other chat.
+ */
+export interface ChatRoutineRequest {
+  type: 'routines:chat'
   id: string
 }
 
@@ -946,6 +960,7 @@ export type CompanionRequest =
   | UpdateRoutineRequest
   | DeleteRoutineRequest
   | RunRoutineRequest
+  | ChatRoutineRequest
   | PruneRoutinesRequest
   | GenerateRoutineRequest
   | ListPipelineRequest

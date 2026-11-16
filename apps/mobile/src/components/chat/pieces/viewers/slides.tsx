@@ -42,40 +42,20 @@
  * phone fallback.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { ChevronLeft, ChevronRight, Presentation } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
+import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 import { PieceView } from '../../PieceView'
 
+import { BarButton, Stage, ViewerBar } from './kit'
 import type { PieceViewerProps } from './index'
 
 /** Mark of the bridge messages, the same one as the desktop runtime (`SLIDES_SOURCE`). */
 export const SLIDES_SOURCE = 'orbit-slides'
-
-/**
- * Fixed heights of what is not ours: the bar of `PieceViewer` (h-8 of the button +
- * py-2.5 + the border) and what `PieceView` puts around the WebView (the
- * title bar, the `mt-2` margin and the borders). Added to the top inset, it is what is left
- * of body for the deck.
- */
-const VIEWER_HEADER_HEIGHT = 53
-const PIECE_CHROME_HEIGHT = 45
-
-/** Side of the arrow button: the comfortable touch target (44pt) + `hitSlop`. */
-const ARROW_SIZE = 44
 
 type DeckStatus = 'loading' | 'ready' | 'error' | 'empty'
 
@@ -292,52 +272,7 @@ export function deckStageSource(background: string): string {
   return STAGE_RUNTIME.replace('__ORBIT_SLIDES_CONFIG__', config)
 }
 
-/** Side arrow overlaid on the deck. `disabled` at the ends: there is nowhere to go. */
-function SlideArrow({
-  side,
-  label,
-  color,
-  background,
-  border,
-  disabled,
-  onPress,
-}: {
-  side: 'previous' | 'next'
-  label: string
-  color: string
-  background: string
-  border: string
-  disabled: boolean
-  onPress: () => void
-}) {
-  const Icon = side === 'previous' ? ChevronLeft : ChevronRight
-  const position: StyleProp<ViewStyle> =
-    side === 'previous' ? styles.arrowLeft : styles.arrowRight
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={10}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      testID={`slides-${side}`}
-      style={[
-        styles.arrow,
-        position,
-        { backgroundColor: background, borderColor: border },
-        disabled ? styles.arrowDisabled : null,
-      ]}
-    >
-      <Icon size={20} color={color} />
-    </Pressable>
-  )
-}
-
 export function SlidesViewer({ piece }: PieceViewerProps) {
-  const { height: windowHeight } = useWindowDimensions()
-  const insets = useSafeAreaInsets()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const background = tokens.background
   const { t } = useTranslation()
@@ -384,13 +319,6 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
     inject.current?.(`window.orbitSlides && window.orbitSlides.go(${target})`)
   }, [])
 
-  // Body of the deck: what is left of the screen after the header of `PieceViewer` and
-  // the frame of `PieceView` (which is not ours and cannot be hidden).
-  const bodyHeight = Math.max(
-    240,
-    windowHeight - insets.top - VIEWER_HEADER_HEIGHT - PIECE_CHROME_HEIGHT,
-  )
-
   const ready = status === 'ready'
   const counter =
     ready && total > 0
@@ -416,100 +344,71 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
     )
   }
 
+  const canGo = ready && total > 1
   return (
-    <View className="flex-1" style={styles.stage}>
-      <PieceView
-        src={piece.url}
-        // While the total is unknown the bar stays without text: repeating the
-        // title here would say twice what the header already says.
-        title={total > 0 ? t('pieces.meta.slides', { count: total }) : ''}
-        poster={piece.cover}
-        revision={0}
-        height={bodyHeight}
-        expandable={false}
-        onMessage={handleMessage}
-        onError={() => setStatus('error')}
-        onReady={handleReady}
-      />
+    <View className="flex-1">
+      <Stage size={null}>
+        <PieceView
+          src={piece.url}
+          title=""
+          poster={piece.cover}
+          revision={0}
+          bare
+          onMessage={handleMessage}
+          onError={() => setStatus('error')}
+          onReady={handleReady}
+        />
+      </Stage>
 
-      {ready && total > 1 ? (
-        <>
-          <SlideArrow
-            side="previous"
+      <ViewerBar>
+        {canGo ? (
+          <BarButton
+            testID="slides-previous"
+            icon={ChevronLeft}
             label={t('pieces.slides.previous')}
-            color={tokens.foreground}
-            background={withAlpha(tokens.background, 0.74)}
-            border={tokens.border}
-            disabled={index === 0}
             onPress={() => goTo(index - 1)}
+            disabled={index === 0}
           />
-          <SlideArrow
-            side="next"
-            label={t('pieces.slides.next')}
-            color={tokens.foreground}
-            background={withAlpha(tokens.background, 0.74)}
-            border={tokens.border}
-            disabled={index >= total - 1}
-            onPress={() => goTo(index + 1)}
-          />
-        </>
-      ) : null}
-
-      {counter ? (
-        // Over the deck, in the footer: pointer events off, otherwise the counter eats the
-        // touch that belonged to the swipe.
-        <View pointerEvents="none" style={styles.counterRow}>
-          <View
-            style={[
-              styles.counter,
-              { backgroundColor: withAlpha(tokens.background, 0.78), borderColor: tokens.border },
-            ]}
-          >
+        ) : null}
+        <View style={styles.middle}>
+          {counter ? (
             <Text
-              className="text-[11px] font-medium"
-              style={{ color: tokens.mutedForeground }}
               testID="slides-counter"
+              className="text-xs font-medium"
+              style={{ color: tokens.mutedForeground, fontVariant: ['tabular-nums'] }}
             >
               {counter}
             </Text>
-          </View>
+          ) : null}
+          {canGo ? <Progress index={index} total={total} /> : null}
         </View>
-      ) : null}
+        {canGo ? (
+          <BarButton
+            testID="slides-next"
+            icon={ChevronRight}
+            label={t('pieces.slides.next')}
+            onPress={() => goTo(index + 1)}
+            disabled={index >= total - 1}
+          />
+        ) : null}
+      </ViewerBar>
+    </View>
+  )
+}
+
+/** Where you are in the deck: a rail with the current slide's share filled. */
+function Progress({ index, total }: { index: number; total: number }) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const ratio = total > 1 ? (index + 1) / total : 1
+  return (
+    <View style={[styles.rail, { backgroundColor: tokens.secondary }]}>
+      <View style={{ width: `${ratio * 100}%`, height: '100%', backgroundColor: tokens.primary }} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  stage: { position: 'relative' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24 },
-  arrow: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -ARROW_SIZE / 2,
-    width: ARROW_SIZE,
-    height: ARROW_SIZE,
-    borderRadius: ARROW_SIZE / 2,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowLeft: { left: 6 },
-  arrowRight: { right: 6 },
-  // At the ends the arrow stays visible (you can see that a side exists), but
-  // faded and without touch.
-  arrowDisabled: { opacity: 0.28 },
-  counterRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    paddingBottom: 12,
-  },
-  counter: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
+  middle: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  rail: { alignSelf: 'stretch', height: 4, borderRadius: 999, overflow: 'hidden' },
 })

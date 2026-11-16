@@ -31,3 +31,15 @@ export function formatDateTimeShort(ts: number, locale: string): string {
     hour12: !locale.toLowerCase().startsWith('pt'),
   })
 }
+
+/** Short moment for a list line ("sáb., 14 de nov., 18:00" / "Sat, Nov 14, 6:00 PM"). */
+export function formatWhenShort(ts: number, locale: string): string {
+  return new Date(ts).toLocaleString(locale, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: !locale.toLowerCase().startsWith('pt'),
+  })
+}

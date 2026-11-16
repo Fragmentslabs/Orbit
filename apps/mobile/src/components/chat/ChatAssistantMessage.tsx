@@ -687,6 +687,9 @@ const SPECIAL_TOOLS = new Set([
   'design_edit',
   'slides_write',
   'slides_edit',
+  'motion_preview',
+  'design_preview',
+  'slides_preview',
 ])
 
 type Segment =
@@ -696,8 +699,22 @@ type Segment =
 
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
+  // One card per piece: `design_write` runs a screen per call and a piece is edited many times,
+  // each call used to stack another card of the same canvas. The first place keeps the card and
+  // shows the LATEST call, the one that knows the piece's final state (same rule as the desktop).
+  const pieceAt = new Map<string, number>()
   for (const part of parts) {
-    if (part.type === 'tool' && WEB_TOOLS.has(part.tool)) {
+    if (part.type === 'tool' && part.piece) {
+      const key = `${part.piece.kind}:${part.piece.id}`
+      const at = pieceAt.get(key)
+      if (at !== undefined) {
+        const seg = segments[at]
+        if (seg.kind === 'part') segments[at] = { ...seg, part }
+        continue
+      }
+      pieceAt.set(key, segments.length)
+      segments.push({ kind: 'part', id: part.id, part })
+    } else if (part.type === 'tool' && WEB_TOOLS.has(part.tool)) {
       const last = segments[segments.length - 1]
       if (last?.kind === 'research') last.parts.push(part)
       else segments.push({ kind: 'research', id: part.id, parts: [part] })

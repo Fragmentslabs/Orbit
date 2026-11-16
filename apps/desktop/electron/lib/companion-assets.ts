@@ -26,8 +26,12 @@ import { readArtifactAsset, readMedia } from './media'
 import { resolveAudioFile } from './audio-store'
 import { videoFilePath } from './video/store'
 import { getMotion, resolveMotionFile } from './video/motion-store'
+import { motionAudioTracks } from './video/motion-audio'
+import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './video/motion-runtime'
+import { MOTION_SCHEME } from '@shared/media'
 import { getDesign, resolveDesignFile } from './design/design-store'
 import { getSlides, resolveSlidesFile } from './slides/slides-store'
+import { readWebImage } from './web-images/store'
 import { resolveFontFile } from './fonts/store'
 import { isAssetScope, createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { FONT_SCHEME } from '@shared/media'
@@ -89,10 +93,45 @@ const CACHE_REWRITABLE = 'no-store'
 
 /** The requested file, already resolved to a buffer (small ones) or a path. */
 interface ResolvedAsset {
+  /** Answer 302 to this path (relative to the request's own) instead of serving a body. */
+  redirect?: string
   buffer?: Buffer
   file?: string
   contentType: string
   cache: string
+}
+
+/**
+ * Reserved name under a motion piece: the audio the phone has to play, resolved by the
+ * same module the desktop tab and the render use (motion-audio) — manifest, loose file or
+ * nothing. The phone has no way to read `audio.json` itself: the loose-file door has no
+ * manifest, and the numbers (gain, fades, offset) are already normalized here.
+ */
+export const MOTION_AUDIO_PLAN = '__orbit-audio.json'
+
+async function motionAudioPlanAsset(folder: string): Promise<ResolvedAsset> {
+  const tracks = await motionAudioTracks(folder).catch(() => [])
+  const body = {
+    tracks: tracks
+      // A track outside the folder is muxed by the render but not served: nothing to play.
+      .filter((track) => track.path)
+      .map((track) => ({
+        name: track.name,
+        path: track.path,
+        start: track.start,
+        end: track.end ?? null,
+        offset: track.offset ?? 0,
+        gainDb: track.gainDb,
+        fadeIn: track.fadeIn,
+        fadeOut: track.fadeOut,
+        loop: track.loop === true,
+      })),
+  }
+  return {
+    buffer: Buffer.from(JSON.stringify(body), 'utf8'),
+    contentType: CONTENT_TYPES['.json'],
+    cache: CACHE_REWRITABLE,
+  }
 }
 
 /** Relative path of a piece's entry (motion/slides), with `/`. */
@@ -183,6 +222,8 @@ async function resolveAsset(
    *  rewritten inside the HTML/CSS. `null` keeps `orbit-font://` (a desktop peer,
    *  whose own main serves it). */
   base: string | null,
+  /** The token of the request: a motion page's runtime and assets must be reachable under it. */
+  token = '',
 ): Promise<ResolvedAsset | null> {
   switch (scope) {
     case 'media': {
@@ -193,6 +234,12 @@ async function resolveAsset(
         contentType: media.contentType,
         cache: 'private, max-age=86400',
       }
+    }
+
+    case 'web': {
+      const image = await readWebImage(`orbit-web://${id}`)
+      if (!image) return null
+      return { buffer: image.buffer, contentType: image.contentType, cache: 'private, max-age=86400' }
     }
 
     case 'artifact': {
@@ -216,8 +263,27 @@ async function resolveAsset(
     case 'motion': {
       const entry = await getMotion(id)
       if (!entry) return null
+      if (relative === MOTION_AUDIO_PLAN) return motionAudioPlanAsset(entry.folder)
+      // The bare address is the one the phone stores, but a page opened there would resolve its
+      // relative files (`gsap.js`, `fonts/…`) above the token and lose it: it goes to the entry.
+      if (!relative) return { redirect: entryRelative(entry.folder, entry.entry), contentType: '', cache: CACHE_REWRITABLE }
+      // The runtime the desktop injects into every composition (clock, `seek`, frame capture): the
+      // phone's player drives the piece through it, so older pieces that never carried their own
+      // are seekable too.
+      if (`/${relative}` === MOTION_RUNTIME_PATH) {
+        return { buffer: Buffer.from(MOTION_RUNTIME, 'utf8'), contentType: CONTENT_TYPES['.js'], cache: CACHE_REWRITABLE }
+      }
       const file = resolveMotionFile(entry.folder, relative || entryRelative(entry.folder, entry.entry))
       if (!file) return null
+      if (base && token && /\.html?$/i.test(file)) {
+        const html = await fsp.readFile(file, 'utf8').catch(() => null)
+        if (html === null) return null
+        // The page asks for the runtime in the desktop's scheme, which the phone cannot open: the
+        // same address, under the signed HTTP path.
+        const root = `${base}/api/file/motion/${encodeURIComponent(id)}/${token}/`
+        const page = injectMotionRuntime(html, MOTION_SCHEME, id).split(`${MOTION_SCHEME}://${id}/`).join(root)
+        return bufferAsset(Buffer.from(page, 'utf8'), contentTypeOf(file), base)
+      }
       return fileAsset(file, base)
     }
 
@@ -232,6 +298,7 @@ async function resolveAsset(
     case 'slides': {
       const entry = await getSlides(id)
       if (!entry) return null
+      if (!relative) return { redirect: entryRelative(entry.folder, entry.entry), contentType: '', cache: CACHE_REWRITABLE }
       const file = resolveSlidesFile(entry.folder, relative || entryRelative(entry.folder, entry.entry))
       if (!file) return null
       return fileAsset(file, base)
@@ -289,7 +356,7 @@ export async function serveAsset(
   }
 
   const base = options.rewriteFonts === false ? null : `http://${req.headers.host ?? 'localhost'}`
-  const asset = await resolveAsset(scope, id, relative, base)
+  const asset = await resolveAsset(scope, id, relative, base, token)
   if (!asset) {
     res.writeHead(404, headers({ 'Content-Type': 'text/plain; charset=utf-8' }))
     res.end('not found')
@@ -297,6 +364,14 @@ export async function serveAsset(
   }
 
   const head = req.method === 'HEAD'
+
+  if (asset.redirect !== undefined) {
+    const here = (req.url ?? '').split('?')[0].replace(/\/+$/, '')
+    const target = asset.redirect.split('/').map(encodeURIComponent).join('/')
+    res.writeHead(302, headers({ Location: `${here}/${target}`, 'Cache-Control': 'no-store' }))
+    res.end()
+    return
+  }
 
   if (asset.buffer) {
     res.writeHead(200, headers({

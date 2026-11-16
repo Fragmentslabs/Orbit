@@ -1,35 +1,21 @@
 /**
- * Routine detail — mirror of the desktop's RoutineDetail: its own header
- * (back, title, switch, menu), prompt, badges, "Run now" and the session
- * history (derived from the sessions with routineId, run metrics matched by
- * sessionId). Tapping a session opens the chat of that execution.
+ * Routine detail — mirror of the desktop's RoutineDetail: its own header (back, title, switch,
+ * menu), prompt, badges, "Run now" and the routine's ONE chat. Every execution arrives in that
+ * chat as a message, so there is no list of sessions here: the card opens the conversation.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import {
-  AlertCircle,
-  ArrowLeft,
-  CheckCircle2,
-  ExternalLink,
-  Folder,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Play,
-  Trash2,
-} from 'lucide-react-native'
+import { ArrowLeft, ChevronRight, Folder, Loader2, MessagesSquare, MoreHorizontal, Pencil, Play, Trash2 } from 'lucide-react-native'
 import { nextRoutineRun } from '@orbit/shared'
-import { useSessionStore } from '~/stores/session-store'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { describeSchedule } from '~/lib/schedule'
 import { formatDateTimeShort } from '~/lib/format-time'
-import { formatCost, formatDuration, formatTokens } from '~/lib/format'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { Spin } from '~/components/ui/spin'
 import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
@@ -48,11 +34,12 @@ export default function RoutineDetailScreen() {
   const update = useRoutinesStore((s) => s.update)
   const runNow = useRoutinesStore((s) => s.runNow)
   const remove = useRoutinesStore((s) => s.remove)
-  const sessions = useSessionStore((s) => s.sessions)
-  const status = useSessionStore((s) => s.status)
+  const openChat = useRoutinesStore((s) => s.openChat)
   const catalog = useSettingsStore((s) => s.catalog)
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [opening, setOpening] = useState(false)
+  const [openFailed, setOpenFailed] = useState(false)
 
   const routine = routines.find((r) => r.id === id)
   const running = runs.some((r) => r.routineId === id && r.status === 'running')
@@ -67,14 +54,19 @@ export default function RoutineDetailScreen() {
     if (loaded && !routine) router.back()
   }, [loaded, routine, router])
 
-  const executions = useMemo(() => {
-    if (!routine) return []
-    const metrics = new Map(runs.filter((r) => r.routineId === routine.id).map((r) => [r.sessionId, r]))
-    return sessions
-      .filter((s) => s.routineId === routine.id)
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map((session) => ({ session, run: metrics.get(session.id) }))
-  }, [sessions, runs, routine])
+  const lastRun = routine
+    ? runs.filter((r) => r.routineId === routine.id).sort((x, y) => y.startedAt - x.startedAt)[0]
+    : undefined
+
+  const openRoutineChat = async () => {
+    if (!routine || opening) return
+    setOpening(true)
+    setOpenFailed(false)
+    const sessionId = await openChat(routine.id).catch(() => null)
+    setOpening(false)
+    if (sessionId) router.push({ pathname: '/(main)/chat/[id]', params: { id: sessionId } })
+    else setOpenFailed(true)
+  }
 
   if (!routine) {
     return <SafeScreen style={{ flex: 1 }}>{null}</SafeScreen>
@@ -172,59 +164,38 @@ export default function RoutineDetailScreen() {
           <Text style={[s.runButtonText, { color: tokens.foreground }]}>{t('routines.list.runNow')}</Text>
         </Pressable>
 
-        {/* Execution history */}
-        <Text style={[s.runsTitle, { color: tokens.foreground }]}>{t('routines.runs.title')}</Text>
-
-        {executions.length === 0 ? (
-          <Text style={[s.muted, { color: tokens.mutedForeground }]}>{t('routines.runs.empty')}</Text>
-        ) : (
-          executions.map(({ session, run }) => {
-            const sessionStatus = status[session.id]
-            const runRunning = sessionStatus === 'submitted' || sessionStatus === 'streaming' || run?.status === 'running'
-            const runStatus = runRunning ? 'running' : run?.status === 'error' || sessionStatus === 'error' ? 'error' : 'ok'
-            const duration =
-              run?.completedAt && run.startedAt ? formatDuration(run.completedAt - run.startedAt) : undefined
-
-            return (
-              <Pressable
-                key={session.id}
-                onPress={() => router.push({ pathname: '/(main)/chat/[id]', params: { id: session.id } })}
-                style={[s.runRow, { borderColor: tokens.border, backgroundColor: tokens.card }]}
-              >
-                {runStatus === 'running' ? (
-                  <Spin>
-                    <Loader2 size={14} color={tokens.primary} />
-                  </Spin>
-                ) : runStatus === 'error' ? (
-                  <AlertCircle size={14} color={tokens.destructive} />
-                ) : (
-                  <CheckCircle2 size={14} color={tokens.mutedForeground} />
-                )}
-                <View style={{ minWidth: 0, flex: 1 }}>
-                  <Text numberOfLines={1} style={[s.runDate, { color: tokens.foreground }]}>
-                    {formatDateTimeShort(run?.startedAt ?? session.createdAt, i18n.language)}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[s.runStatus, { color: runStatus === 'error' ? tokens.destructive : tokens.mutedForeground }]}
-                  >
-                    {runStatus === 'running'
-                      ? t('routines.runs.running')
-                      : runStatus === 'error'
-                        ? run?.error || t('routines.runs.error')
-                        : [duration, run && run.tokens > 0 ? t('routines.runs.tokens', { value: formatTokens(run.tokens) }) : null, run && run.cost > 0 ? formatCost(run.cost) : null]
-                            .filter(Boolean)
-                            .join(' · ') || t('routines.runs.ok')}
-                  </Text>
-                </View>
-                <View style={s.openRow}>
-                  <Text style={[s.openText, { color: tokens.mutedForeground }]}>{t('routines.runs.openChat')}</Text>
-                  <ExternalLink size={12} color={tokens.mutedForeground} />
-                </View>
-              </Pressable>
-            )
-          })
-        )}
+        {/* The routine's one chat */}
+        <Pressable
+          onPress={() => void openRoutineChat()}
+          disabled={opening}
+          accessibilityRole="button"
+          style={[s.chatCard, { borderColor: tokens.border, backgroundColor: tokens.card }, opening && { opacity: 0.6 }]}
+        >
+          <View style={[s.chatIcon, { backgroundColor: tokens.accent }]}>
+            {opening ? (
+              <Spin>
+                <Loader2 size={16} color={tokens.foreground} />
+              </Spin>
+            ) : (
+              <MessagesSquare size={16} color={tokens.foreground} />
+            )}
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[s.runsTitle, { color: tokens.foreground }]}>{t('routines.chat.title')}</Text>
+            <Text style={[s.muted, { color: tokens.mutedForeground }]}>
+              {opening
+                ? t('routines.chat.opening')
+                : lastRun
+                  ? lastRun.status === 'error'
+                    ? t('routines.chat.failed')
+                    : t('routines.chat.lastRun', { when: formatDateTimeShort(lastRun.startedAt, i18n.language) })
+                  : t('routines.chat.never')}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={tokens.mutedForeground} />
+        </Pressable>
+        <Text style={[s.muted, { color: tokens.mutedForeground, paddingHorizontal: 4 }]}>{t('routines.chat.subtitle')}</Text>
+        {openFailed && <Text style={[s.muted, { color: tokens.destructive, paddingHorizontal: 4 }]}>{t('routines.chat.error')}</Text>}
       </ScrollView>
 
       <ActionMenu
@@ -258,6 +229,8 @@ const s = StyleSheet.create({
   modeBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   modeBadgeText: { fontSize: 11, fontWeight: '500' },
   muted: { fontSize: 12 },
+  chatCard: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: 12, borderWidth: 1 },
+  chatIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   folderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 
   runButton: {
@@ -271,18 +244,5 @@ const s = StyleSheet.create({
   },
   runButtonText: { fontSize: 13, fontWeight: '600' },
 
-  runsTitle: { fontSize: 14, fontWeight: '600', marginTop: 4 },
-  runRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  runDate: { fontSize: 13 },
-  runStatus: { fontSize: 12, marginTop: 1 },
-  openRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
-  openText: { fontSize: 12 },
+  runsTitle: { fontSize: 14, fontWeight: '600' },
 })
