@@ -7,6 +7,14 @@
 
 import type { ConnectionConfig } from './types'
 import type {
+  FilesListRequest,
+  FilesListResponse,
+  FilesReadRequest,
+  FilesReadResponse,
+  FilesSearchRequest,
+  FilesSearchResponse,
+  FilesWriteRequest,
+  FilesWriteResponse,
   MediaEntry,
   MediaUsage,
   ReasoningPrefsMap,
@@ -263,6 +271,27 @@ export class CompanionHttp {
 
   async deleteManyMedia(ids: string[]): Promise<HttpResult<{ removed: number }>> {
     return this.request('POST', '/api/media/delete', { ids })
+  }
+
+  // ─── Session files ───────────────────────────────────────────────────────
+  // Browse/read/search/write the working folders of a session. Paths are relative to a
+  // root the desktop validates against the session (see @shared/companion-files).
+
+  async listFiles(req: FilesListRequest): Promise<HttpResult<FilesListResponse>> {
+    return this.request('POST', '/api/files/list', req)
+  }
+
+  async readFile(req: FilesReadRequest): Promise<HttpResult<FilesReadResponse>> {
+    return this.request('POST', '/api/files/read', req)
+  }
+
+  /** A refused write (`stale`, `binary`…) is still `ok: true` here: read `data.ok`. */
+  async writeFile(req: FilesWriteRequest): Promise<HttpResult<FilesWriteResponse>> {
+    return this.request('POST', '/api/files/write', req)
+  }
+
+  async searchFiles(req: FilesSearchRequest): Promise<HttpResult<FilesSearchResponse>> {
+    return this.request('POST', '/api/files/search', req)
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────

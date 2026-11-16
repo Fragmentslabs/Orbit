@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, FolderTree, ChevronDown } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -53,6 +54,7 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const confirm = useConfirm()
+  const router = useRouter()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const [menuOpen, setMenuOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
@@ -227,6 +229,13 @@ export const ChatHeader = memo(function ChatHeader({
             label: session?.archived ? t('sidebar.unarchive') : t('sidebar.archive'),
             onPress: onToggleArchive,
           },
+          ...(code && directory && session
+            ? [{
+                icon: FolderTree,
+                label: t('filesBrowser.menu'),
+                onPress: () => router.push({ pathname: '/(main)/files', params: { sessionId: session.id } }),
+              }]
+            : []),
           ...(code
             ? [{ icon: GitBranch, label: t('workspace.menu'), onPress: () => onOpenWorkspace?.() }]
             : []),

@@ -72,6 +72,8 @@ export type AssetScope =
   /** A file of the font library (`<hash>.woff2`): `orbit-font://` does not
    *  exist on the phone, and it is what the `<style>` of `font_use` references. */
   | 'font'
+  /** A file of a session's working folder (`id` = encoded root + relative path). */
+  | 'workspace'
 
 const SCOPES: readonly AssetScope[] = [
   'media',
@@ -83,6 +85,7 @@ const SCOPES: readonly AssetScope[] = [
   'slides',
   'web',
   'font',
+  'workspace',
 ]
 
 export function isAssetScope(value: string): value is AssetScope {
