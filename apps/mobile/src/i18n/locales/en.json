@@ -205,7 +205,8 @@
     "fork": "Fork",
     "deleteTitle": "Delete conversation?",
     "deleteBody": "\"{{title}}\" and all its messages will be permanently deleted.",
-    "searchInChat": "Search in chat"
+    "searchInChat": "Search in chat",
+    "sources": "Sources"
   },
   "chatSearch": {
     "placeholder": "Search this conversation...",
@@ -1920,5 +1921,50 @@
       "document": "Document"
     },
     "cite": "Open source {{id}}"
+  },
+  "sources": {
+    "title": "Sources",
+    "newChat": "New chat",
+    "add": "Add",
+    "addFile": "File",
+    "addText": "Pasted text",
+    "addUrl": "Website",
+    "paste": "Paste",
+    "cancel": "Cancel",
+    "remove": "Remove",
+    "share": "Move to folder sources",
+    "unshare": "Move to this conversation",
+    "removeTitle": "Remove source?",
+    "removeBody": "\"{{name}}\" will no longer be available to the agent.",
+    "newGoTo": "New sources go to",
+    "folderArea": "Folder",
+    "conversationArea": "Chat",
+    "folderSources": "Folder sources",
+    "fromConversation": "From this conversation",
+    "emptyTitle": "No sources yet",
+    "emptyBody": "Add a file, pasted text or a website so the agent can read and cite it.",
+    "titlePlaceholder": "Title (optional)",
+    "textPlaceholder": "Paste the text here",
+    "urlPlaceholder": "https://example.com/article",
+    "invalidUrl": "Enter a valid http(s) address.",
+    "tooBig": "{{name}} is larger than {{size}}.",
+    "failed": "Could not complete the operation.",
+    "loadFailed": "Could not load the sources.",
+    "working": "Working…",
+    "truncated": "truncated",
+    "usage": "{{size}} on disk",
+    "unitPages_one": "{{count}} page",
+    "unitPages_other": "{{count}} pages",
+    "unitSheets_one": "{{count}} sheet",
+    "unitSheets_other": "{{count}} sheets",
+    "unitBlocks_one": "{{count}} block",
+    "unitBlocks_other": "{{count}} blocks",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "spreadsheet": "Spreadsheet",
+      "text": "Text",
+      "web": "Website"
+    }
   }
 }

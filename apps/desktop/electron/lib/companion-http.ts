@@ -29,6 +29,7 @@ import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import type { McpConfig } from '@shared/mcp'
+import * as sources from './companion-sources'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia, updateMediaEntry } from './media'
 import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
@@ -608,6 +609,31 @@ async function handleDeleteManyMedia(req: IncomingMessage, res: ServerResponse) 
   }
 }
 
+// ─── Sources Handlers ─────────────────────────────────────────────────────────
+// Thin adapters over companion-sources.ts (the rules and their tests live there).
+
+async function sendSources(res: ServerResponse, run: () => Promise<sources.SourcesResult>) {
+  try {
+    const out = await run()
+    jsonResponse(res, out.status, out.body)
+  } catch (err) {
+    jsonResponse(res, 400, { error: (err as Error).message })
+  }
+}
+
+const handleListSources = (_req: IncomingMessage, res: ServerResponse, sessionId: string) =>
+  sendSources(res, () => sources.listSources(decodeURIComponent(sessionId)))
+const handleAddSourceFile = (req: IncomingMessage, res: ServerResponse, sessionId: string) =>
+  sendSources(res, async () => sources.addSourceFile(decodeURIComponent(sessionId), await readBody(req)))
+const handleAddSourceText = (req: IncomingMessage, res: ServerResponse, sessionId: string) =>
+  sendSources(res, async () => sources.addSourceText(decodeURIComponent(sessionId), await readBody(req)))
+const handleAddSourceUrl = (req: IncomingMessage, res: ServerResponse, sessionId: string) =>
+  sendSources(res, async () => sources.addSourceUrl(decodeURIComponent(sessionId), await readBody(req)))
+const handleShareSource = (req: IncomingMessage, res: ServerResponse, sessionId: string, docId: string) =>
+  sendSources(res, async () => sources.shareSource(decodeURIComponent(sessionId), docId, await readBody(req)))
+const handleRemoveSource = (_req: IncomingMessage, res: ServerResponse, sessionId: string, docId: string) =>
+  sendSources(res, () => sources.removeSource(decodeURIComponent(sessionId), docId))
+
 // ─── Skills Handlers ──────────────────────────────────────────────────────────
 
 async function handleCreateSkill(req: IncomingMessage, res: ServerResponse) {
@@ -943,6 +969,12 @@ function createRouter(
     { pattern: /^GET \/api\/mcp\/config$/, paramNames: [], handler: handleGetMcpConfig },
     { pattern: /^GET \/api\/media$/, paramNames: [], handler: handleListMedia },
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
+    { pattern: /^GET \/api\/sources\/([^/]+)$/, paramNames: ['sessionId'], handler: handleListSources },
+    { pattern: /^POST \/api\/sources\/([^/]+)\/file$/, paramNames: ['sessionId'], handler: handleAddSourceFile },
+    { pattern: /^POST \/api\/sources\/([^/]+)\/text$/, paramNames: ['sessionId'], handler: handleAddSourceText },
+    { pattern: /^POST \/api\/sources\/([^/]+)\/url$/, paramNames: ['sessionId'], handler: handleAddSourceUrl },
+    { pattern: /^POST \/api\/sources\/([^/]+)\/([^/]+)\/share$/, paramNames: ['sessionId', 'docId'], handler: handleShareSource },
+    { pattern: /^DELETE \/api\/sources\/([^/]+)\/([^/]+)$/, paramNames: ['sessionId', 'docId'], handler: handleRemoveSource },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
     { pattern: /^GET \/api\/session-tools$/, paramNames: [], handler: handleGetSessionTools },

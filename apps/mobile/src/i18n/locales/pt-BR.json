@@ -205,7 +205,8 @@
     "fork": "Fork",
     "deleteTitle": "Excluir conversa?",
     "deleteBody": "\"{{title}}\" e todas as suas mensagens serão excluídas permanentemente.",
-    "searchInChat": "Buscar na conversa"
+    "searchInChat": "Buscar na conversa",
+    "sources": "Fontes"
   },
   "chatSearch": {
     "placeholder": "Buscar nesta conversa...",
@@ -1920,5 +1921,50 @@
       "document": "Documento"
     },
     "cite": "Abrir fonte {{id}}"
+  },
+  "sources": {
+    "title": "Fontes",
+    "newChat": "Nova conversa",
+    "add": "Adicionar",
+    "addFile": "Arquivo",
+    "addText": "Texto colado",
+    "addUrl": "Site",
+    "paste": "Colar",
+    "cancel": "Cancelar",
+    "remove": "Remover",
+    "share": "Mover para as fontes da pasta",
+    "unshare": "Mover para esta conversa",
+    "removeTitle": "Remover fonte?",
+    "removeBody": "\"{{name}}\" deixará de estar disponível para o agente.",
+    "newGoTo": "Novas fontes vão para",
+    "folderArea": "Pasta",
+    "conversationArea": "Conversa",
+    "folderSources": "Fontes da pasta",
+    "fromConversation": "Desta conversa",
+    "emptyTitle": "Nenhuma fonte ainda",
+    "emptyBody": "Adicione um arquivo, um texto colado ou um site para o agente ler e citar.",
+    "titlePlaceholder": "Título (opcional)",
+    "textPlaceholder": "Cole o texto aqui",
+    "urlPlaceholder": "https://exemplo.com/artigo",
+    "invalidUrl": "Informe um endereço http(s) válido.",
+    "tooBig": "{{name}} é maior que {{size}}.",
+    "failed": "Não foi possível concluir a operação.",
+    "loadFailed": "Não foi possível carregar as fontes.",
+    "working": "Processando…",
+    "truncated": "truncado",
+    "usage": "{{size}} em disco",
+    "unitPages_one": "{{count}} página",
+    "unitPages_other": "{{count}} páginas",
+    "unitSheets_one": "{{count}} planilha",
+    "unitSheets_other": "{{count}} planilhas",
+    "unitBlocks_one": "{{count}} bloco",
+    "unitBlocks_other": "{{count}} blocos",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "spreadsheet": "Planilha",
+      "text": "Texto",
+      "web": "Site"
+    }
   }
 }

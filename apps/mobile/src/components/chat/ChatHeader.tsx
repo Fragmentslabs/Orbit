@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown, Library } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -55,6 +56,7 @@ export const ChatHeader = memo(function ChatHeader({
   const confirm = useConfirm()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const [menuOpen, setMenuOpen] = useState(false)
+  const router = useRouter()
   const [branch, setBranch] = useState<string | null>(null)
   const folderList = folders ?? NO_FOLDERS
   const directory = folderList[0]
@@ -216,6 +218,11 @@ export const ChatHeader = memo(function ChatHeader({
         onClose={() => setMenuOpen(false)}
         items={[
           ...(searchEnabled ? [{ icon: Search, label: t('chatHeader.searchInChat'), onPress: toggleChatSearch }] : []),
+          {
+            icon: Library,
+            label: t('chatHeader.sources'),
+            onPress: () => router.push({ pathname: '/sources', params: session?.id ? { sessionId: session.id } : {} }),
+          },
           { icon: Pencil, label: t('sidebar.rename'), onPress: () => setRenaming(true) },
           {
             icon: session?.pinned ? PinOff : Pin,

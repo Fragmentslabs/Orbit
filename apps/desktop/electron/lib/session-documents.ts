@@ -1093,6 +1093,15 @@ export async function deleteFolderDocuments(folderId: string): Promise<void> {
   await fsp.rm(scopeDir(`folder-${folderId}`), { recursive: true, force: true })
 }
 
+const changeListeners = new Set<() => void>()
+
+/** In-process subscription to the same notice the windows get (the companion server uses it
+ *  to push `sources:changed` to the phones). Returns the unsubscribe function. */
+export function onDocumentsChanged(listener: () => void): () => void {
+  changeListeners.add(listener)
+  return () => changeListeners.delete(listener)
+}
+
 /**
  * Warns the windows that the set of sources changed. The Sources tab is the only
  * subscriber: without this, attaching a PDF from the conversation would leave the tab open
@@ -1102,6 +1111,7 @@ export async function deleteFolderDocuments(folderId: string): Promise<void> {
  * an import cycle with the broadcast layer.
  */
 function notifyDocumentsChanged(): void {
+  for (const listener of changeListeners) listener()
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('documents:changed')
   }
