@@ -35,6 +35,7 @@ import { createAssetToken, validateAssetToken, type AssetScope } from './compani
 import { serveAsset } from './companion-assets'
 import { handleGetDocumentHtml, handleGetDocumentText } from './companion-documents'
 import { handleFilesList, handleFilesRead, handleFilesSearch, handleFilesWrite } from './companion-files-http'
+import { handleLiveFrame, handleLiveList, handleLiveStop } from './companion-live'
 import { getMotion, registeredMotionUrl } from './video/motion-store'
 import { getDesign } from './design/design-store'
 import { getSlides } from './slides/slides-store'
@@ -986,6 +987,9 @@ function createRouter(
     { pattern: /^GET \/api\/documents\/([^/]+)\/html$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentHtml(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
     { pattern: /^GET \/api\/voice\/status$/, paramNames: [], handler: handleGetVoiceStatus },
+    { pattern: /^GET \/api\/live$/, paramNames: [], handler: handleLiveList },
+    { pattern: /^GET \/api\/live\/frame$/, paramNames: [], handler: handleLiveFrame },
+    { pattern: /^POST \/api\/live\/stop$/, paramNames: [], handler: handleLiveStop },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },

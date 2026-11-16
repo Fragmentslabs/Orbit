@@ -16,6 +16,9 @@ import type {
   FilesSearchResponse,
   FilesWriteRequest,
   FilesWriteResponse,
+  LiveFrameResponse,
+  LiveKind,
+  LiveListResponse,
   MediaEntry,
   MediaUsage,
   ReasoningPrefsMap,
@@ -345,6 +348,22 @@ export class CompanionHttp {
 
   async searchFiles(req: FilesSearchRequest): Promise<HttpResult<FilesSearchResponse>> {
     return this.request('POST', '/api/files/search', req)
+  }
+
+  // ─── Live view (browser / computer panels) ───────────────────────────────
+
+  async liveList(): Promise<HttpResult<LiveListResponse>> {
+    return this.get('/api/live')
+  }
+
+  /** `since` = the revision the phone already shows; the desktop answers `unchanged` without encoding. */
+  async liveFrame(sessionId: string, kind: LiveKind, since?: number): Promise<HttpResult<LiveFrameResponse>> {
+    const q = `sessionId=${encodeURIComponent(sessionId)}&kind=${kind}${since ? `&since=${since}` : ''}`
+    return this.get(`/api/live/frame?${q}`)
+  }
+
+  async liveStop(sessionId: string, kind: LiveKind): Promise<HttpResult<{ stopped: boolean }>> {
+    return this.request('POST', '/api/live/stop', { sessionId, kind })
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────
