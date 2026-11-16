@@ -1751,7 +1751,14 @@
     "menuWith": "Branch: {{branch}}",
     "none": "Nenhuma branch local.",
     "loadError": "Não foi possível ler as branches.",
-    "switchError": "Não foi possível trocar de branch."
+    "switchError": "Não foi possível trocar de branch.",
+    "newBranch": "Nova branch…",
+    "newPlaceholder": "nome-da-branch",
+    "create": "Criar",
+    "switch": "Trocar",
+    "confirmTitle": "Trocar para {{branch}}?",
+    "confirmDirty": "{{count}} arquivo(s) com alterações não commitadas. Se conflitarem com a outra branch, o git recusa a troca.",
+    "createError": "Não foi possível criar a branch."
   },
   "chatSearchScreen": {
     "placeholder": "Buscar conversas…",
@@ -1885,5 +1892,15 @@
       "example3Label": "Banco de dados",
       "example3Text": "Quero conectar um banco [qual banco] ao Orbit por MCP."
     }
+  },
+  "changes": {
+    "menu": "Alterações",
+    "title": "Alterações",
+    "refresh": "Atualizar",
+    "allChanges": "Todas as alterações ({{count}})",
+    "empty": "Nenhuma alteração nesta pasta.",
+    "binary": "Arquivo binário",
+    "noTextChanges": "Sem mudanças de texto (só modo ou renomeação).",
+    "truncated": "O diff é grande demais; mostrando só o começo."
   }
 }

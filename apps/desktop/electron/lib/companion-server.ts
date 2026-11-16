@@ -93,6 +93,7 @@ import {
   rewriteMessage as rewriteMessageMedia,
   rewriteMessages as rewriteMessagesMedia,
 } from './companion-media'
+import { handleGitRequest } from './companion-git'
 import { hasUnresolvedPiece, resolvePart, resolvePieceIds } from './companion-pieces'
 import {
   startCompanionHttpServer,
@@ -633,6 +634,17 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         } catch (err) {
           // Dirty tree: git refuses and its message is what the app shows,
           // the same as on the desktop — we do not force a checkout over the changes.
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'git:status':
+      case 'git:diff':
+      case 'git:create-branch': {
+        try {
+          sendResponse(ws, requestId, true, await handleGitRequest(req))
+        } catch (err) {
           sendResponse(ws, requestId, false, undefined, (err as Error).message)
         }
         break

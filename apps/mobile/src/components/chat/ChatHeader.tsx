@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, GitCompare, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -15,6 +15,8 @@ import { folderName } from '~/lib/folder-name'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
 import { useChatModes } from '~/hooks/useChatModes'
 import { ContextMeter } from './ContextMeter'
+import { ChangesSheet } from '~/components/git/ChangesSheet'
+import { BranchSheet } from '~/components/git/BranchSheet'
 
 interface ChatHeaderProps {
   /** Current session — undefined while the chat is a draft (not sent yet). */
@@ -88,6 +90,8 @@ export const ChatHeader = memo(function ChatHeader({
     }
   }, [directory])
   const [renaming, setRenaming] = useState(false)
+  const [changesOpen, setChangesOpen] = useState(false)
+  const [branchOpen, setBranchOpen] = useState(false)
 
   useEffect(() => {
     // One git call per opened chat, only in code mode — the strip needs the branch.
@@ -228,12 +232,28 @@ export const ChatHeader = memo(function ChatHeader({
             onPress: onToggleArchive,
           },
           ...(code
-            ? [{ icon: GitBranch, label: t('workspace.menu'), onPress: () => onOpenWorkspace?.() }]
+            ? [
+                { icon: GitCompare, label: t('changes.menu'), onPress: () => setChangesOpen(true) },
+                { icon: GitBranch, label: branch ? t('branch.menuWith', { branch }) : t('branch.menu'), onPress: () => setBranchOpen(true) },
+                { icon: Folder, label: t('workspace.menu'), onPress: () => onOpenWorkspace?.() },
+              ]
             : []),
           { icon: GitFork, label: t('chatHeader.fork'), onPress: onFork },
           { icon: Trash2, label: t('sidebar.delete'), destructive: true, onPress: handleDeletePress },
         ]}
       />
+
+      {code && directory ? (
+        <>
+          <ChangesSheet visible={changesOpen} directory={directory} onClose={() => setChangesOpen(false)} />
+          <BranchSheet
+            open={branchOpen}
+            directory={directory}
+            onClose={() => setBranchOpen(false)}
+            onChanged={(next) => setBranch(next)}
+          />
+        </>
+      ) : null}
 
       <RenamePrompt
         visible={renaming}
