@@ -222,6 +222,7 @@
     "voice": {
       "record": "Ditar",
       "stop": "Parar de gravar",
+      "cancel": "Descartar gravação",
       "recording": "Gravando… toque no microfone para parar e transcrever",
       "permission": "Permita o acesso ao microfone para ditar",
       "unsupported": "Ditado indisponível neste aparelho",
