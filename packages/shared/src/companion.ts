@@ -592,6 +592,56 @@ export interface ListDirsResponse {
   dirs: { name: string; path: string }[]
 }
 
+// --- Project folders: init status, git info, remote repo -----------------------
+
+/** Whether a folder was already analyzed by /init, and whether an analysis is running. */
+export interface FolderInitStatusRequest {
+  type: 'folders:init-status'
+  directory: string
+}
+
+export interface FolderInitStatusResponse {
+  directory: string
+  initialized: boolean
+  running: boolean
+}
+
+/** What the project card needs to know about a folder: git state and the remote. */
+export interface FolderGitInfoRequest {
+  type: 'folders:git-info'
+  directory: string
+}
+
+export interface FolderGitInfoResponse {
+  directory: string
+  /** The folder exists on the desktop and is a directory. */
+  exists: boolean
+  isRepo: boolean
+  hasCommits: boolean
+  /** URL of `origin` (or the first remote); null when the repo has none. */
+  remoteUrl: string | null
+  branch: string
+}
+
+/** Creates the GitHub repository for the folder, sets `origin` and pushes. The token never
+ *  leaves the desktop: it comes from the git credential helper or from `gh`. */
+export interface FolderCreateRemoteRequest {
+  type: 'folders:create-remote'
+  directory: string
+  name: string
+  isPrivate: boolean
+}
+
+/** Mirrors CreateRepoResult of the desktop (electron/lib/github-repo.ts). */
+export type FolderCreateRemoteResponse =
+  | { ok: true; url: string; fullName: string; pushed: boolean }
+  | {
+      ok: false
+      kind: 'noCredential'
+      hint: 'ghMissing' | 'ghOther'
+    }
+  | { ok: false; kind: 'auth' | 'nameTaken' | 'invalidName' | 'noCommits' | 'other'; message: string }
+
 // --- Git (branch of the working folder) -------------------------------------
 
 /** Local branches of the working folder + the current one. */
@@ -947,6 +997,9 @@ export type CompanionRequest =
   | ListBranchesRequest
   | CheckoutBranchRequest
   | ListDirsRequest
+  | FolderInitStatusRequest
+  | FolderGitInfoRequest
+  | FolderCreateRemoteRequest
   | ListMemoriesRequest
   | UpdateMemoryRequest
   | DeleteMemoryRequest

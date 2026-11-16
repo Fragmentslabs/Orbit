@@ -1885,5 +1885,67 @@
       "example3Label": "Database",
       "example3Text": "I want to connect a [which] database to Orbit through MCP."
     }
+  },
+  "folderHint": {
+    "hint": "Choose a folder to work in — code mode needs one.",
+    "choose": "Choose",
+    "dismiss": "Dismiss"
+  },
+  "folderChoices": {
+    "known": "KNOWN FOLDERS",
+    "none": "No folder"
+  },
+  "initProject": {
+    "title": "New project",
+    "description": "Orbit can analyze this folder and remember how the project works, so every chat starts with that context.",
+    "analyze": "Analyze project",
+    "later": "Later"
+  },
+  "publishRepo": {
+    "title": "Publish to GitHub",
+    "description": "Creates a GitHub repository for {{path}} on your desktop, sets it as origin and pushes the current branch. The GitHub credential stays on the desktop.",
+    "name": "REPOSITORY NAME",
+    "private": "Private repository",
+    "public": "Public repository",
+    "privateHint": "Only you can see it.",
+    "publicHint": "Anyone on the internet can see it.",
+    "create": "Create repository",
+    "noCredentialMissing": "The desktop has no GitHub credential. Install the GitHub CLI there (brew install gh) and run gh auth login, then try again.",
+    "noCredentialOther": "The desktop has no GitHub credential. Run gh auth login there, then try again.",
+    "errors": {
+      "invalidName": "Use letters, numbers, dots, dashes or underscores (up to 100).",
+      "nameTaken": "You already have a repository with this name.",
+      "auth": "GitHub refused the credential or it cannot create repositories.",
+      "noCommits": "Make at least one commit before publishing.",
+      "other": "Could not create the repository."
+    }
+  },
+  "folders": {
+    "title": "Folders",
+    "subtitle": "Project folders on your desktop",
+    "add": "Add",
+    "search": "Search folders",
+    "count_one": "{{count}} folder",
+    "count_other": "{{count}} folders",
+    "chats_one": "{{count}} chat",
+    "chats_other": "{{count}} chats",
+    "noChats": "No chats yet",
+    "empty": "No folders yet. Add one from your desktop, or start a chat in code mode.",
+    "foot": "Removing a folder only hides it on this phone. Nothing on the desktop is deleted.",
+    "newChat": "New chat in this folder",
+    "analyze": "Analyze project",
+    "publish": "Publish to GitHub",
+    "rename": "Rename",
+    "remove": "Remove from the app",
+    "removeTitle": "Remove folder?",
+    "removeBody": "\"{{name}}\" will disappear from this phone's list. Its files and chats on the desktop stay as they are.",
+    "cancel": "Cancel",
+    "published": "Published as {{name}}",
+    "git": {
+      "missing": "This folder no longer exists on the desktop",
+      "notRepo": "Not a git repository",
+      "noRemote": "no remote",
+      "detached": "detached HEAD"
+    }
   }
 }

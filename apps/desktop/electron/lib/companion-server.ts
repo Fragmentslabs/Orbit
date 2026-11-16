@@ -94,6 +94,9 @@ import {
   rewriteMessages as rewriteMessagesMedia,
 } from './companion-media'
 import { hasUnresolvedPiece, resolvePart, resolvePieceIds } from './companion-pieces'
+import { folderCreateRemote, folderGitInfo, folderInitStatus, type FolderDeps } from './companion-folders'
+import { createRemoteRepo } from './github-repo'
+import { getInitStatus } from './project-init'
 import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
@@ -1230,6 +1233,26 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const full = await getMemoryFull(req.id)
         if (full) sendResponse(ws, requestId, true, full.document)
         else sendResponse(ws, requestId, false, undefined, tNow('companion.server.memoryNotFound'))
+        break
+      }
+
+      case 'folders:init-status':
+      case 'folders:git-info':
+      case 'folders:create-remote': {
+        // Project card of the phone: same checks and the same GitHub flow as the desktop's
+        // card/dialog (init:status, git:createRemoteRepo). See companion-folders.ts.
+        const deps: FolderDeps = { initStatus: getInitStatus, createRemoteRepo }
+        try {
+          const data =
+            req.type === 'folders:init-status'
+              ? await folderInitStatus(req.directory, deps)
+              : req.type === 'folders:git-info'
+                ? await folderGitInfo(req.directory)
+                : await folderCreateRemote(req, deps)
+          sendResponse(ws, requestId, true, data)
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
         break
       }
 
