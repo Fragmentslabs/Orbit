@@ -33,6 +33,7 @@ import { getDesign, resolveDesignFile } from './design/design-store'
 import { getSlides, resolveSlidesFile } from './slides/slides-store'
 import { readWebImage } from './web-images/store'
 import { resolveFontFile } from './fonts/store'
+import { resolveWorkspaceFile } from './companion-files'
 import { isAssetScope, createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { FONT_SCHEME } from '@shared/media'
 
@@ -302,6 +303,12 @@ async function resolveAsset(
       const file = resolveSlidesFile(entry.folder, relative || entryRelative(entry.folder, entry.entry))
       if (!file) return null
       return fileAsset(file, base)
+    }
+
+    case 'workspace': {
+      const file = await resolveWorkspaceFile(id)
+      if (!file) return null
+      return { file, contentType: contentTypeOf(file), cache: CACHE_REWRITABLE }
     }
 
     case 'font': {

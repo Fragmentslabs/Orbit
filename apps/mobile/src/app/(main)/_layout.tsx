@@ -36,6 +36,8 @@ export default function MainLayout() {
               <Stack.Screen name="memories" />
               <Stack.Screen name="media" />
               <Stack.Screen name="sources" />
+              <Stack.Screen name="files/index" />
+              <Stack.Screen name="files/view" />
 
               <Stack.Screen name="routines/index" />
               <Stack.Screen name="routines/new" />

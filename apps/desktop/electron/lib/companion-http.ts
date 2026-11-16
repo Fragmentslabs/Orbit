@@ -34,6 +34,7 @@ import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia, upd
 import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
 import { handleGetDocumentHtml, handleGetDocumentText } from './companion-documents'
+import { handleFilesList, handleFilesRead, handleFilesSearch, handleFilesWrite } from './companion-files-http'
 import { getMotion, registeredMotionUrl } from './video/motion-store'
 import { getDesign } from './design/design-store'
 import { getSlides } from './slides/slides-store'
@@ -1004,6 +1005,10 @@ function createRouter(
     { pattern: /^POST \/api\/voice\/speak$/, paramNames: [], handler: handlePostVoiceSpeak },
     { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
     { pattern: /^POST \/api\/git\/checkout$/, paramNames: [], handler: handlePostCheckout },
+    { pattern: /^POST \/api\/files\/list$/, paramNames: [], handler: handleFilesList },
+    { pattern: /^POST \/api\/files\/read$/, paramNames: [], handler: handleFilesRead },
+    { pattern: /^POST \/api\/files\/write$/, paramNames: [], handler: handleFilesWrite },
+    { pattern: /^POST \/api\/files\/search$/, paramNames: [], handler: handleFilesSearch },
   ]
 
   return async (req: IncomingMessage, res: ServerResponse) => {
