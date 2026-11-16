@@ -529,7 +529,7 @@ export function PromptInput({
   const [liveActive, setLiveActive] = useState(false)
   // Latest text and cursor, readable from the async transcript callback.
   const dictationTextRef = useRef(text)
-  dictationTextRef.current = text
+  useEffect(() => { dictationTextRef.current = text }, [text])
   const selectionRef = useRef<TextSelection | null>(null)
   const insertDictation = useCallback((dictated: string) => {
     if (liveActive) {
