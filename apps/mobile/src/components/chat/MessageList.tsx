@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHand
 import { View, FlatList, Pressable, Keyboard } from 'react-native'
 import { ChevronDown } from 'lucide-react-native'
 import { MessageBubble } from '~/components/chat/MessageBubble'
+import { MessageIdProvider } from '~/components/chat/SearchHighlight'
 import { SummaryCard } from '~/components/chat/SummaryCard'
 import { DateSeparator, isNewDay } from '~/components/chat/DateSeparator'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -24,6 +25,9 @@ interface MessageListProps {
 export interface MessageListHandle {
   scrollToMessageId: (id: string) => void
   scrollToEnd: () => void
+  /** Search support: remember where the user was and go back there when the search closes. */
+  saveScrollPosition: () => void
+  restoreScrollPosition: () => void
 }
 
 // memo: the list cannot re-render when the chat/code mode changes (the
@@ -42,6 +46,8 @@ export const MessageList = memo(
     const pinnedRef = useRef(true)
     /** Last value notified to the parent — avoids a setState per scroll event. */
     const lastAtBottomRef = useRef(true)
+    const scrollOffsetRef = useRef(0)
+    const savedScrollRef = useRef<{ offset: number; atBottom: boolean } | null>(null)
     const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
     useEffect(() => {
@@ -52,6 +58,7 @@ export const MessageList = memo(
 
     const handleScroll = useCallback((event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+      scrollOffsetRef.current = contentOffset.y
       const atBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 60
       setIsAtBottom(atBottom)
       // Going above the limit unanchors; reaching the bottom re-anchors.
@@ -97,6 +104,20 @@ export const MessageList = memo(
           // ignore — item not measured yet, the fallback below covers that case
         }
       },
+      saveScrollPosition: () => {
+        savedScrollRef.current = { offset: scrollOffsetRef.current, atBottom: lastAtBottomRef.current }
+      },
+      restoreScrollPosition: () => {
+        const saved = savedScrollRef.current
+        savedScrollRef.current = null
+        if (!saved) return
+        if (saved.atBottom) {
+          pinnedRef.current = true
+          listRef.current?.scrollToEnd({ animated: true })
+        } else {
+          listRef.current?.scrollToOffset({ offset: saved.offset, animated: true })
+        }
+      },
       scrollToEnd: () => {
         // Re-anchors before scrolling: without this the first scroll event
         // during the animation would unanchor again and the chip would not go away.
@@ -119,13 +140,15 @@ export const MessageList = memo(
           {item.summary ? (
             <SummaryCard message={item} />
           ) : (
-            <MessageBubble
-              message={item}
-              isLast={index === messages.length - 1}
-              isBusy={isStreaming}
-              onRevert={onRevert}
-              onReply={onReply}
-            />
+            <MessageIdProvider id={item.id}>
+              <MessageBubble
+                message={item}
+                isLast={index === messages.length - 1}
+                isBusy={isStreaming}
+                onRevert={onRevert}
+                onReply={onReply}
+              />
+            </MessageIdProvider>
           )}
         </View>
       ),
@@ -161,9 +184,12 @@ export const MessageList = memo(
             }
           }}
           onScrollToIndexFailed={(info) => {
+            // Rows far from the rendered window are not measured: first jump close
+            // by the average height (renders the neighbourhood), then land exactly.
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
             setTimeout(() => {
               listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.35 })
-            }, 100)
+            }, 120)
           }}
         />
 

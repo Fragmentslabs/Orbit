@@ -211,7 +211,10 @@
     "placeholder": "Search this conversation...",
     "of": "{{current}} of {{total}}",
     "noMatches": "No results",
-    "dateFilter": "Jump to a date"
+    "dateFilter": "Jump to a date",
+    "previousMatch": "Previous result",
+    "nextMatch": "Next result",
+    "close": "Close search"
   },
   "dateSeparator": {
     "today": "Today",

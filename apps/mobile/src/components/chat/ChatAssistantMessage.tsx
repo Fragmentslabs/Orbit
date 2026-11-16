@@ -30,6 +30,7 @@ import type {
 } from '@orbit/shared'
 import { MemoryChip } from '~/components/memories/MemoryChip'
 import { AssistantMarkdown } from './AssistantMarkdown'
+import { Highlighted } from './SearchHighlight'
 import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
@@ -154,7 +155,7 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
       {body.trim().length > 0 && (
         <View className="px-4 py-2.5 rounded-2xl rounded-tr-sm" style={{ backgroundColor: tokens.muted }}>
           <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
-            {body}
+            <Highlighted text={body} />
           </Text>
         </View>
       )}

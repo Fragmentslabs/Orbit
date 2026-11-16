@@ -4,6 +4,7 @@ import { parseMemoryHref, parseOrbitUi, type OrbitUiBlock } from '@orbit/shared'
 import { CodeBlock } from '~/components/chat/CodeBlock'
 import { MermaidBlock } from '~/components/chat/MermaidBlock'
 import { OrbitUiBlocks } from '~/components/chat/OrbitUi'
+import { Highlighted } from '~/components/chat/SearchHighlight'
 import { MemoryChip } from '~/components/memories/MemoryChip'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -315,13 +316,13 @@ const InlineText = memo(function InlineText({
           case 'bold':
             return (
               <Text key={i} style={{ color, fontWeight: '700' }}>
-                {seg.text}
+                <Highlighted text={seg.text} />
               </Text>
             )
           case 'italic':
             return (
               <Text key={i} style={{ color, fontStyle: 'italic' }}>
-                {seg.text}
+                <Highlighted text={seg.text} />
               </Text>
             )
           case 'code':
@@ -337,7 +338,7 @@ const InlineText = memo(function InlineText({
                   paddingHorizontal: 4,
                 }}
               >
-                {seg.text}
+                <Highlighted text={seg.text} />
               </Text>
             )
           case 'link': {
@@ -353,7 +354,7 @@ const InlineText = memo(function InlineText({
                 style={{ color: tokens.primary, textDecorationLine: 'underline' }}
                 onPress={() => Linking.openURL(seg.url)}
               >
-                {seg.text}
+                <Highlighted text={seg.text} />
               </Text>
             )
           }
@@ -362,7 +363,7 @@ const InlineText = memo(function InlineText({
           default:
             return (
               <Text key={i} style={{ color }}>
-                {seg.text}
+                <Highlighted text={seg.text} />
               </Text>
             )
         }
