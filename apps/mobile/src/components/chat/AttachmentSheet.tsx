@@ -46,6 +46,7 @@ import { useBottomBreathing } from '~/lib/keyboard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { DirBrowserBody } from './DirBrowserBody'
+import { KnownFolderChoices } from '~/components/folders/KnownFolderChoices'
 import { ModelPickerContent } from './ModelPickerModal'
 
 export type PermissionModeValue = 'ask' | 'approve' | 'full'
@@ -718,6 +719,14 @@ export function AttachmentSheet({
                       </View>
                       <ChevronRight size={16} color={tokens.mutedForeground} />
                     </Pressable>
+
+                    <KnownFolderChoices
+                      current={mainFolder}
+                      onPick={(path) => {
+                        if (path) void saveRecentFolder(path)
+                        onFoldersChange?.(path ? [path, ...extras.filter((f) => f !== path)] : [])
+                      }}
+                    />
 
                     <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
                       {extras.length > 0

@@ -35,6 +35,8 @@ import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
 import { useShallow } from 'zustand/react/shallow'
 import { Storage } from '~/lib/storage'
+import { FolderHintCard } from '~/components/folders/FolderHintCard'
+import { InitProjectCard } from '~/components/folders/InitProjectCard'
 
 /** Shared empty list: stable identity for the footer memo. */
 const EMPTY_ASKS: PendingAsk[] = []
@@ -192,6 +194,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   // sheet on that page (a number, not a boolean, so two taps in a row both arrive).
   const [foldersRequest, setFoldersRequest] = useState(0)
   const openFoldersSheet = useCallback(() => setFoldersRequest((n) => n + 1), [])
+  // The hint card is dismissed per screen visit; choosing a folder makes it go away by itself.
+  const [folderHintDismissed, setFolderHintDismissed] = useState(false)
 
   // Suggestions of the empty state — translated and per mode, as on the desktop
   const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
@@ -630,6 +634,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
         {/* The agent driving the browser/computer on the desktop: opens the live view. */}
         <LiveChips sessionId={sessionId} />
+        {/* Code mode, no folder: says why send is blocked and opens the folder page. With a
+            folder nobody has analyzed, offers /init (same rules as the desktop cards). */}
+        {needsFolder && !folderHintDismissed && (
+          <FolderHintCard onChoose={openFoldersSheet} onDismiss={() => setFolderHintDismissed(true)} />
+        )}
+        {isCode && folders[0] && activeMessages.length === 0 && (
+          <InitProjectCard directory={folders[0]} sessionId={sessionId} />
+        )}
 
         <ChatInput
           onSend={handleSend}

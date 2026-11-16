@@ -2063,5 +2063,67 @@
     "captureFailed": "O desktop não conseguiu capturar o painel — ele pode estar oculto.",
     "feed": "Ações",
     "feedEmpty": "Nenhuma ação ainda."
+  },
+  "folderHint": {
+    "hint": "Escolha uma pasta para trabalhar — o modo código precisa de uma.",
+    "choose": "Escolher",
+    "dismiss": "Dispensar"
+  },
+  "folderChoices": {
+    "known": "PASTAS CONHECIDAS",
+    "none": "Sem pasta"
+  },
+  "initProject": {
+    "title": "Projeto novo",
+    "description": "O Orbit pode analisar esta pasta e lembrar como o projeto funciona, para que cada conversa comece com esse contexto.",
+    "analyze": "Analisar projeto",
+    "later": "Depois"
+  },
+  "publishRepo": {
+    "title": "Publicar no GitHub",
+    "description": "Cria um repositório no GitHub para {{path}} no seu desktop, define como origin e envia a branch atual. A credencial do GitHub fica no desktop.",
+    "name": "NOME DO REPOSITÓRIO",
+    "private": "Repositório privado",
+    "public": "Repositório público",
+    "privateHint": "Só você pode ver.",
+    "publicHint": "Qualquer pessoa na internet pode ver.",
+    "create": "Criar repositório",
+    "noCredentialMissing": "O desktop não tem credencial do GitHub. Instale o GitHub CLI nele (brew install gh) e rode gh auth login; depois tente de novo.",
+    "noCredentialOther": "O desktop não tem credencial do GitHub. Rode gh auth login nele e tente de novo.",
+    "errors": {
+      "invalidName": "Use letras, números, pontos, hífens ou underscores (até 100).",
+      "nameTaken": "Você já tem um repositório com esse nome.",
+      "auth": "O GitHub recusou a credencial ou ela não pode criar repositórios.",
+      "noCommits": "Faça pelo menos um commit antes de publicar.",
+      "other": "Não foi possível criar o repositório."
+    }
+  },
+  "folders": {
+    "title": "Pastas",
+    "subtitle": "Pastas de projeto no seu desktop",
+    "add": "Adicionar",
+    "search": "Buscar pastas",
+    "count_one": "{{count}} pasta",
+    "count_other": "{{count}} pastas",
+    "chats_one": "{{count}} conversa",
+    "chats_other": "{{count}} conversas",
+    "noChats": "Nenhuma conversa ainda",
+    "empty": "Nenhuma pasta ainda. Adicione uma do seu desktop ou comece uma conversa no modo código.",
+    "foot": "Remover uma pasta só a esconde neste celular. Nada é apagado no desktop.",
+    "newChat": "Nova conversa nesta pasta",
+    "analyze": "Analisar projeto",
+    "publish": "Publicar no GitHub",
+    "rename": "Renomear",
+    "remove": "Remover do app",
+    "removeTitle": "Remover pasta?",
+    "removeBody": "\"{{name}}\" vai sumir da lista deste celular. Os arquivos e as conversas no desktop continuam como estão.",
+    "cancel": "Cancelar",
+    "published": "Publicado como {{name}}",
+    "git": {
+      "missing": "Esta pasta não existe mais no desktop",
+      "notRepo": "Não é um repositório git",
+      "noRemote": "sem remote",
+      "detached": "HEAD solto"
+    }
   }
 }

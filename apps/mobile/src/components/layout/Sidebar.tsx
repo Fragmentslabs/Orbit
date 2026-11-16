@@ -23,6 +23,7 @@ import {
   LogOut,
   Plus,
   Folder,
+  FolderOpen,
   Loader2,
   Check,
   Square,
@@ -424,6 +425,7 @@ export function Sidebar() {
     { label: t('sidebar.usage'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.media'), icon: Images, view: 'media' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
+    { label: t('sidebar.folders'), icon: FolderOpen, view: 'folders', codeOnly: true },
   ]
 
   const footerItems: NavItem[] = [
