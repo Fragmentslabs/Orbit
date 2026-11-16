@@ -528,8 +528,8 @@ export function PromptInput({
   // `liveActive` is state (and not a ref) because the banner and the icons render it.
   const [liveActive, setLiveActive] = useState(false)
   // Latest text and cursor, readable from the async transcript callback.
-  const textRef = useRef(text)
-  textRef.current = text
+  const dictationTextRef = useRef(text)
+  dictationTextRef.current = text
   const selectionRef = useRef<TextSelection | null>(null)
   const insertDictation = useCallback((dictated: string) => {
     if (liveActive) {
@@ -538,8 +538,8 @@ export function PromptInput({
       return
     }
     // At the cursor (or over the selection), never over what was typed while it transcribed.
-    const result = insertTranscript(textRef.current, dictated, selectionRef.current)
-    textRef.current = result.text
+    const result = insertTranscript(dictationTextRef.current, dictated, selectionRef.current)
+    dictationTextRef.current = result.text
     selectionRef.current = { start: result.cursor, end: result.cursor }
     setText(result.text)
     inputRef.current?.focus()
