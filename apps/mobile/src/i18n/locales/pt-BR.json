@@ -1885,5 +1885,26 @@
       "example3Label": "Banco de dados",
       "example3Text": "Quero conectar um banco [qual banco] ao Orbit por MCP."
     }
+  },
+  "live": {
+    "back": "Voltar",
+    "browserTitle": "Navegador",
+    "computerTitle": "Controlando {{app}}",
+    "chipBrowser": "Navegador · {{host}}",
+    "chipComputer": "Controlando {{app}}",
+    "stop": "Parar",
+    "cancel": "Cancelar",
+    "stopTitle": "Parar o agente?",
+    "stopBrowser": "Isso aborta o turno atual no desktop, igual ao Parar do chat.",
+    "stopComputer": "Isso encerra o controle do computador e aborta o turno atual no desktop.",
+    "frameAlt": "Visão ao vivo do que o agente está fazendo",
+    "waiting": "Aguardando a próxima ação…",
+    "ended": "Encerrado",
+    "closed": "O painel foi fechado no desktop.",
+    "offline": "Sem conexão com o desktop — tentando de novo…",
+    "noFrame": "O painel ainda não tem nada para mostrar.",
+    "captureFailed": "O desktop não conseguiu capturar o painel — ele pode estar oculto.",
+    "feed": "Ações",
+    "feedEmpty": "Nenhuma ação ainda."
   }
 }

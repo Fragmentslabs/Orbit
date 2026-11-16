@@ -12,6 +12,7 @@ import type {
   WorkerConfigSnapshot,
   ReasoningPrefsMap,
   MessageQueueChangeEvent,
+  LiveEventMessage,
 } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
@@ -27,6 +28,7 @@ import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-syn
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { usePipelineStore } from '~/stores/pipeline-store'
+import { useLiveStore } from '~/stores/live-store'
 
 /**
  * Hook that orchestrates the WS + HTTP connection with the desktop.
@@ -236,7 +238,14 @@ export function useCompanion() {
       }
     })
 
+    // live:event → browser/computer live view (chip + live screen)
+    const unsubLive = conn.onEvent('live:event', (event) => {
+      const msg = event as LiveEventMessage
+      if (msg?.state) useLiveStore.getState().applyEvent(msg.state)
+    })
+
     return () => {
+      unsubLive()
       unsubChat()
       unsubModels()
       unsubRotation()

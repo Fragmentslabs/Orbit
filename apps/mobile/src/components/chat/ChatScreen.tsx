@@ -25,6 +25,7 @@ import { VisionHintCard } from '~/components/chat/VisionHintCard'
 import { Suggestions } from '~/components/chat/Suggestion'
 import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
+import { LiveChips } from '~/components/chat/LiveChip'
 import { useDraftFolders } from '~/stores/draft-folders-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { useBottomBreathing } from '~/lib/keyboard'
@@ -626,6 +627,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
             It stays in the band because it also exists without a conversation (image pending on
             the initial screen, where there is no list to enter). */}
         {sessionId && <VisionHintCard sessionId={sessionId} />}
+
+        {/* The agent driving the browser/computer on the desktop: opens the live view. */}
+        <LiveChips sessionId={sessionId} />
 
         <ChatInput
           onSend={handleSend}

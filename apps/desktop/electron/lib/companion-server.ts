@@ -53,6 +53,8 @@ import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, Send
 import type { RoutineEvent } from '@shared/routines'
 import { setArchivedState } from '@shared/archive'
 import type { PipelineEvent } from '@shared/pipeline'
+import type { LiveState } from '@shared/live'
+import { startCompanionLive } from './companion-live'
 import { StorageKeys, normalizeOrchestrationPlan } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
@@ -1861,6 +1863,14 @@ export function forwardMemoryEvent(event: MemoryEvent): void {
   }
 }
 
+/** Browser/computer live view: a small state push; the phone pulls the frame over HTTP. */
+function forwardLiveState(state: LiveState): void {
+  for (const client of clients) {
+    if (!client.authenticated || !receivesWorkEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'live:event', state } as CompanionEvent))
+  }
+}
+
 /** Relays a PipelineEvent to every authenticated companion. */
 export function forwardPipelineEvent(event: PipelineEvent): void {
   for (const client of clients) {
@@ -2091,6 +2101,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
 
   // Starts the REST HTTP server along with the WS
   startCompanionHttpServer(validatePin, getPairingPin, validateDeviceToken)
+  startCompanionLive(forwardLiveState)
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const client: ConnectedClient = {

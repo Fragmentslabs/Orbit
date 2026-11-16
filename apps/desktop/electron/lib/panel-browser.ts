@@ -50,6 +50,27 @@ export class PanelCaptureError extends Error {
 const panelWcs = new Map<string, number>()
 
 /**
+ * Observers of the panel browser for the phone's live view (companion-live.ts). It is a
+ * listener list, not an import, so this module stays free of the companion code.
+ */
+export type PanelLiveEvent =
+  | { type: 'registered' | 'unregistered'; sessionId: string }
+  | { type: 'activity'; sessionId: string; label: string }
+  | { type: 'screenshot'; sessionId: string; data: Buffer }
+const panelLiveListeners = new Set<(event: PanelLiveEvent) => void>()
+export function onPanelLive(listener: (event: PanelLiveEvent) => void): () => void {
+  panelLiveListeners.add(listener)
+  return () => panelLiveListeners.delete(listener)
+}
+function emitPanelLive(event: PanelLiveEvent): void {
+  for (const listener of panelLiveListeners) listener(event)
+}
+/** The session's panel webContents, or null when the panel is closed (read-only access for the live view). */
+export function panelLiveWebContents(sessionId: string): WebContents | null {
+  return getWc(sessionId)
+}
+
+/**
  * Last viewport requested by the agent (panel_resize). The renderer applies it to the
  * webview's hidden host; here it serves so that the FALLBACK captures in the hidden
  * window (captureUrl) come out in the SAME size — without this, a mobile screenshot
@@ -87,9 +108,11 @@ export function registerPanelWebContents(sessionId: string | null, id: number | 
   if (!sessionId) return
   if (id == null) {
     panelWcs.delete(sessionId)
+    emitPanelLive({ type: 'unregistered', sessionId })
     return
   }
   panelWcs.set(sessionId, id)
+  emitPanelLive({ type: 'registered', sessionId })
   const wc = webContents.fromId(id)
   if (!wc || wc.isDestroyed()) return
   const known = consoleOwners.has(id)
@@ -111,6 +134,7 @@ export function unregisterPanelWebContents(sessionId: string | null, id: number 
   if (!sessionId || id == null) return
   if (panelWcs.get(sessionId) !== id) return
   panelWcs.delete(sessionId)
+  emitPanelLive({ type: 'unregistered', sessionId })
   consoleOwners.delete(id)
 }
 
@@ -170,6 +194,7 @@ function broadcastPanelEvent(event: PanelEvent): void {
  */
 function activity(label: string, sessionId?: string): void {
   broadcastPanelEvent({ type: 'activity', label, sessionId })
+  if (sessionId) emitPanelLive({ type: 'activity', sessionId, label })
 }
 
 /** Same feed, for whoever captures outside the panel (hidden script engine). */
@@ -461,11 +486,15 @@ export async function panelScreenshot(
     )
   }
 
-  if (!fullscreen) return capture(1024)
+  const noteShot = (data: Buffer): Buffer => {
+    emitPanelLive({ type: 'screenshot', sessionId, data })
+    return data
+  }
+  if (!fullscreen) return noteShot(await capture(1024))
   await panelFullscreen(true)
   try {
     await delay(300)
-    return capture(1440)
+    return noteShot(await capture(1440))
   } finally {
     await panelFullscreen(false)
   }

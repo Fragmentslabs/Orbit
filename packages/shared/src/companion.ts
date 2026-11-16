@@ -9,6 +9,7 @@ import type { VoiceEngineId, VoiceEngineStatus } from './voice'
 import type { AnalyticsRange, UsageSummaryRequest } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type { MemoryEvent } from './memory'
+import type { LiveEventMessage } from './live'
 import type {
   NewPipelineInput,
   PlannedTask,
@@ -1087,6 +1088,7 @@ export interface StatusUpdate {
 }
 
 export type CompanionEvent =
+  | LiveEventMessage
   | AuthOkResponse
   | AuthErrorResponse
   | ApiResponse

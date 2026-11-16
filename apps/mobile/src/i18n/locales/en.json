@@ -1885,5 +1885,26 @@
       "example3Label": "Database",
       "example3Text": "I want to connect a [which] database to Orbit through MCP."
     }
+  },
+  "live": {
+    "back": "Back",
+    "browserTitle": "Browser",
+    "computerTitle": "Controlling {{app}}",
+    "chipBrowser": "Browser · {{host}}",
+    "chipComputer": "Controlling {{app}}",
+    "stop": "Stop",
+    "cancel": "Cancel",
+    "stopTitle": "Stop the agent?",
+    "stopBrowser": "This aborts the current turn on the desktop, the same as Stop in the chat.",
+    "stopComputer": "This ends the computer control and aborts the current turn on the desktop.",
+    "frameAlt": "Live view of what the agent is doing",
+    "waiting": "Waiting for the next action…",
+    "ended": "Finished",
+    "closed": "The panel was closed on the desktop.",
+    "offline": "Can't reach the desktop — retrying…",
+    "noFrame": "The panel has nothing to show yet.",
+    "captureFailed": "The desktop could not capture the panel — it may be hidden.",
+    "feed": "Actions",
+    "feedEmpty": "No actions yet."
   }
 }

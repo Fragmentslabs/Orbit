@@ -186,4 +186,4 @@ export async function disposeComputerUse(): Promise<void> {
 }
 
 export { ComputerError } from './types'
-export { stopComputer, getComputerActivity, setComputerStopHandler, endActivity, markOverlaySession } from './session'
+export { onComputerEvent, stopComputer, getComputerActivity, setComputerStopHandler, endActivity, markOverlaySession } from './session'

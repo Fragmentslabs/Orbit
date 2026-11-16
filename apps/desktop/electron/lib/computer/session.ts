@@ -55,8 +55,16 @@ export function setComputerRestoreHandler(handler: (pids: number[]) => Promise<v
   restoreHandler = handler
 }
 
+/** Observers of the control state for the phone's live view (companion-live.ts). */
+const computerListeners = new Set<(event: ComputerEvent) => void>()
+export function onComputerEvent(listener: (event: ComputerEvent) => void): () => void {
+  computerListeners.add(listener)
+  return () => computerListeners.delete(listener)
+}
+
 // It also goes to the panels window (it shows the app being controlled).
 function broadcast(event: ComputerEvent): void {
+  for (const listener of computerListeners) listener(event)
   for (const win of BrowserWindow.getAllWindows()) {
     if (win !== overlay && !win.isDestroyed()) win.webContents.send('computer:event', event)
   }

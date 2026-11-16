@@ -7,6 +7,9 @@
 
 import type { ConnectionConfig } from './types'
 import type {
+  LiveFrameResponse,
+  LiveKind,
+  LiveListResponse,
   MediaEntry,
   MediaUsage,
   ReasoningPrefsMap,
@@ -263,6 +266,22 @@ export class CompanionHttp {
 
   async deleteManyMedia(ids: string[]): Promise<HttpResult<{ removed: number }>> {
     return this.request('POST', '/api/media/delete', { ids })
+  }
+
+  // ─── Live view (browser / computer panels) ───────────────────────────────
+
+  async liveList(): Promise<HttpResult<LiveListResponse>> {
+    return this.get('/api/live')
+  }
+
+  /** `since` = the revision the phone already shows; the desktop answers `unchanged` without encoding. */
+  async liveFrame(sessionId: string, kind: LiveKind, since?: number): Promise<HttpResult<LiveFrameResponse>> {
+    const q = `sessionId=${encodeURIComponent(sessionId)}&kind=${kind}${since ? `&since=${since}` : ''}`
+    return this.get(`/api/live/frame?${q}`)
+  }
+
+  async liveStop(sessionId: string, kind: LiveKind): Promise<HttpResult<{ stopped: boolean }>> {
+    return this.request('POST', '/api/live/stop', { sessionId, kind })
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────
