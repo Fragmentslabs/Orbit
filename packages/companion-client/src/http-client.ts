@@ -21,6 +21,17 @@ import type {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** A document as the desktop viewer reads it: pages of lines (the same numbering a citation uses). */
+export interface DocumentTextView {
+  id: string
+  filename: string
+  kind: 'pdf' | 'docx' | 'spreadsheet' | 'text' | 'web'
+  totalPages: number
+  pages: { num: number; label?: string; lines: string[] }[]
+  hasOriginal: boolean
+  originalKind?: 'pdf' | 'docx'
+}
+
 export interface HttpResult<T = unknown> {
   ok: boolean
   data?: T
@@ -110,6 +121,19 @@ export class CompanionHttp {
    *  through the WS event 'rotation:change'. */
   async getReasoningPrefs(): Promise<HttpResult<{ prefs: ReasoningPrefsMap }>> {
     return this.get('/api/reasoning-prefs')
+  }
+
+  /** A document's pages as numbered-line text — a conversation source (`docN`/`srcN`, needs the
+   *  session) or a gallery document. The desktop panel's `docs:text`. */
+  async getDocumentText(docId: string, sessionId?: string): Promise<HttpResult<DocumentTextView>> {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
+    return this.get(`/api/documents/${encodeURIComponent(docId)}/text${query}`)
+  }
+
+  /** The .docx original converted to HTML (the desktop panel's `docs:html`). */
+  async getDocumentHtml(docId: string, sessionId?: string): Promise<HttpResult<{ html: string }>> {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
+    return this.get(`/api/documents/${encodeURIComponent(docId)}/html${query}`)
   }
 
   /** Global config of the delegated modes (model/thinking of the subagent and

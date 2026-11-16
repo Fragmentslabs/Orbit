@@ -1885,5 +1885,40 @@
       "example3Label": "Database",
       "example3Text": "I want to connect a [which] database to Orbit through MCP."
     }
+  },
+  "docViewer": {
+    "open": "Read",
+    "openLabel": "Open in the document viewer",
+    "title": "Document",
+    "close": "Close document",
+    "share": "Share",
+    "shareFailed": "Could not share the document",
+    "find": "Find in document",
+    "findPlaceholder": "Find…",
+    "findNone": "No matches",
+    "findPrev": "Previous match",
+    "findNext": "Next match",
+    "findClose": "Close search",
+    "outline": "Outline",
+    "outlineEmpty": "This document has no headings",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "loading": "Loading document…",
+    "error": "Could not load the document",
+    "notFound": "This source is no longer available",
+    "page": "Page {{n}}",
+    "sheet": "Sheet {{name}}",
+    "block": "Section {{n}}",
+    "citedLines": "Lines {{from}}–{{to}} cited",
+    "citedLine": "Line {{n}} cited",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "spreadsheet": "Sheet",
+      "text": "Text",
+      "web": "Web",
+      "document": "Document"
+    },
+    "cite": "Open source {{id}}"
   }
 }

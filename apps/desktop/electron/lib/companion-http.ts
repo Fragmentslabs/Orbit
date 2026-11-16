@@ -32,6 +32,7 @@ import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia, updateMediaEntry } from './media'
 import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
+import { handleGetDocumentHtml, handleGetDocumentText } from './companion-documents'
 import { getMotion, registeredMotionUrl } from './video/motion-store'
 import { getDesign } from './design/design-store'
 import { getSlides } from './slides/slides-store'
@@ -948,6 +949,8 @@ function createRouter(
     { pattern: /^GET \/api\/session-prefs$/, paramNames: [], handler: handleGetSessionPrefs },
     { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
+    { pattern: /^GET \/api\/documents\/([^/]+)\/text$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentText(r, s, id, jsonResponse) },
+    { pattern: /^GET \/api\/documents\/([^/]+)\/html$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentHtml(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
     { pattern: /^GET \/api\/voice\/status$/, paramNames: [], handler: handleGetVoiceStatus },
 

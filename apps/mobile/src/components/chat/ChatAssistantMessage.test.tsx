@@ -110,6 +110,7 @@ vi.mock('lucide-react-native', async () => {
     ChevronRight: Icon,
     Download: Icon,
     ExternalLink: Icon,
+    BookOpen: Icon,
     Eye: Icon,
     Globe: Icon,
     Link: Icon,
