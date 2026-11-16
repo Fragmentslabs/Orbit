@@ -16,6 +16,8 @@ import { InputAttachment } from './Attachment'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
 import { useDictation } from '~/hooks/useDictation'
+import { DictationWave } from './DictationWave'
+import { insertTranscript, type TextSelection } from '~/lib/dictation-logic'
 import { useChatModes } from '~/hooks/useChatModes'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
 import { uriToFilePart } from '~/lib/attachments'
@@ -525,14 +527,29 @@ export function PromptInput({
   // already goes as a message (marked as a call, so the answer comes back speakable).
   // `liveActive` is state (and not a ref) because the banner and the icons render it.
   const [liveActive, setLiveActive] = useState(false)
+  // Latest text and cursor, readable from the async transcript callback.
+  const dictationTextRef = useRef(text)
+  useEffect(() => { dictationTextRef.current = text }, [text])
+  const selectionRef = useRef<TextSelection | null>(null)
   const insertDictation = useCallback((dictated: string) => {
     if (liveActive) {
       setLiveActive(false)
       submitText(dictated, true)
       return
     }
-    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${dictated}` : dictated))
+    // At the cursor (or over the selection), never over what was typed while it transcribed.
+    const result = insertTranscript(dictationTextRef.current, dictated, selectionRef.current)
+    dictationTextRef.current = result.text
+    selectionRef.current = { start: result.cursor, end: result.cursor }
+    setText(result.text)
     inputRef.current?.focus()
+    requestAnimationFrame(() => {
+      try {
+        inputRef.current?.setNativeProps({ selection: selectionRef.current })
+      } catch {
+        /* the cursor simply stays where the platform put it */
+      }
+    })
   }, [liveActive, submitText])
   const dictation = useDictation(insertDictation)
 
@@ -634,9 +651,22 @@ export function PromptInput({
       {dictation.recording && (
         <View className="flex-row items-center gap-2 mb-1.5">
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
-          <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
-            {t(liveActive ? 'promptInput.voice.live' : 'promptInput.voice.recording')}
-          </Text>
+          {liveActive && (
+            <Text className="text-xs" numberOfLines={1} style={{ color: tokens.mutedForeground, flexShrink: 1 }}>
+              {t('promptInput.voice.live')}
+            </Text>
+          )}
+          <View style={{ flex: 1 }}>
+            <DictationWave levels={dictation.levels} color={tokens.mutedForeground} />
+          </View>
+          <TouchableOpacity
+            onPress={() => { setLiveActive(false); dictation.cancel() }}
+            activeOpacity={0.7}
+            hitSlop={8}
+            accessibilityLabel={t('promptInput.voice.cancel')}
+          >
+            <X size={16} color={tokens.mutedForeground} />
+          </TouchableOpacity>
         </View>
       )}
       {dictation.error && (
@@ -685,6 +715,7 @@ export function PromptInput({
               ref={inputRef}
               value={text}
               onChangeText={setText}
+              onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection }}
               placeholder={t('promptInput.placeholder')}
               placeholderTextColor={tokens.mutedForeground}
               multiline

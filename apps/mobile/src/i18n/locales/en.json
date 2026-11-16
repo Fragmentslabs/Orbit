@@ -223,6 +223,7 @@
     "voice": {
       "record": "Dictate",
       "stop": "Stop recording",
+      "cancel": "Discard recording",
       "recording": "Recording… tap the microphone to stop and transcribe",
       "permission": "Allow microphone access to dictate",
       "unsupported": "Dictation is not available on this device",
