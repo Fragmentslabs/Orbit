@@ -59,7 +59,6 @@ export const ChatHeader = memo(function ChatHeader({
   const router = useRouter()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const [menuOpen, setMenuOpen] = useState(false)
-  const router = useRouter()
   const [branch, setBranch] = useState<string | null>(null)
   const folderList = folders ?? NO_FOLDERS
   const directory = folderList[0]

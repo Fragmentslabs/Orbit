@@ -16,7 +16,8 @@ import {
   outdent,
   parentPath,
   stepIndex,
-} from './files'
+ splitTokensByLine } from './files'
+
 
 describe('names', () => {
   it('reads extensions, dotfiles included', () => {
@@ -102,8 +103,6 @@ describe('editor edits', () => {
     expect(autoIndentNewline('a', 'ab', 2)).toBeNull()
   })
 })
-
-import { splitTokensByLine } from './files'
 
 describe('splitTokensByLine', () => {
   it('splits multi-line tokens and keeps colors', () => {

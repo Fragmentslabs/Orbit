@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LiveState } from '@orbit/shared'
 
+import { selectActiveSurfaces, useLiveStore } from './live-store'
+
 const http = { liveList: vi.fn(), liveFrame: vi.fn(), liveStop: vi.fn() }
 vi.mock('./connection-store', () => ({ useConnectionStore: { getState: () => ({ http }) } }))
-
-import { selectActiveSurfaces, useLiveStore } from './live-store'
 
 const st = (over: Partial<LiveState> = {}): LiveState => ({
   sessionId: 's1', kind: 'browser', active: true, url: 'https://a.com', title: 'A', app: null,
