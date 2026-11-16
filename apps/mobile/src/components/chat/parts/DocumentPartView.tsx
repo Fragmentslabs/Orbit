@@ -17,12 +17,13 @@ import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native
 import * as WebBrowser from 'expo-web-browser'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
-import { Download, ExternalLink } from 'lucide-react-native'
+import { BookOpen, Download, ExternalLink } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { DocumentPart } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { PieceView } from '../PieceView'
+import { useDocumentViewerStore } from '~/stores/document-viewer-store'
 
 /** Safe file name from the title — the share sheet uses the name. */
 function fileNameFor(part: DocumentPart): string {
@@ -39,6 +40,17 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [busy, setBusy] = useState<'open' | 'share' | null>(null)
   const [error, setError] = useState(false)
+  const openViewer = useDocumentViewerStore((s) => s.open)
+  const read = useCallback(() => {
+    if (!part.previewSrc) return
+    openViewer({
+      kind: 'part',
+      title: part.title,
+      src: part.previewSrc,
+      documentId: part.documentId,
+      revision: part.revision,
+    })
+  }, [openViewer, part])
 
   const open = useCallback(async () => {
     if (!part.previewSrc) return
@@ -91,6 +103,20 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
       style={{ borderTopWidth: 1, borderTopColor: tokens.border }}
     >
       <Pressable
+        onPress={read}
+        disabled={!part.previewSrc}
+        accessibilityRole="button"
+        accessibilityLabel={t('docViewer.openLabel')}
+        className="flex-row items-center gap-1.5 rounded-md px-2 py-1.5"
+        style={{ backgroundColor: tokens.primary }}
+      >
+        <BookOpen size={13} color={tokens.primaryForeground} />
+        <Text className="text-xs font-medium" style={{ color: tokens.primaryForeground }}>
+          {t('docViewer.open')}
+        </Text>
+      </Pressable>
+
+      <Pressable
         onPress={open}
         disabled={busy !== null || !part.previewSrc}
         accessibilityRole="button"
@@ -142,6 +168,7 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
       revision={part.revision}
       height={360}
       footer={footer}
+      onExpand={read}
       emptyLabel={t('parts.document.empty')}
       loadingLabel={t('parts.document.loading')}
       errorLabel={t('parts.document.error')}

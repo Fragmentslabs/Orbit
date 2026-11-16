@@ -1885,5 +1885,40 @@
       "example3Label": "Banco de dados",
       "example3Text": "Quero conectar um banco [qual banco] ao Orbit por MCP."
     }
+  },
+  "docViewer": {
+    "open": "Ler",
+    "openLabel": "Abrir no visualizador de documentos",
+    "title": "Documento",
+    "close": "Fechar documento",
+    "share": "Compartilhar",
+    "shareFailed": "Não foi possível compartilhar o documento",
+    "find": "Buscar no documento",
+    "findPlaceholder": "Buscar…",
+    "findNone": "Nenhum resultado",
+    "findPrev": "Resultado anterior",
+    "findNext": "Próximo resultado",
+    "findClose": "Fechar busca",
+    "outline": "Sumário",
+    "outlineEmpty": "Este documento não tem títulos",
+    "zoomIn": "Aumentar",
+    "zoomOut": "Diminuir",
+    "loading": "Carregando documento…",
+    "error": "Não foi possível carregar o documento",
+    "notFound": "Esta fonte não está mais disponível",
+    "page": "Página {{n}}",
+    "sheet": "Planilha {{name}}",
+    "block": "Seção {{n}}",
+    "citedLines": "Linhas {{from}}–{{to}} citadas",
+    "citedLine": "Linha {{n}} citada",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "spreadsheet": "Planilha",
+      "text": "Texto",
+      "web": "Web",
+      "document": "Documento"
+    },
+    "cite": "Abrir fonte {{id}}"
   }
 }

@@ -5,6 +5,8 @@ import { CodeBlock } from '~/components/chat/CodeBlock'
 import { MermaidBlock } from '~/components/chat/MermaidBlock'
 import { OrbitUiBlocks } from '~/components/chat/OrbitUi'
 import { MemoryChip } from '~/components/memories/MemoryChip'
+import { SourceChip } from '~/components/documents/SourceChip'
+import { parseSourceHref, rescueLegacyCitations } from '~/lib/document-source'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -347,6 +349,19 @@ const InlineText = memo(function InlineText({
             if (memoryId) {
               return <MemoryChip key={i} memoryId={memoryId} label={seg.text} size={size} />
             }
+            // Document citation: opens the viewer at the cited page and lines.
+            const sourceRef = parseSourceHref(seg.url)
+            if (sourceRef) {
+              return <SourceChip key={i} source={sourceRef} label={seg.text} size={size} />
+            }
+            // Shaped like a citation but pointing nowhere (an invented id): text, not a dead tap.
+            if (seg.url.startsWith('#orbit-source/')) {
+              return (
+                <Text key={i} style={{ color }}>
+                  {seg.text}
+                </Text>
+              )
+            }
             return (
               <Text
                 key={i}
@@ -415,7 +430,7 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const bodyColor = muted ? tokens.mutedForeground : tokens.foreground
   const blocks = useMemo(() => {
-    const source = streaming ? stabilizeMarkdown(text) : text
+    const source = rescueLegacyCitations(streaming ? stabilizeMarkdown(text) : text)
     return parseMarkdown(source)
   }, [text, streaming])
 

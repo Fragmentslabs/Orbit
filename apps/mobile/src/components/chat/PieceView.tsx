@@ -91,6 +91,8 @@ export interface PieceViewProps {
    * (inline or full screen), so a seek never lands in a hidden WebView.
    */
   onReady?: (inject: (js: string) => void) => void
+  /** Replaces the built-in full screen: the expand button hands the piece to a viewer of its own. */
+  onExpand?: () => void
 }
 
 type LoadState = 'loading' | 'ready' | 'error'
@@ -111,6 +113,7 @@ export function PieceView({
   onError,
   onMessage,
   onReady,
+  onExpand,
 }: PieceViewProps) {
   const { t } = useTranslation()
   const resolved = useThemeStore((s) => s.resolved)
@@ -316,7 +319,7 @@ export function PieceView({
           </Text>
           {expandable ? (
             <Pressable
-              onPress={() => setFullscreen(true)}
+              onPress={() => (onExpand ? onExpand() : setFullscreen(true))}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={t('parts.preview.expand')}

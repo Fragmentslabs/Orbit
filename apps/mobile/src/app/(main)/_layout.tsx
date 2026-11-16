@@ -4,6 +4,7 @@ import { GestureDetector } from 'react-native-gesture-handler'
 import { Sidebar } from '~/components/layout/Sidebar'
 import { RightPanel } from '~/components/chat/RightPanel'
 import { MemorySheet } from '~/components/memories/MemorySheet'
+import { DocumentViewerHost } from '~/components/documents/DocumentViewerHost'
 import { useBreakpoint } from '~/components/layout/ResponsiveContainer'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSidebarSwipe } from '~/components/layout/useSidebarSwipe'
@@ -75,6 +76,8 @@ export default function MainLayout() {
             lived inside the ChatScreen, a chip on the Memories screen would open
             nothing; two mounted copies would give two modals for the same state. */}
         <MemorySheet />
+        {/* The document viewer, for the same reason: cards and citations only name the document. */}
+        <DocumentViewerHost />
       </View>
     </GestureDetector>
   )
