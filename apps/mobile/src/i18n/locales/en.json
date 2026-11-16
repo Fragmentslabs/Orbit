@@ -1752,7 +1752,14 @@
     "menuWith": "Branch: {{branch}}",
     "none": "No local branches.",
     "loadError": "Could not read the branches.",
-    "switchError": "Could not switch branch."
+    "switchError": "Could not switch branch.",
+    "newBranch": "New branch…",
+    "newPlaceholder": "branch-name",
+    "create": "Create",
+    "switch": "Switch",
+    "confirmTitle": "Switch to {{branch}}?",
+    "confirmDirty": "{{count}} file(s) have uncommitted changes. If they conflict with the other branch, git will refuse to switch.",
+    "createError": "Could not create the branch."
   },
   "chatSearchScreen": {
     "placeholder": "Search conversations…",
@@ -1966,5 +1973,15 @@
       "text": "Text",
       "web": "Website"
     }
+  },
+  "changes": {
+    "menu": "Changes",
+    "title": "Changes",
+    "refresh": "Refresh",
+    "allChanges": "All changes ({{count}})",
+    "empty": "No changes in this folder.",
+    "binary": "Binary file",
+    "noTextChanges": "No text changes (mode or rename only).",
+    "truncated": "The diff is too large; showing only the first part."
   }
 }

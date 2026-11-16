@@ -355,7 +355,7 @@ function classifyGitStatus(code: string): GitStatusEntry['status'] {
 }
 
 /** Lists the files changed in the working tree (`git status` style). */
-async function getGitStatus(
+export async function getGitStatus(
   repoPath: string,
 ): Promise<{ ok: true; entries: GitStatusEntry[] } | { ok: false; error: string }> {
   try {
@@ -394,7 +394,7 @@ async function getGitStatus(
  * not exist in any git tree, so there is nothing to compare them with — for
  * them the list shows only the status indicator.
  */
-async function getWorkingNumstat(
+export async function getWorkingNumstat(
   repoPath: string,
 ): Promise<
   | { ok: true; stats: Record<string, { added: number; deleted: number }> }
@@ -469,7 +469,7 @@ async function getWorkingNumstat(
  * HEAD does not see them, and without them the stacked view would end up with
  * holes that the list beside it announces.
  */
-async function getWorkingDiff(
+export async function getWorkingDiff(
   repoPath: string,
 ): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {
   try {
@@ -505,7 +505,7 @@ async function getWorkingDiff(
 }
 
 /** Working tree diff against HEAD for one file (unified patch). */
-async function getWorkingFileDiff(
+export async function getWorkingFileDiff(
   repoPath: string,
   relPath: string,
 ): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {

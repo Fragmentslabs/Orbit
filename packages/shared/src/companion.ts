@@ -644,6 +644,50 @@ export interface CheckoutBranchRequest {
   branch: string
 }
 
+/** Status of a changed file in the working tree (`git status`). */
+export type GitChangeStatus = 'added' | 'modified' | 'deleted' | 'untracked' | 'renamed'
+
+export interface GitChangedFile {
+  /** Path relative to the repo ('/' separator). */
+  path: string
+  status: GitChangeStatus
+  /** Lines added/removed against HEAD. Absent for binary files. */
+  added?: number
+  deleted?: number
+}
+
+/** Changed files of the working folder, with the +/- counts of the desktop's Changes view. */
+export interface GitStatusRequest {
+  type: 'git:status'
+  directory: string
+}
+
+export interface GitStatusResponse {
+  files: GitChangedFile[]
+  /** Current branch ('' when HEAD is detached). */
+  branch: string
+}
+
+/** Unified diff of one file against HEAD, or of the whole working tree when `path` is omitted. */
+export interface GitDiffRequest {
+  type: 'git:diff'
+  directory: string
+  path?: string
+}
+
+export interface GitDiffResponse {
+  patch: string
+  /** The patch was cut at the size cap the phone can render. */
+  truncated?: boolean
+}
+
+/** Creates and switches to a new branch (`git checkout -b`). Fails with the git message. */
+export interface CreateBranchRequest {
+  type: 'git:create-branch'
+  directory: string
+  branch: string
+}
+
 export interface RevertSessionRequest {
   type: 'sessions:revert'
   sessionId: string
@@ -977,6 +1021,9 @@ export type CompanionRequest =
   | OrganizeSidebarRequest
   | ListBranchesRequest
   | CheckoutBranchRequest
+  | GitStatusRequest
+  | GitDiffRequest
+  | CreateBranchRequest
   | ListDirsRequest
   | ListMemoriesRequest
   | UpdateMemoryRequest
