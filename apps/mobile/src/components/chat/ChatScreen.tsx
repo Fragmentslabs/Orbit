@@ -64,8 +64,13 @@ interface ChatScreenProps {
 // Stable reference for the zustand selector (avoids a getSnapshot loop)
 const NO_MESSAGES: never[] = []
 
-export function ChatScreen({ sessionId }: ChatScreenProps) {
+export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
   const { t } = useTranslation()
+  // A draft that just got its first message becomes that conversation IN PLACE: the route stays,
+  // so nothing slides or remounts — the persona fades, the message appears and the header updates.
+  // (Navigating to /chat/[id] swapped the whole screen, even without animation.)
+  const [adoptedId, setAdoptedId] = useState<string | null>(null)
+  const sessionId = routeSessionId ?? adoptedId ?? undefined
   const router = useRouter()
   const mode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -311,9 +316,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         // It only takes you to the new chat if the person is still in the draft: if they
         // already went to another conversation, pulling them back looked like the message
         // had fallen into the wrong chat.
-        if (mountedRef.current && !sessionIdRef.current) {
-          router.replace({ pathname: '/(main)/chat/[id]', params: { id: created.id } })
-        }
+        if (mountedRef.current && !sessionIdRef.current) setAdoptedId(created.id)
       } finally {
         if (mountedRef.current) setCreating(false)
       }
@@ -346,6 +349,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const handleToggleArchive = useCallback(() => {
     if (sessionId && session) {
       void setArchived(sessionId, !session.archived)
+      setAdoptedId(null)
       router.replace('/(main)')
     }
   }, [sessionId, session, setArchived, router])
@@ -499,6 +503,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
     await deleteSession(sessionId)
+    setAdoptedId(null)
     router.replace('/(main)')
   }, [sessionId, deleteSession, router])
 
