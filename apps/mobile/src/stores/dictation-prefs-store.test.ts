@@ -15,7 +15,7 @@ import { DEFAULT_DICTATION_MODE, useDictationPrefsStore } from './dictation-pref
 describe('dictation prefs', () => {
   beforeEach(() => {
     storage.clear()
-    useDictationPrefsStore.setState({ mode: DEFAULT_DICTATION_MODE })
+    useDictationPrefsStore.setState({ mode: DEFAULT_DICTATION_MODE, callEnabled: true })
   })
 
   it('defaults to the phone recognizer', () => {
@@ -34,5 +34,15 @@ describe('dictation prefs', () => {
     storage.set('orbit_dictation_prefs', JSON.stringify({ mode: 'cloud' }))
     await useDictationPrefsStore.getState().loadPrefs()
     expect(useDictationPrefsStore.getState().mode).toBe('native')
+  })
+
+  it('keeps the call switch on by default and saves it next to the mode', async () => {
+    expect(useDictationPrefsStore.getState().callEnabled).toBe(true)
+    await useDictationPrefsStore.getState().setMode('desktop')
+    await useDictationPrefsStore.getState().setCallEnabled(false)
+    useDictationPrefsStore.setState({ mode: 'native', callEnabled: true })
+    await useDictationPrefsStore.getState().loadPrefs()
+    expect(useDictationPrefsStore.getState().callEnabled).toBe(false)
+    expect(useDictationPrefsStore.getState().mode).toBe('desktop')
   })
 })

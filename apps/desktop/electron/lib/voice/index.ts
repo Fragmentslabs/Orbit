@@ -577,7 +577,14 @@ export interface VoiceTranscribeResult {
 /** State of the dictation engines — it is the snapshot the phone queries. */
 export async function voiceStatus(): Promise<VoiceStatusResponse> {
   const engines = await sttEngineStatus()
-  return { ready: engines.some((e) => e.installed && e.available), engines }
+  const { stt, tts, call } = getAppSettings().voice
+  return {
+    ready: engines.some((e) => e.installed && e.available),
+    engines,
+    call: { enabled: call.enabled, silenceMs: call.silenceMs },
+    stt: { enabled: stt.enabled },
+    tts: { enabled: tts.enabled },
+  }
 }
 
 /**

@@ -2181,6 +2181,9 @@
     "desktop": "No desktop",
     "desktopHint": "O modelo de voz do desktop. Mais preciso, mostra o texto a cada segundo ou so e precisa da conexão.",
     "defaultTag": "Padrão",
-    "unavailable": "Esta versão do app ainda não inclui o reconhecedor do celular — é preciso gerar um novo build. Enquanto isso, o desktop é usado."
+    "unavailable": "Esta versão do app ainda não inclui o reconhecedor do celular — é preciso gerar um novo build. Enquanto isso, o desktop é usado.",
+    "callTitle": "Ligação por voz",
+    "callHint": "Mostra o botão de ligação ao lado do microfone. O desktop faz a transcrição e a voz.",
+    "callDesktopOff": "A ligação está desligada no desktop. Ative lá para o botão voltar a aparecer aqui."
   }
 }

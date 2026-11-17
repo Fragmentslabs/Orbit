@@ -1340,6 +1340,14 @@ export interface VoiceStatusResponse {
   /** There is at least one engine able to transcribe now. */
   ready: boolean
   engines: VoiceEngineStatus[]
+  /**
+   * Call mode on the desktop: the phone offers the call button only when `call.enabled` and
+   * dictation (`stt`) are on there, and uses `silenceMs` as the pause that ends a turn.
+   * Absent on a desktop older than this field — the app then treats the call as available.
+   */
+  call?: { enabled: boolean; silenceMs: number }
+  stt?: { enabled: boolean }
+  tts?: { enabled: boolean }
 }
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────

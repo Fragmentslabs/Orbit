@@ -2181,6 +2181,9 @@
     "desktop": "On the desktop",
     "desktopHint": "The desktop's voice model. More accurate, shows text every second or so, and needs the connection.",
     "defaultTag": "Default",
-    "unavailable": "This build of the app does not include the phone recognizer yet — it needs a new build. The desktop is used meanwhile."
+    "unavailable": "This build of the app does not include the phone recognizer yet — it needs a new build. The desktop is used meanwhile.",
+    "callTitle": "Voice call",
+    "callHint": "Shows the call button next to the microphone. The desktop does the transcription and the voice.",
+    "callDesktopOff": "The call is turned off on the desktop. Turn it on there for the button to come back here."
   }
 }

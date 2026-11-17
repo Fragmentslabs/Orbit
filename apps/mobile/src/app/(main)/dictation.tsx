@@ -1,9 +1,10 @@
-import { Fragment } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { Fragment, useEffect } from 'react'
+import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Check } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { DEFAULT_DICTATION_MODE, useDictationPrefsStore, type DictationMode } from '~/stores/dictation-prefs-store'
+import { useVoiceDesktopStore } from '~/stores/voice-desktop-store'
 import { nativeSpeechAvailable } from '~/lib/native-speech'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -17,7 +18,15 @@ export default function DictationScreen() {
   const router = useRouter()
   const mode = useDictationPrefsStore((s) => s.mode)
   const setMode = useDictationPrefsStore((s) => s.setMode)
+  const callEnabled = useDictationPrefsStore((s) => s.callEnabled)
+  const setCallEnabled = useDictationPrefsStore((s) => s.setCallEnabled)
+  const desktopLoaded = useVoiceDesktopStore((s) => s.loaded)
+  const desktopCall = useVoiceDesktopStore((s) => s.callEnabled)
+  const refreshDesktop = useVoiceDesktopStore((s) => s.refresh)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  useEffect(() => {
+    void refreshDesktop()
+  }, [refreshDesktop])
   // A build either has the native module or it does not (the answer is cached).
   const hasNative = nativeSpeechAvailable()
 
@@ -72,6 +81,19 @@ export default function DictationScreen() {
         <Text style={[s.helperText, { color: tokens.mutedForeground }]}>{t('dictationScreen.description')}</Text>
         {!hasNative ? (
           <Text style={[s.helperText, { color: tokens.destructive }]}>{t('dictationScreen.unavailable')}</Text>
+        ) : null}
+
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, marginTop: 20 }]}>
+          <View style={s.row}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={[s.rowText, { color: tokens.foreground, fontWeight: '600' }]}>{t('dictationScreen.callTitle')}</Text>
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('dictationScreen.callHint')}</Text>
+            </View>
+            <Switch value={callEnabled} onValueChange={(v) => void setCallEnabled(v)} />
+          </View>
+        </View>
+        {desktopLoaded && !desktopCall ? (
+          <Text style={[s.helperText, { color: tokens.destructive }]}>{t('dictationScreen.callDesktopOff')}</Text>
         ) : null}
       </ScrollView>
     </SafeScreen>

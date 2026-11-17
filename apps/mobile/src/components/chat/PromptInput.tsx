@@ -16,6 +16,7 @@ import { InputAttachment } from './Attachment'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
 import { useDictation } from '~/hooks/useDictation'
+import { useCallAvailability } from '~/hooks/useCallAvailability'
 import { useVoiceCall } from '~/hooks/useVoiceCall'
 import { CallCaption } from './CallCaption'
 import { CallStrip } from './CallStrip'
@@ -546,8 +547,15 @@ export function PromptInput({
     },
     [disabled, sendDisabled, submitText],
   )
-  const call = useVoiceCall({ sessionId, submit: submitCall })
+  const callAvailability = useCallAvailability()
+  const call = useVoiceCall({ sessionId, submit: submitCall, silenceMs: callAvailability.silenceMs })
   const liveActive = call.active
+  // The call switched off meanwhile (on the desktop or here): it ends, like on the desktop.
+  const hangUpCall = call.hangUp
+  const callUsable = callAvailability.available
+  useEffect(() => {
+    if (liveActive && !callUsable) hangUpCall()
+  }, [liveActive, callUsable, hangUpCall])
   // Latest text and cursor, readable from the async transcript callback.
   const dictationTextRef = useRef(text);
   useEffect(() => {
@@ -618,7 +626,10 @@ export function PromptInput({
   const hasText = text.trim().length > 0;
   // While dictating, the text arriving in the field must not take the mic button away: it is the way to stop.
   const dictatingText = dictation.recording && !liveActive;
-  const showSend = (hasText || !!isStreaming) && !dictatingText;
+  // Without the call (off on the desktop or on the phone) the slot is the plain "send" next to the
+  // microphone; a call already under way keeps its controls until it ends.
+  const callOffered = callAvailability.available || liveActive;
+  const showSend = (hasText || !!isStreaming || !callOffered) && !dictatingText;
 
   // Built once, on the left of the field.
   const plusButton = (
@@ -847,6 +858,9 @@ export function PromptInput({
                     includeFontPadding: false,
                     paddingTop: 0,
                     paddingBottom: 0,
+                    // iOS draws the text a couple of points below the middle of its own box:
+                    // lift it so it shares the centre of the row with the buttons.
+                    transform: Platform.OS === "ios" ? [{ translateY: -2.5 }] : undefined,
                     maxHeight: INPUT_MAX_LINES * INPUT_LINE_HEIGHT,
                     outlineStyle: "none",
                   } as any,
@@ -858,9 +872,6 @@ export function PromptInput({
                 phase={call.phase}
                 levels={call.levels}
                 label={t(`promptInput.voice.call_${call.phase}`)}
-                    // iOS draws the text a couple of points below the middle of its own box:
-                    // lift it so it shares the centre of the row with the buttons.
-                    transform: Platform.OS === "ios" ? [{ translateY: -2.5 }] : undefined,
                 color={tokens.mutedForeground}
                 background={tokens.card}
                 interruptLabel={t('promptInput.voice.call_interrupt')}
