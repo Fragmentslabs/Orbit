@@ -1,7 +1,9 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { CalendarClock } from 'lucide-react-native'
+import { CalendarClock, Pause, Play, Settings, Trash2 } from 'lucide-react-native'
+import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
+import { useConfirm } from '~/components/ui/confirm-dialog'
 import type { Routine, RoutineRun } from '@orbit/shared'
 import { isFinishedOnce, nextRoutineRun } from '@orbit/shared'
 import { useRoutinesStore } from '~/stores/routines-store'
@@ -43,17 +45,58 @@ function Avatars({ names }: { names: string[] }) {
 }
 
 /** One routine as a row of the list — mirror of the desktop's RoutineRow. */
-export const RoutineRow = memo(function RoutineRow({ routine, onOpen }: { routine: Routine; onOpen: () => void }) {
+export const RoutineRow = memo(function RoutineRow({
+  routine,
+  onOpen,
+  onSettings,
+}: {
+  routine: Routine
+  onOpen: () => void
+  /** Opens the routine's details and settings screen. */
+  onSettings: () => void
+}) {
   const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
   const state = useRoutineState(routine)
+  const update = useRoutinesStore((s) => s.update)
+  const runNow = useRoutinesStore((s) => s.runNow)
+  const remove = useRoutinesStore((s) => s.remove)
+  const [menuTop, setMenuTop] = useState<number | null>(null)
   const next = nextRoutineRun(routine)
+  const finished = isFinishedOnce(routine)
   const folder = routine.folders[0] ? folderName(routine.folders[0]) : null
   const members = routine.team?.members.map((m) => m.name) ?? []
   const label = t(`routines.list.state.${state}`)
 
+  const confirmRemoval = async () => {
+    const ok = await confirm({
+      title: t('routines.list.deleteTitle'),
+      description: t('routines.list.deleteDescription', { title: routine.title }),
+      confirmLabel: t('routines.list.delete'),
+      cancelLabel: t('sidebar.cancel'),
+      destructive: true,
+    })
+    if (ok) void remove(routine.id)
+  }
+
+  // The same options as the desktop's card dropdown. A finished one-off has no date left to
+  // resume: "reschedule" takes it to the settings, where the schedule is picked again.
+  const items: ActionMenuItem[] = [
+    ...(state === 'running' ? [] : [{ icon: Play, label: t('routines.list.runNow'), onPress: () => void runNow(routine.id) }]),
+    routine.active
+      ? { icon: Pause, label: t('routines.detail.pause'), onPress: () => void update(routine.id, { active: false }) }
+      : finished
+        ? { icon: CalendarClock, label: t('routines.detail.reschedule'), onPress: onSettings }
+        : { icon: Play, label: t('routines.detail.activate'), onPress: () => void update(routine.id, { active: true }) },
+    { icon: Settings, label: t('routines.chat.settings'), onPress: onSettings },
+    { icon: Trash2, label: t('routines.list.delete'), destructive: true, onPress: () => void confirmRemoval() },
+  ]
+
   return (
+    <>
     <ListRow
       onPress={onOpen}
+      onLongPress={(pageY) => setMenuTop(pageY)}
       title={routine.title}
       tile={<StateTile state={TONE[state]} icon={CalendarClock} spinning={state === 'running'} />}
       lines={[
@@ -71,6 +114,13 @@ export const RoutineRow = memo(function RoutineRow({ routine, onOpen }: { routin
         </>
       }
     />
+    <ActionMenu
+      visible={menuTop !== null}
+      onClose={() => setMenuTop(null)}
+      items={items}
+      anchor={{ top: Math.max(60, (menuTop ?? 0) - 20), right: 16 }}
+    />
+    </>
   )
 })
 

@@ -42,7 +42,6 @@ export default function MainLayout() {
               <Stack.Screen name="routines/index" />
               <Stack.Screen name="routines/new" />
               <Stack.Screen name="routines/[id]" />
-              <Stack.Screen name="routines/[id]/edit" />
 
               <Stack.Screen name="pipeline/index" />
               <Stack.Screen name="pipeline/new" />

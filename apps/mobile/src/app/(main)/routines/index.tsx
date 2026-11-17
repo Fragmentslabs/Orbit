@@ -3,7 +3,7 @@
  * numbers, the rows and the foot line. "New" opens the menu that leads to the creation chat first
  * (or the form). Opening a routine is the /routines/[id] route.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, FlatList, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
@@ -79,7 +79,28 @@ export default function RoutinesScreen() {
     }
   }, [routines, runs, now])
 
-  const open = useCallback((id: string) => router.push(`/(main)/routines/${id}`), [router])
+  // Opening a routine is opening ITS chat (like the desktop); the settings are one tap away in
+  // the chat's menu. If the chat cannot be reached, the detail screen shows the error.
+  const openingRef = useRef(false)
+  const open = useCallback(
+    (id: string) => {
+      if (openingRef.current) return
+      openingRef.current = true
+      void useRoutinesStore
+        .getState()
+        .openChat(id)
+        .catch(() => null)
+        .then((sessionId) => {
+          if (sessionId) router.push({ pathname: '/(main)/chat/[id]', params: { id: sessionId } })
+          else router.push(`/(main)/routines/${id}`)
+        })
+        .finally(() => {
+          openingRef.current = false
+        })
+    },
+    [router],
+  )
+  const openSettings = useCallback((id: string) => router.push(`/(main)/routines/${id}`), [router])
   const openForm = useCallback(() => router.push('/(main)/routines/new'), [router])
 
   const counts = [
@@ -141,7 +162,7 @@ export default function RoutinesScreen() {
                 <FlatList
                   data={filtered}
                   keyExtractor={(r) => r.id}
-                  renderItem={({ item }) => <RoutineRow routine={item} onOpen={() => open(item.id)} />}
+                  renderItem={({ item }) => <RoutineRow routine={item} onOpen={() => open(item.id)} onSettings={() => openSettings(item.id)} />}
                   contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
                   style={{ flex: 1 }}
                   refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={tokens.primary} />}

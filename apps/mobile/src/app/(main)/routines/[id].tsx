@@ -1,25 +1,32 @@
 /**
- * Routine detail — mirror of the desktop's RoutineDetail: its own header (back, title, switch,
- * menu), prompt, badges, "Run now" and the routine's ONE chat. Every execution arrives in that
- * chat as a message, so there is no list of sessions here: the card opens the conversation.
+ * Routine detail — mirror of the desktop's routine panel: its own header (back, title, switch),
+ * two tabs and the delete at the foot. "Runs" says when it fires again, who works in it and how
+ * the last ones ended; "Settings" IS the editor (one accordion per group, autosaved). The
+ * routine's one chat is what the list opens — this screen is reached from that chat's menu.
  */
-import { useEffect, useState } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { View, Text, Pressable, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
 import { useConfirm } from '~/components/ui/confirm-dialog'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ChevronRight, Folder, Loader2, MessagesSquare, MoreHorizontal, Pencil, Play, Trash2 } from 'lucide-react-native'
-import { nextRoutineRun } from '@orbit/shared'
+import { ArrowLeft, Check, ChevronRight, Loader2, Pause, Play, Trash2, X } from 'lucide-react-native'
+import { isFinishedOnce, nextRoutineRun, type RoutineRun } from '@orbit/shared'
 import { useRoutinesStore } from '~/stores/routines-store'
-import { useSettingsStore } from '~/stores/settings-store'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { describeSchedule } from '~/lib/schedule'
 import { formatDateTimeShort } from '~/lib/format-time'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { Spin } from '~/components/ui/spin'
-import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
-import { ActiveSwitch, ModeBadges } from '~/components/routines/schedule-editor'
+import { RoutineSettings } from '~/components/routines/routine-settings'
+
+type Tab = 'runs' | 'config'
+
+function duration(run: RoutineRun): string {
+  if (!run.completedAt) return ''
+  const seconds = Math.max(1, Math.round((run.completedAt - run.startedAt) / 1000))
+  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, '0')} s`
+}
 
 export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -28,52 +35,38 @@ export default function RoutineDetailScreen() {
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const routines = useRoutinesStore((s) => s.routines)
-  const runs = useRoutinesStore((s) => s.runs)
+  const allRuns = useRoutinesStore((s) => s.runs)
   const loaded = useRoutinesStore((s) => s.loaded)
   const load = useRoutinesStore((s) => s.load)
   const update = useRoutinesStore((s) => s.update)
   const runNow = useRoutinesStore((s) => s.runNow)
   const remove = useRoutinesStore((s) => s.remove)
-  const openChat = useRoutinesStore((s) => s.openChat)
-  const catalog = useSettingsStore((s) => s.catalog)
 
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [opening, setOpening] = useState(false)
-  const [openFailed, setOpenFailed] = useState(false)
+  const [tab, setTab] = useState<Tab>('config')
 
   const routine = routines.find((r) => r.id === id)
-  const running = runs.some((r) => r.routineId === id && r.status === 'running')
+  const runs = useMemo(
+    () => allRuns.filter((r) => r.routineId === id).sort((a, b) => b.startedAt - a.startedAt),
+    [allRuns, id],
+  )
+  const running = runs.some((r) => r.status === 'running')
 
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
 
-  // Routine removed (here or in another window/desktop): goes back to the list
-  // instead of leaving the screen stuck on a detail that no longer exists.
+  // Routine removed (here or in another window/desktop): goes back instead of leaving the screen
+  // stuck on a detail that no longer exists.
   useEffect(() => {
     if (loaded && !routine) router.back()
   }, [loaded, routine, router])
-
-  const lastRun = routine
-    ? runs.filter((r) => r.routineId === routine.id).sort((x, y) => y.startedAt - x.startedAt)[0]
-    : undefined
-
-  const openRoutineChat = async () => {
-    if (!routine || opening) return
-    setOpening(true)
-    setOpenFailed(false)
-    const sessionId = await openChat(routine.id).catch(() => null)
-    setOpening(false)
-    if (sessionId) router.push({ pathname: '/(main)/chat/[id]', params: { id: sessionId } })
-    else setOpenFailed(true)
-  }
 
   if (!routine) {
     return <SafeScreen style={{ flex: 1 }}>{null}</SafeScreen>
   }
 
   const next = nextRoutineRun(routine)
-  const modelName = catalog?.[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId
+  const finished = isFinishedOnce(routine)
 
   const confirmRemoval = async () => {
     const ok = await confirm({
@@ -87,16 +80,11 @@ export default function RoutineDetailScreen() {
     void remove(routine.id).then(() => router.back())
   }
 
-  const menuItems: ActionMenuItem[] = [
-    { icon: Pencil, label: t('routines.list.edit'), onPress: () => router.push(`/(main)/routines/${routine.id}/edit`) },
-    { icon: Trash2, label: t('routines.list.delete'), destructive: true, onPress: confirmRemoval },
-  ]
-
   return (
     <SafeScreen style={{ flex: 1 }}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
-        <Pressable onPress={() => router.back()} style={s.headerBtn}>
+        <Pressable onPress={() => router.back()} style={s.headerBtn} accessibilityLabel={t('routines.review.back')}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
         <View style={s.headerTitle}>
@@ -112,99 +100,142 @@ export default function RoutineDetailScreen() {
           </View>
           <Text numberOfLines={1} style={[s.subtitle, { color: tokens.mutedForeground }]}>
             {describeSchedule(routine.schedule, t)}
-            {' · '}
-            {next
-              ? t('routines.list.next', { when: formatDateTimeShort(next, i18n.language) })
-              : t('routines.list.paused')}
           </Text>
         </View>
-        <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
-        <Pressable onPress={() => setMenuOpen(true)} style={s.headerBtn}>
-          <MoreHorizontal size={20} color={tokens.mutedForeground} />
-        </Pressable>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 40 }}>
-        {/* Routine card */}
-        <View style={[s.infoCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Text style={[s.prompt, { color: tokens.mutedForeground }]}>{routine.prompt}</Text>
-          <View style={s.badgesRow}>
-            <ModeBadges modes={routine.modes} permission />
-          </View>
-          <Text numberOfLines={1} style={[s.muted, { color: tokens.mutedForeground }]}>
-            {modelName}
-          </Text>
-          {routine.folders.length > 0 && (
-            <View style={s.folderRow}>
-              <Folder size={13} color={tokens.mutedForeground} />
-              <Text numberOfLines={1} style={[s.muted, { color: tokens.mutedForeground, flex: 1 }]}>
-                {routine.folders.join(', ')}
+      {/* Tabs */}
+      <View style={s.tabsWrap}>
+        <View style={[s.tabs, { backgroundColor: tokens.muted }]}>
+          {(['runs', 'config'] as const).map((value) => (
+            <Pressable
+              key={value}
+              onPress={() => setTab(value)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === value }}
+              style={[s.tab, tab === value && { backgroundColor: tokens.background }]}
+            >
+              <Text style={[s.tabText, { color: tab === value ? tokens.foreground : tokens.mutedForeground }, tab === value && { fontWeight: '600' }]}>
+                {t(value === 'runs' ? 'routines.detail.tabRuns' : 'routines.detail.tabConfig')}
               </Text>
-            </View>
-          )}
+            </Pressable>
+          ))}
         </View>
+      </View>
 
-        {/* Run now */}
-        <Pressable
-          onPress={() => void runNow(routine.id)}
-          disabled={running}
-          style={[
-            s.runButton,
-            { borderColor: tokens.border },
-            running && { opacity: 0.4 },
-          ]}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Both stay mounted: a settings change waiting for its autosave survives a tab switch. */}
+        <ScrollView
+          style={[{ flex: 1 }, tab !== 'runs' && { display: 'none' }]}
+          contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 24 }}
         >
-          {running ? (
-            <Spin>
-              <Loader2 size={15} color={tokens.foreground} />
-            </Spin>
-          ) : (
-            <Play size={15} color={tokens.foreground} />
-          )}
-          <Text style={[s.runButtonText, { color: tokens.foreground }]}>{t('routines.list.runNow')}</Text>
-        </Pressable>
+          <View style={{ gap: 8 }}>
+            <Text style={[s.section, { color: tokens.mutedForeground }]}>{t('routines.detail.next')}</Text>
+            <View style={[s.nextCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+              <Text style={[s.nextTitle, { color: tokens.foreground }]}>
+                {next
+                  ? formatDateTimeShort(next, i18n.language)
+                  : t(finished ? 'routines.list.state.finished' : 'routines.list.paused')}
+              </Text>
+              <Text style={[s.muted, { color: tokens.mutedForeground }]}>{describeSchedule(routine.schedule, t)}</Text>
+            </View>
+            <View style={s.actions}>
+              <Pressable
+                onPress={() => void runNow(routine.id)}
+                disabled={running}
+                style={[s.actionBtn, { borderColor: tokens.border }, running && { opacity: 0.4 }]}
+              >
+                {running ? (
+                  <Spin>
+                    <Loader2 size={15} color={tokens.foreground} />
+                  </Spin>
+                ) : (
+                  <Play size={15} color={tokens.foreground} />
+                )}
+                <Text style={[s.actionText, { color: tokens.foreground }]}>{t('routines.list.runNow')}</Text>
+              </Pressable>
+              {(routine.active || !finished) && (
+                <Pressable
+                  onPress={() => void update(routine.id, { active: !routine.active })}
+                  style={[s.actionBtn, { borderColor: tokens.border }]}
+                >
+                  {routine.active ? <Pause size={15} color={tokens.foreground} /> : <Play size={15} color={tokens.foreground} />}
+                  <Text style={[s.actionText, { color: tokens.foreground }]}>
+                    {t(routine.active ? 'routines.detail.pause' : 'routines.detail.activate')}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
 
-        {/* The routine's one chat */}
-        <Pressable
-          onPress={() => void openRoutineChat()}
-          disabled={opening}
-          accessibilityRole="button"
-          style={[s.chatCard, { borderColor: tokens.border, backgroundColor: tokens.card }, opening && { opacity: 0.6 }]}
-        >
-          <View style={[s.chatIcon, { backgroundColor: tokens.accent }]}>
-            {opening ? (
-              <Spin>
-                <Loader2 size={16} color={tokens.foreground} />
-              </Spin>
+          <View>
+            <Text style={[s.section, { color: tokens.mutedForeground, paddingBottom: 4 }]}>{t('routines.detail.recent')}</Text>
+            {runs.length === 0 ? (
+              <Text style={[s.muted, { color: tokens.mutedForeground, paddingVertical: 8 }]}>{t('routines.detail.noRuns')}</Text>
             ) : (
-              <MessagesSquare size={16} color={tokens.foreground} />
+              runs.slice(0, 8).map((run) => (
+                <RunRow
+                  key={run.sessionId}
+                  run={run}
+                  label={formatDateTimeShort(run.startedAt, i18n.language)}
+                  onOpen={() => router.push({ pathname: '/(main)/chat/[id]', params: { id: run.sessionId } })}
+                />
+              ))
             )}
           </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[s.runsTitle, { color: tokens.foreground }]}>{t('routines.chat.title')}</Text>
-            <Text style={[s.muted, { color: tokens.mutedForeground }]}>
-              {opening
-                ? t('routines.chat.opening')
-                : lastRun
-                  ? lastRun.status === 'error'
-                    ? t('routines.chat.failed')
-                    : t('routines.chat.lastRun', { when: formatDateTimeShort(lastRun.startedAt, i18n.language) })
-                  : t('routines.chat.never')}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={tokens.mutedForeground} />
-        </Pressable>
-        <Text style={[s.muted, { color: tokens.mutedForeground, paddingHorizontal: 4 }]}>{t('routines.chat.subtitle')}</Text>
-        {openFailed && <Text style={[s.muted, { color: tokens.destructive, paddingHorizontal: 4 }]}>{t('routines.chat.error')}</Text>}
-      </ScrollView>
+        </ScrollView>
 
-      <ActionMenu
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        items={menuItems}
-        anchor={{ top: 52, right: 12 }}
-      />
+        <ScrollView
+          style={[{ flex: 1 }, tab !== 'config' && { display: 'none' }]}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <RoutineSettings key={routine.id} routine={routine} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <View style={[s.footer, { borderTopColor: tokens.border }]}>
+        <Pressable onPress={() => void confirmRemoval()} style={[s.deleteBtn, { borderColor: tokens.border }]}>
+          <Trash2 size={16} color={tokens.destructive} />
+          <Text style={[s.actionText, { color: tokens.destructive }]}>{t('routines.list.delete')}</Text>
+        </Pressable>
+      </View>
     </SafeScreen>
+  )
+}
+
+function RunRow({ run, label, onOpen }: { run: RoutineRun; label: string; onOpen: () => void }) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const running = run.status === 'running'
+  const failed = run.status === 'error'
+  const length = duration(run)
+  return (
+    <Pressable onPress={onOpen} style={[s.runRow, { borderBottomColor: tokens.border }]}>
+      {running ? (
+        <Spin>
+          <Loader2 size={16} color={tokens.primary} />
+        </Spin>
+      ) : failed ? (
+        <View style={[s.dot, { backgroundColor: 'rgba(220,38,38,0.15)' }]}>
+          <X size={12} color={tokens.destructive} />
+        </View>
+      ) : (
+        <View style={[s.dot, { backgroundColor: 'rgba(22,163,74,0.15)' }]}>
+          <Check size={12} color="#15803d" />
+        </View>
+      )}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={[s.rowTitle, { color: tokens.foreground }]}>
+          {label}
+        </Text>
+        <Text style={[s.muted, { color: failed ? tokens.destructive : tokens.mutedForeground }]}>
+          {t(`routines.runs.${run.status}`)}
+          {length ? ` · ${length}` : ''}
+        </Text>
+      </View>
+      <ChevronRight size={16} color={tokens.mutedForeground} />
+    </Pressable>
   )
 }
 
@@ -223,26 +254,41 @@ const s = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
   subtitle: { fontSize: 12, marginTop: 1 },
 
-  infoCard: { borderRadius: 10, borderWidth: 1, padding: 12, gap: 8 },
-  prompt: { fontSize: 12, lineHeight: 17 },
-  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  modeBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  modeBadgeText: { fontSize: 11, fontWeight: '500' },
-  muted: { fontSize: 12 },
-  chatCard: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: 12, borderWidth: 1 },
-  chatIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  folderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tabsWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 },
+  tabs: { flexDirection: 'row', gap: 2, padding: 3, borderRadius: 12 },
+  tab: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  tabText: { fontSize: 13, fontWeight: '500' },
 
-  runButton: {
+  section: { fontSize: 11, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
+  nextCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 3 },
+  nextTitle: { fontSize: 20, fontWeight: '600' },
+  muted: { fontSize: 12 },
+  actions: { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingVertical: 11,
   },
-  runButtonText: { fontSize: 13, fontWeight: '600' },
+  actionText: { fontSize: 14, fontWeight: '500' },
 
-  runsTitle: { fontSize: 14, fontWeight: '600' },
+  rowTitle: { fontSize: 14, fontWeight: '500' },
+
+  runRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, borderBottomWidth: 1 },
+  dot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+
+  footer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1 },
+  deleteBtn: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
 })

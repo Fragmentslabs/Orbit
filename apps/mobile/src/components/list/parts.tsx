@@ -240,16 +240,23 @@ export function ListRow({
   lines,
   right,
   onPress,
+  onLongPress,
 }: {
   tile: ReactNode
   title: string
   lines: { text: string; quiet?: boolean; bad?: boolean }[]
   right?: ReactNode
   onPress: () => void
+  /** Holding the row: gets the screen height of the finger, so a menu can open right there. */
+  onLongPress?: (pageY: number) => void
 }) {
   const tokens = useTokens()
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.row, pressed && { backgroundColor: tokens.accent }]}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress ? (e) => onLongPress(e.nativeEvent.pageY) : undefined}
+      style={({ pressed }) => [s.row, pressed && { backgroundColor: tokens.accent }]}
+    >
       {tile}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', color: tokens.foreground }}>

@@ -1442,6 +1442,29 @@
       "noResults": "Nenhuma rotina para \"{{query}}\".",
       "tail": "Rotinas rodam enquanto o Orbit estiver aberto no computador."
     },
+    "detail": {
+      "tabRuns": "Execuções",
+      "tabConfig": "Configurações",
+      "next": "Próxima",
+      "recent": "Recentes",
+      "noRuns": "Ainda não rodou nenhuma vez.",
+      "agents": "Agentes",
+      "noTeam": "Sem equipe",
+      "what": "O que fazer",
+      "when": "Quando",
+      "who": "Quem faz",
+      "where": "Onde",
+      "abilities": "Habilidades",
+      "model": "Modelo",
+      "saved": "Salvo automaticamente",
+      "saving": "Salvando…",
+      "saveError": "Não foi possível salvar. Confira a conexão com o desktop.",
+      "agentCount_one": "{{count}} agente",
+      "agentCount_other": "{{count}} agentes",
+      "reschedule": "Reagendar",
+      "pause": "Pausar",
+      "activate": "Ativar"
+    },
     "chat": {
       "title": "Conversa da rotina",
       "subtitle": "Uma conversa só: cada execução chega nela como uma mensagem.",
@@ -1450,6 +1473,7 @@
       "never": "Ainda não rodou nenhuma vez.",
       "failed": "A última execução falhou",
       "opening": "Abrindo…",
+      "settings": "Configurações da rotina",
       "error": "Não foi possível abrir a conversa. Confira a conexão com o desktop."
     },
     "runs": {

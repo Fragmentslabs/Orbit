@@ -1,9 +1,10 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, GitCompare, Search, Trash2, Folder, FolderTree, ChevronDown, Library } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, GitCompare, Search, Trash2, Folder, FolderTree, ChevronDown, Library, Settings } from 'lucide-react-native'
 import { useRouter } from 'expo-router'
-import type { SessionInfo, BranchesResponse } from '@orbit/shared'
+import { routineChatSessionId, type SessionInfo, type BranchesResponse } from '@orbit/shared'
+import { useRoutinesStore } from '~/stores/routines-store'
 import { openDrawer } from '~/components/layout/sidebar-control'
 import { useConnectionStore } from '~/stores/connection-store'
 import { ActionMenu } from '~/components/ui/action-menu'
@@ -64,6 +65,10 @@ export const ChatHeader = memo(function ChatHeader({
   const directory = folderList[0]
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
+  // The routine's own chat (not one of its runs): its menu leads to the routine's settings.
+  const routineId = useRoutinesStore((s) =>
+    session ? s.routines.find((r) => routineChatSessionId(r.id) === session.id)?.id : undefined,
+  )
 
   const modelLabel = useSessionModelLabel(session?.id)
   const { activeModes } = useChatModes(session?.id)
@@ -221,6 +226,9 @@ export const ChatHeader = memo(function ChatHeader({
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         items={[
+          ...(routineId
+            ? [{ icon: Settings, label: t('routines.chat.settings'), onPress: () => router.push(`/(main)/routines/${routineId}`) }]
+            : []),
           ...(searchEnabled ? [{ icon: Search, label: t('chatHeader.searchInChat'), onPress: toggleChatSearch }] : []),
           {
             icon: Library,

@@ -1442,6 +1442,29 @@
       "noResults": "No routine for \"{{query}}\".",
       "tail": "Routines run while Orbit is open on the computer."
     },
+    "detail": {
+      "tabRuns": "Runs",
+      "tabConfig": "Settings",
+      "next": "Next",
+      "recent": "Recent",
+      "noRuns": "No runs yet.",
+      "agents": "Agents",
+      "noTeam": "No team",
+      "what": "What to do",
+      "when": "When",
+      "who": "Who does it",
+      "where": "Where",
+      "abilities": "Abilities",
+      "model": "Model",
+      "saved": "Saved automatically",
+      "saving": "Saving…",
+      "saveError": "Could not save. Check the connection to the desktop.",
+      "agentCount_one": "{{count}} agent",
+      "agentCount_other": "{{count}} agents",
+      "reschedule": "Reschedule",
+      "pause": "Pause",
+      "activate": "Activate"
+    },
     "chat": {
       "title": "Routine chat",
       "subtitle": "One conversation: every run arrives in it as a message.",
@@ -1450,6 +1473,7 @@
       "never": "It has not run yet.",
       "failed": "The last run failed",
       "opening": "Opening…",
+      "settings": "Routine settings",
       "error": "Could not open the chat. Check the connection to the desktop."
     },
     "runs": {
