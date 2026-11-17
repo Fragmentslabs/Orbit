@@ -62,6 +62,7 @@ import {
   backdropOpacity,
   drawerTranslateX,
 } from '~/components/layout/sidebar-anim'
+import { closeDrawer } from '~/components/layout/sidebar-control'
 
 /** Same key as the desktop (app-sidebar) — open/closed folders persisted. */
 const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
@@ -110,7 +111,8 @@ export function Sidebar() {
   const router = useRouter()
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen)
   const mode = useWorkspaceStore((s) => s.mode)
-  const closeSidebar = useWorkspaceStore((s) => s.closeSidebar)
+  // Always animates the drawer shut, even when the store flag already says closed.
+  const closeSidebar = closeDrawer
   const setMode = useWorkspaceStore((s) => s.setMode)
   const disconnect = useConnectionStore((s) => s.disconnect)
   const clearSavedConfig = useConnectionStore((s) => s.clearSavedConfig)

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, GitCompare, Search, Trash2, Folder, FolderTree, ChevronDown, Library } from 'lucide-react-native'
 import { useRouter } from 'expo-router'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
-import { useWorkspaceStore } from '~/stores/workspace-store'
+import { openDrawer } from '~/components/layout/sidebar-control'
 import { useConnectionStore } from '~/stores/connection-store'
 import { ActionMenu } from '~/components/ui/action-menu'
 import { useConfirm } from '~/components/ui/confirm-dialog'
@@ -57,7 +57,7 @@ export const ChatHeader = memo(function ChatHeader({
   const { t } = useTranslation()
   const confirm = useConfirm()
   const router = useRouter()
-  const openSidebar = useWorkspaceStore((s) => s.openSidebar)
+  const openSidebar = openDrawer
   const [menuOpen, setMenuOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
   const folderList = folders ?? NO_FOLDERS
