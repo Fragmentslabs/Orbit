@@ -178,7 +178,6 @@ export function PromptInput({
   // native field ends up a few px taller than one lineHeight, so a bottom-anchored button
   // sits below the text; measuring the resting height lets us lift it by exactly half the
   // excess instead of guessing a fixed offset. Zero when field and buttons already match.
-  const [actionLift, setActionLift] = useState(0);
   // Past one line the field takes the whole width and the buttons drop to a row under it (like the
   // ChatGPT app). It holds until the field empties, so a line that fits again after widening does not flicker.
   const [expanded, setExpanded] = useState(false);
@@ -672,7 +671,7 @@ export function PromptInput({
   );
 
   const voiceSlot = (
-    <View className="flex-row items-center gap-0.5">
+    <View className="flex-row items-center gap-2">
       {micButton}
 
       <TouchableOpacity
@@ -692,7 +691,7 @@ export function PromptInput({
 
   // Same slot in both layouts: "send" while there is text, "voice" while there is not.
   const rightSlot = showSend ? (
-    <View className="flex-row items-center gap-0.5">
+    <View className="flex-row items-center gap-2">
       {micButton}
       <SendButtonGroup
         onSend={handleSend}
@@ -778,20 +777,22 @@ export function PromptInput({
       >
         {/* Field and actions on one row, bottom-anchored: the buttons stay put and the
             field grows upward as it gains lines (the card grows up, the bottom is fixed). */}
-          <View className="flex-row items-end">
+          <View
+            className="flex-row"
+            style={{ alignItems: expanded ? "flex-end" : "center" }}
+          >
             <View
               style={
                 expanded
                   ? { position: "absolute", left: 0, bottom: 0 }
-                  : { marginBottom: actionLift }
+                  : undefined
               }
             >
               {plusButton}
             </View>
-            {/* The vertical padding lives on this wrapper, NOT on the field. It is measured
-              once at rest (one line) and the actions are lifted by half the excess over their
-              own height, so the icon centre lands on the text centre; as the field grows the
-              buttons stay anchored to the bottom of the card. */}
+            {/* The vertical padding lives on this wrapper, NOT on the field. At one line the row
+              centres everything (buttons and text share the row's centre, whatever size the
+              native field lays out at); once expanded the buttons are anchored to the bottom. */}
             <View
               style={{
                 flex: 1,
@@ -801,23 +802,10 @@ export function PromptInput({
                 paddingHorizontal: expanded ? 8 : 0,
               }}
               onLayout={(event) => {
-                const height = event.nativeEvent.layout.height;
-                // The native field lays out a little taller than its line box (32 for a 24
-                // line on iOS), so the row grows past the buttons and half of that excess is
-                // what centres the icons on the text. The baseline has to come from the
-                // EMPTY field — the resting state — and the LATEST one wins: the first pass
-                // reports the bare line box before the field settles, and keeping the
-                // smallest sample froze the lift at zero, leaving the icons a few pixels low.
+                // Width of the one-line field: what the composer compares the text against to
+                // decide whether it still fits on one line.
                 if (!expanded)
                   narrowWidthRef.current = event.nativeEvent.layout.width;
-                if (text !== "" || expanded) return;
-                // A transient tall sample (a multi-line field that just emptied) would lift the buttons for good.
-                if (
-                  height >
-                  INPUT_LINE_HEIGHT * 1.8 + INPUT_VERTICAL_PADDING * 2
-                )
-                  return;
-                setActionLift(Math.max(0, (height - ACTION_SIZE) / 2));
               }}
             >
               <TextInput
@@ -870,6 +858,9 @@ export function PromptInput({
                 phase={call.phase}
                 levels={call.levels}
                 label={t(`promptInput.voice.call_${call.phase}`)}
+                    // iOS draws the text a couple of points below the middle of its own box:
+                    // lift it so it shares the centre of the row with the buttons.
+                    transform: Platform.OS === "ios" ? [{ translateY: -2.5 }] : undefined,
                 color={tokens.mutedForeground}
                 background={tokens.card}
                 interruptLabel={t('promptInput.voice.call_interrupt')}
@@ -881,7 +872,7 @@ export function PromptInput({
               style={
                 expanded
                   ? { position: "absolute", right: 0, bottom: 0 }
-                  : { marginBottom: actionLift }
+                  : undefined
               }
             >
               {rightSlot}
