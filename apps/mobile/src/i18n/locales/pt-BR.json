@@ -78,7 +78,9 @@
     "newMessage": "Nova mensagem",
     "newMessageDescription": "Quando o assistente responder (sessão inativa)",
     "chatError": "Erro no chat",
-    "chatErrorDescription": "Quando ocorrer um erro durante o processamento"
+    "chatErrorDescription": "Quando ocorrer um erro durante o processamento",
+    "routineRun": "Rotinas",
+    "routineRunDescription": "Quando uma rotina terminar de rodar, ou falhar"
   },
   "languageScreen": {
     "title": "Idioma",
@@ -1274,6 +1276,11 @@
     "questionFallback": "pergunta pendente",
     "newMessageTitle": "Nova mensagem",
     "newMessageBody": "Nova mensagem",
+    "routineFallbackTitle": "Rotina",
+    "routineDoneTitle": "{{title}} terminou",
+    "routineDoneBody": "A execução foi concluída. Toque para ler o resultado.",
+    "routineFailedTitle": "{{title}} falhou",
+    "routineFailedBody": "A execução terminou com erro.",
     "chatErrorTitle": "Erro no chat",
     "chatErrorBody": "Ocorreu um erro durante o chat.",
     "chatErrorKind": {

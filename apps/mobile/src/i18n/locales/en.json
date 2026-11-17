@@ -78,7 +78,9 @@
     "newMessage": "New message",
     "newMessageDescription": "When the assistant replies (inactive session)",
     "chatError": "Chat error",
-    "chatErrorDescription": "When an error occurs during processing"
+    "chatErrorDescription": "When an error occurs during processing",
+    "routineRun": "Routines",
+    "routineRunDescription": "When a routine finishes running, or fails"
   },
   "languageScreen": {
     "title": "Language",
@@ -1274,6 +1276,11 @@
     "questionFallback": "pending question",
     "newMessageTitle": "New message",
     "newMessageBody": "New message",
+    "routineFallbackTitle": "Routine",
+    "routineDoneTitle": "{{title}} finished",
+    "routineDoneBody": "The run completed. Tap to read the result.",
+    "routineFailedTitle": "{{title}} failed",
+    "routineFailedBody": "The run ended with an error.",
     "chatErrorTitle": "Chat error",
     "chatErrorBody": "An error occurred during the chat.",
     "chatErrorKind": {

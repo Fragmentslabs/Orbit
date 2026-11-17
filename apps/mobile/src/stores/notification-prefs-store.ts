@@ -10,12 +10,15 @@ export interface NotificationPrefs {
   newMessage: boolean
   /** Error in the chat */
   chatError: boolean
+  /** A routine finished running (done or failed) */
+  routineRun: boolean
 }
 
 const DEFAULTS: NotificationPrefs = {
   pendingAsk: true,
   newMessage: true,
   chatError: true,
+  routineRun: true,
 }
 
 interface NotificationPrefsStore {

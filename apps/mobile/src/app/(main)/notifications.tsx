@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, Bell, MessageCircle, AlertTriangle } from 'lucide-react-native'
+import { ArrowLeft, Bell, MessageCircle, AlertTriangle, CalendarClock } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useNotificationPrefsStore } from '~/stores/notification-prefs-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -55,6 +55,14 @@ export default function NotificationsScreen() {
             description={t('notificationsScreen.chatErrorDescription')}
             value={notificationPrefs.chatError}
             onChange={(v) => setNotificationPref('chatError', v)}
+          />
+          <RowDivider />
+          <SwitchRow
+            icon={CalendarClock}
+            label={t('notificationsScreen.routineRun')}
+            description={t('notificationsScreen.routineRunDescription')}
+            value={notificationPrefs.routineRun}
+            onChange={(v) => setNotificationPref('routineRun', v)}
           />
         </View>
       </ScrollView>
