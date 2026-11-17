@@ -17,11 +17,13 @@ import {
   ListRestart,
   Palette,
   Languages,
+  Mic,
   Info,
   ChevronRight,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useDictationPrefsStore } from '~/stores/dictation-prefs-store'
 import { Spin } from '~/components/ui/spin'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -37,6 +39,7 @@ export default function SettingsScreen() {
   const disconnect = useConnectionStore((s) => s.disconnect)
   const clearSavedConfig = useConnectionStore((s) => s.clearSavedConfig)
 
+  const dictationMode = useDictationPrefsStore((s) => s.mode)
   const selectedModel = useSettingsStore((s) => s.selectedModel)
   const catalog = useSettingsStore((s) => s.catalog)
   const fetchSelectedModel = useSettingsStore((s) => s.fetchSelectedModel)
@@ -135,6 +138,14 @@ export default function SettingsScreen() {
             icon={Languages}
             label={t('settings.language')}
             onPress={() => router.push('/(main)/language')}
+            chevron
+          />
+          <RowDivider />
+          <Row
+            icon={Mic}
+            label={t('settings.dictation')}
+            value={t(dictationMode === 'native' ? 'dictationScreen.native' : 'dictationScreen.desktop')}
+            onPress={() => router.push('/(main)/dictation')}
             chevron
           />
           <RowDivider />

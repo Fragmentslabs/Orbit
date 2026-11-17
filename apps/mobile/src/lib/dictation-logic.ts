@@ -124,3 +124,84 @@ export function insertTranscript(
 function clamp(n: number, max: number): number {
   return Math.max(0, Math.min(max, n))
 }
+
+// ─── Native recognizer (expo-speech-recognition) ─────────────────────────────
+
+const DEFAULT_LOCALES: Record<string, string> = {
+  pt: 'pt-BR',
+  en: 'en-US',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  it: 'it-IT',
+  ja: 'ja-JP',
+  ko: 'ko-KR',
+  zh: 'zh-CN',
+  ru: 'ru-RU',
+}
+
+/** The BCP-47 tag the OS recognizers expect ("pt-BR"), from the app language ("pt", "pt-BR", "pt_BR"). */
+export function speechLocale(appLanguage: string | undefined): string {
+  const raw = (appLanguage ?? '').trim().replace('_', '-')
+  const [base, region] = raw.split('-')
+  if (!base) return 'en-US'
+  const lower = base.toLowerCase()
+  if (region) return `${lower}-${region.toUpperCase()}`
+  return DEFAULT_LOCALES[lower] ?? lower
+}
+
+/**
+ * The recognizer's volume (-2..10, below 0 is inaudible) as a 0..1 bar level. Ordinary speech
+ * sits around 2–6, so a square root curve keeps it from hugging the bottom of the wave.
+ */
+export function volumeToLevel(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.min(1, Math.sqrt(value / 8))
+}
+
+/** What the native recognizer has said so far: closed segments plus the one still being spoken. */
+export interface NativeTranscript {
+  committed: string
+  interim: string
+}
+
+export const EMPTY_NATIVE_TRANSCRIPT: NativeTranscript = { committed: '', interim: '' }
+
+function joinWords(a: string, b: string): string {
+  const left = a.trim()
+  const right = b.trim()
+  if (!left) return right
+  if (!right) return left
+  return `${left} ${right}`
+}
+
+/**
+ * Folds one `result` event in. A final result closes the segment (Android emits several in a
+ * continuous session); a partial one replaces the segment being spoken.
+ */
+export function applyNativeResult(state: NativeTranscript, transcript: string, isFinal: boolean): NativeTranscript {
+  if (isFinal) return { committed: joinWords(state.committed, transcript), interim: '' }
+  return { committed: state.committed, interim: transcript.trim() }
+}
+
+/** The whole text to show / insert. */
+export function nativeText(state: NativeTranscript): string {
+  return joinWords(state.committed, state.interim)
+}
+
+// ─── Streaming partials through the desktop ──────────────────────────────────
+
+/** How often a partial transcript is asked for while recording, and the least audio worth asking about. */
+export const PARTIAL_EVERY_MS = 1600
+export const PARTIAL_MIN_AUDIO_MS = 700
+/** A partial only looks at the last seconds: the desktop engine decodes ~30 s windows and the cost grows with the audio. */
+export const PARTIAL_WINDOW_SECONDS = 24
+
+/**
+ * The trailing `seconds` of a PCM16 mono stream, sample-aligned. The whole buffer when it is shorter.
+ */
+export function pcmTail(pcm: Uint8Array, sampleRate: number, seconds: number): Uint8Array {
+  const wanted = Math.max(0, Math.floor(sampleRate * seconds)) * 2
+  if (wanted === 0 || pcm.length <= wanted) return pcm
+  return pcm.subarray(pcm.length - wanted)
+}

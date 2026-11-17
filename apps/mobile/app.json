@@ -59,6 +59,13 @@
         }
       ],
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Orbit needs the microphone to dictate messages.",
+          "speechRecognitionPermission": "Orbit uses speech recognition to turn what you say into text while you speak."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Orbit needs camera access to scan the connection QR code."

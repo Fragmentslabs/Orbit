@@ -61,6 +61,7 @@ export default function MainLayout() {
               <Stack.Screen name="preferences" />
               <Stack.Screen name="notifications" />
               <Stack.Screen name="language" />
+              <Stack.Screen name="dictation" />
               <Stack.Screen name="howto" />
               <Stack.Screen name="appearance" />
               <Stack.Screen name="modes" />

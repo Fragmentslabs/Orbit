@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EMPTY_NATIVE_TRANSCRIPT,
+  applyNativeResult,
   dictationReducer,
   insertTranscript,
   levelsStale,
+  nativeText,
+  pcmTail,
+  speechLocale,
+  volumeToLevel,
   pcmLevel,
   pushLevel,
   visibleLevels,
@@ -115,5 +121,64 @@ describe('insertTranscript', () => {
   })
   it('keeps the text when the transcript is blank', () => {
     expect(insertTranscript('abc', '   ', { start: 1, end: 1 })).toEqual({ text: 'abc', cursor: 1 })
+  })
+})
+
+describe('speechLocale', () => {
+  it('maps the app language to a region tag', () => {
+    expect(speechLocale('pt')).toBe('pt-BR')
+    expect(speechLocale('en')).toBe('en-US')
+    expect(speechLocale('pt-br')).toBe('pt-BR')
+    expect(speechLocale('en_GB')).toBe('en-GB')
+  })
+  it('falls back to English when there is no language', () => {
+    expect(speechLocale(undefined)).toBe('en-US')
+    expect(speechLocale('')).toBe('en-US')
+  })
+  it('passes an unknown language through as it is', () => {
+    expect(speechLocale('sv')).toBe('sv')
+  })
+})
+
+describe('volumeToLevel', () => {
+  it('is silent for inaudible and invalid values', () => {
+    expect(volumeToLevel(-2)).toBe(0)
+    expect(volumeToLevel(0)).toBe(0)
+    expect(volumeToLevel(Number.NaN)).toBe(0)
+  })
+  it('rises with the volume and tops out at 1', () => {
+    expect(volumeToLevel(2)).toBeLessThan(volumeToLevel(6))
+    expect(volumeToLevel(10)).toBe(1)
+  })
+})
+
+describe('native transcript', () => {
+  it('shows the partial being spoken and replaces it on the next one', () => {
+    let t = applyNativeResult(EMPTY_NATIVE_TRANSCRIPT, 'olá', false)
+    expect(nativeText(t)).toBe('olá')
+    t = applyNativeResult(t, 'olá mundo', false)
+    expect(nativeText(t)).toBe('olá mundo')
+  })
+  it('closes a segment on a final result and keeps going after it', () => {
+    let t = applyNativeResult(EMPTY_NATIVE_TRANSCRIPT, 'primeira frase', true)
+    t = applyNativeResult(t, 'segunda', false)
+    expect(nativeText(t)).toBe('primeira frase segunda')
+    t = applyNativeResult(t, 'segunda frase', true)
+    expect(nativeText(t)).toBe('primeira frase segunda frase')
+  })
+})
+
+describe('pcmTail', () => {
+  it('returns everything when the audio is short', () => {
+    const pcmBytes = new Uint8Array(16000 * 2)
+    expect(pcmTail(pcmBytes, 16000, 5).length).toBe(pcmBytes.length)
+  })
+  it('keeps only the trailing seconds, sample aligned', () => {
+    const pcmBytes = new Uint8Array(16000 * 2 * 10)
+    pcmBytes[pcmBytes.length - 1] = 7
+    const tail = pcmTail(pcmBytes, 16000, 2)
+    expect(tail.length).toBe(16000 * 2 * 2)
+    expect(tail.length % 2).toBe(0)
+    expect(tail[tail.length - 1]).toBe(7)
   })
 })

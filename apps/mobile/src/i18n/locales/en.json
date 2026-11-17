@@ -22,7 +22,8 @@
       "desktop": "Desktop",
       "disconnect": "Disconnect"
     },
-    "footer": "Orbit Mobile v{{version}}"
+    "footer": "Orbit Mobile v{{version}}",
+    "dictation": "Voice dictation"
   },
   "providersScreen": {
     "title": "Providers",
@@ -2135,5 +2136,15 @@
       "noRemote": "no remote",
       "detached": "detached HEAD"
     }
+  },
+  "dictationScreen": {
+    "title": "Voice dictation",
+    "description": "Where your speech becomes text. Either way, the words show up in the message box while you speak.",
+    "native": "On this phone",
+    "nativeHint": "The phone's own recognizer. Appears instantly and works without the desktop. Quality depends on the system.",
+    "desktop": "On the desktop",
+    "desktopHint": "The desktop's voice model. More accurate, shows text every second or so, and needs the connection.",
+    "defaultTag": "Default",
+    "unavailable": "This build of the app does not include the phone recognizer yet — it needs a new build. The desktop is used meanwhile."
   }
 }

@@ -53,6 +53,7 @@
     "expo-router": "~57.0.15",
     "expo-secure-store": "~57.0.0",
     "expo-sharing": "~57.0.14",
+    "expo-speech-recognition": "^58.0.1",
     "expo-splash-screen": "~57.0.7",
     "expo-status-bar": "~57.0.0",
     "expo-symbols": "~57.0.2",

@@ -22,7 +22,8 @@
       "desktop": "Desktop",
       "disconnect": "Desconectar"
     },
-    "footer": "Orbit Mobile v{{version}}"
+    "footer": "Orbit Mobile v{{version}}",
+    "dictation": "Ditado por voz"
   },
   "providersScreen": {
     "title": "Provedores",
@@ -2135,5 +2136,15 @@
       "noRemote": "sem remote",
       "detached": "HEAD solto"
     }
+  },
+  "dictationScreen": {
+    "title": "Ditado por voz",
+    "description": "Onde a sua fala vira texto. Nos dois jeitos, as palavras aparecem na caixa de mensagem enquanto você fala.",
+    "native": "No celular",
+    "nativeHint": "O reconhecedor do próprio celular. Aparece na hora e funciona sem o desktop. A qualidade depende do sistema.",
+    "desktop": "No desktop",
+    "desktopHint": "O modelo de voz do desktop. Mais preciso, mostra o texto a cada segundo ou so e precisa da conexão.",
+    "defaultTag": "Padrão",
+    "unavailable": "Esta versão do app ainda não inclui o reconhecedor do celular — é preciso gerar um novo build. Enquanto isso, o desktop é usado."
   }
 }

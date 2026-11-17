@@ -176,8 +176,17 @@ export function PromptInput({
   // native field ends up a few px taller than one lineHeight, so a bottom-anchored button
   // sits below the text; measuring the resting height lets us lift it by exactly half the
   // excess instead of guessing a fixed offset. Zero when field and buttons already match.
-  const [actionLift, setActionLift] = useState(0)
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const [actionLift, setActionLift] = useState(0);
+  // Past one line the field takes the whole width and the buttons drop to a row under it (like the
+  // ChatGPT app). It holds until the field empties, so a line that fits again after widening does not flicker.
+  const [expanded, setExpanded] = useState(false);
+  // Width the field has beside the buttons, and the length that overflowed it: they decide when the text
+  // is short enough to go back to one line without wrapping again (which would bounce the layout).
+  const narrowWidthRef = useRef(0);
+  const overflowLenRef = useRef(Infinity);
+  // An empty field is always the one-line layout: the size event can arrive before the text state does.
+  if (expanded && text === "") setExpanded(false);
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
   // FIXED padding: the KeyboardAvoidingView discounts this same value from the keyboard
   // height (negative keyboardVerticalOffset, in ChatScreen), so there is a single
   // animation and the input does not go out of phase with the keyboard. See lib/keyboard.
@@ -528,38 +537,76 @@ export function PromptInput({
   // `liveActive` is state (and not a ref) because the banner and the icons render it.
   const [liveActive, setLiveActive] = useState(false)
   // Latest text and cursor, readable from the async transcript callback.
-  const dictationTextRef = useRef(text)
-  useEffect(() => { dictationTextRef.current = text }, [text])
-  const selectionRef = useRef<TextSelection | null>(null)
-  const insertDictation = useCallback((dictated: string) => {
-    if (liveActive) {
-      setLiveActive(false)
-      submitText(dictated, true)
-      return
-    }
-    // At the cursor (or over the selection), never over what was typed while it transcribed.
-    const result = insertTranscript(dictationTextRef.current, dictated, selectionRef.current)
-    dictationTextRef.current = result.text
-    selectionRef.current = { start: result.cursor, end: result.cursor }
-    setText(result.text)
-    inputRef.current?.focus()
-    requestAnimationFrame(() => {
-      try {
-        inputRef.current?.setNativeProps({ selection: selectionRef.current })
-      } catch {
-        /* the cursor simply stays where the platform put it */
+  const dictationTextRef = useRef(text);
+  useEffect(() => {
+    dictationTextRef.current = text;
+  }, [text]);
+  const selectionRef = useRef<TextSelection | null>(null);
+  // The field as it was when the dictation began: the words shown while speaking are always
+  // laid over THIS, so each new partial replaces the last one instead of piling up on it.
+  const dictationBaseRef = useRef<{
+    text: string;
+    selection: TextSelection | null;
+  } | null>(null);
+  const placeDictation = useCallback((dictated: string) => {
+    const base = dictationBaseRef.current ?? {
+      text: dictationTextRef.current,
+      selection: selectionRef.current,
+    };
+    // At the cursor (or over the selection), never over what was typed before the dictation.
+    const result = insertTranscript(base.text, dictated, base.selection);
+    dictationTextRef.current = result.text;
+    setText(result.text);
+    return result;
+  }, []);
+  // Text arriving while the person is still speaking (and an empty one, to take it back).
+  const previewDictation = useCallback(
+    (partial: string) => {
+      if (liveActive) return;
+      if (!dictationBaseRef.current) {
+        if (!partial) return;
+        dictationBaseRef.current = {
+          text: dictationTextRef.current,
+          selection: selectionRef.current,
+        };
       }
-    })
-  }, [liveActive, submitText])
-  const dictation = useDictation(insertDictation)
+      placeDictation(partial);
+      if (!partial) dictationBaseRef.current = null;
+    },
+    [liveActive, placeDictation],
+  );
+  const insertDictation = useCallback(
+    (dictated: string) => {
+      if (liveActive) {
+        setLiveActive(false);
+        submitText(dictated, true);
+        return;
+      }
+      const result = placeDictation(dictated);
+      dictationBaseRef.current = null;
+      selectionRef.current = { start: result.cursor, end: result.cursor };
+      inputRef.current?.focus();
+      requestAnimationFrame(() => {
+        try {
+          inputRef.current?.setNativeProps({ selection: selectionRef.current });
+        } catch {
+          /* the cursor simply stays where the platform put it */
+        }
+      });
+    },
+    [liveActive, submitText, placeDictation],
+  );
+  const dictation = useDictation(insertDictation, undefined, previewDictation);
 
   const handleLiveCall = useCallback(() => {
     setLiveActive(true)
     dictation.toggle()
   }, [dictation])
 
-  const hasText = text.trim().length > 0
-  const showSend = hasText || !!isStreaming
+  const hasText = text.trim().length > 0;
+  // While dictating, the text arriving in the field must not take the mic button away: it is the way to stop.
+  const dictatingText = dictation.recording && !liveActive;
+  const showSend = (hasText || !!isStreaming) && !dictatingText;
 
   // Built once, on the left of the field.
   const plusButton = (
@@ -575,19 +622,46 @@ export function PromptInput({
 
   // Right slot while there is nothing to send: dictation next to the live call — the same
   // control as the desktop (primary with the dark icon), in the place of "send".
+  const micButton = (
+    <TouchableOpacity
+      onPress={() => {
+        setLiveActive(false);
+        dictation.toggle();
+      }}
+      disabled={disabled || dictation.transcribing}
+      activeOpacity={0.75}
+      className="h-10 w-10 items-center justify-center rounded-full"
+      style={
+        dictation.recording && !liveActive
+          ? { backgroundColor: tokens.destructive }
+          : undefined
+      }
+      accessibilityLabel={
+        dictation.recording
+          ? t("promptInput.voice.stop")
+          : t("promptInput.voice.record")
+      }
+    >
+      {dictation.transcribing ? (
+        <ActivityIndicator size="small" color={tokens.mutedForeground} />
+      ) : (
+        <Mic
+          size={22}
+          color={
+            dictation.recording && !liveActive
+              ? "#fff"
+              : dictation.recording
+                ? tokens.destructive
+                : tokens.mutedForeground
+          }
+        />
+      )}
+    </TouchableOpacity>
+  );
+
   const voiceSlot = (
     <View className="flex-row items-center gap-0.5">
-      <TouchableOpacity
-        onPress={() => { setLiveActive(false); dictation.toggle() }}
-        disabled={disabled || dictation.transcribing}
-        activeOpacity={0.75}
-        className="h-10 w-10 items-center justify-center rounded-full"
-        accessibilityLabel={dictation.recording ? t('promptInput.voice.stop') : t('promptInput.voice.record')}
-      >
-        {dictation.transcribing
-          ? <ActivityIndicator size="small" color={tokens.mutedForeground} />
-          : <Mic size={22} color={dictation.recording ? tokens.destructive : tokens.mutedForeground} />}
-      </TouchableOpacity>
+      {micButton}
 
       <TouchableOpacity
         onPress={handleLiveCall}
@@ -606,16 +680,19 @@ export function PromptInput({
 
   // Same slot in both layouts: "send" while there is text, "voice" while there is not.
   const rightSlot = showSend ? (
-    <SendButtonGroup
-      onSend={handleSend}
-      onStop={onAbort}
-      onQueue={handleQueue}
-      onStopAndSend={handleStopAndSend}
-      onSchedule={handleSchedule}
-      isStreaming={!!isStreaming}
-      hasText={hasText}
-      disabled={disabled || sendDisabled}
-    />
+    <View className="flex-row items-center gap-0.5">
+      {micButton}
+      <SendButtonGroup
+        onSend={handleSend}
+        onStop={onAbort}
+        onQueue={handleQueue}
+        onStopAndSend={handleStopAndSend}
+        onSchedule={handleSchedule}
+        isStreaming={!!isStreaming}
+        hasText={hasText}
+        disabled={disabled || sendDisabled}
+      />
+    </View>
   ) : (
     voiceSlot
   )
@@ -648,7 +725,9 @@ export function PromptInput({
 
       {/* Reply quote and dictation status — above the pill, never inside it */}
       <ReplyBar sessionId={sessionId} />
-      {dictation.recording && (
+      {/* Plain dictation writes into the field as you speak (the red button is the signal); the
+          recording line only belongs to the live call, which shows no text. */}
+      {dictation.recording && liveActive && (
         <View className="flex-row items-center gap-2 mb-1.5">
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
           {liveActive && (
@@ -691,55 +770,103 @@ export function PromptInput({
       >
         {/* Field and actions on one row, bottom-anchored: the buttons stay put and the
             field grows upward as it gains lines (the card grows up, the bottom is fixed). */}
-        <View className="flex-row items-end">
-          <View style={{ marginBottom: actionLift }}>{plusButton}</View>
-          {/* The vertical padding lives on this wrapper, NOT on the field. It is measured
+          <View className="flex-row items-end">
+            <View
+              style={
+                expanded
+                  ? { position: "absolute", left: 0, bottom: 0 }
+                  : { marginBottom: actionLift }
+              }
+            >
+              {plusButton}
+            </View>
+            {/* The vertical padding lives on this wrapper, NOT on the field. It is measured
               once at rest (one line) and the actions are lifted by half the excess over their
               own height, so the icon centre lands on the text centre; as the field grows the
               buttons stay anchored to the bottom of the card. */}
-          <View
-            style={{ flex: 1, paddingTop: INPUT_VERTICAL_PADDING, paddingBottom: INPUT_VERTICAL_PADDING }}
-            onLayout={(event) => {
-              const height = event.nativeEvent.layout.height
-              // The native field lays out a little taller than its line box (32 for a 24
-              // line on iOS), so the row grows past the buttons and half of that excess is
-              // what centres the icons on the text. The baseline has to come from the
-              // EMPTY field — the resting state — and the LATEST one wins: the first pass
-              // reports the bare line box before the field settles, and keeping the
-              // smallest sample froze the lift at zero, leaving the icons a few pixels low.
-              if (text !== '') return
-              setActionLift(Math.max(0, (height - ACTION_SIZE) / 2))
-            }}
-          >
-            <TextInput
-              ref={inputRef}
-              value={text}
-              onChangeText={setText}
-              onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection }}
-              placeholder={t('promptInput.placeholder')}
-              placeholderTextColor={tokens.mutedForeground}
-              multiline
-              maxLength={4096}
-              editable={!disabled}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              submitBehavior="newline"
-              style={[
-                {
-                  color: tokens.foreground,
-                  fontSize: 16,
-                  lineHeight: INPUT_LINE_HEIGHT,
-                  includeFontPadding: false,
-                  paddingTop: 0,
-                  paddingBottom: 0,
-                  maxHeight: INPUT_MAX_LINES * INPUT_LINE_HEIGHT,
-                  outlineStyle: 'none',
-                } as any,
-                Platform.OS === 'web' ? { outlineStyle: 'none' } : undefined,
-              ]}
-            />
-          </View>
-          <View style={{ marginBottom: actionLift }}>{rightSlot}</View>
+            <View
+              style={{
+                flex: 1,
+                paddingTop: INPUT_VERTICAL_PADDING,
+                paddingBottom:
+                  INPUT_VERTICAL_PADDING + (expanded ? ACTION_SIZE : 0),
+                paddingHorizontal: expanded ? 8 : 0,
+              }}
+              onLayout={(event) => {
+                const height = event.nativeEvent.layout.height;
+                // The native field lays out a little taller than its line box (32 for a 24
+                // line on iOS), so the row grows past the buttons and half of that excess is
+                // what centres the icons on the text. The baseline has to come from the
+                // EMPTY field — the resting state — and the LATEST one wins: the first pass
+                // reports the bare line box before the field settles, and keeping the
+                // smallest sample froze the lift at zero, leaving the icons a few pixels low.
+                if (!expanded)
+                  narrowWidthRef.current = event.nativeEvent.layout.width;
+                if (text !== "" || expanded) return;
+                // A transient tall sample (a multi-line field that just emptied) would lift the buttons for good.
+                if (
+                  height >
+                  INPUT_LINE_HEIGHT * 1.8 + INPUT_VERTICAL_PADDING * 2
+                )
+                  return;
+                setActionLift(Math.max(0, (height - ACTION_SIZE) / 2));
+              }}
+            >
+              <TextInput
+                ref={inputRef}
+                value={text}
+                onChangeText={setText}
+                onContentSizeChange={(e) => {
+                  const h = e.nativeEvent.contentSize.height;
+                  if (h > INPUT_LINE_HEIGHT * 1.5) {
+                    if (!expanded) overflowLenRef.current = text.length;
+                    setExpanded(true);
+                  } else if (expanded && text === "") {
+                    setExpanded(false);
+                  } else if (expanded) {
+                    const fits = Math.floor(narrowWidthRef.current / 10);
+                    const shortEnough =
+                      text.length < overflowLenRef.current &&
+                      text.length <= fits;
+                    if (text === "" || (!text.includes("\n") && shortEnough))
+                      setExpanded(false);
+                  }
+                }}
+                onSelectionChange={(e) => {
+                  selectionRef.current = e.nativeEvent.selection;
+                }}
+                placeholder={t("promptInput.placeholder")}
+                placeholderTextColor={tokens.mutedForeground}
+                multiline
+                maxLength={4096}
+                editable={!disabled}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                submitBehavior="newline"
+                style={[
+                  {
+                    color: tokens.foreground,
+                    fontSize: 16,
+                    lineHeight: INPUT_LINE_HEIGHT,
+                    includeFontPadding: false,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    maxHeight: INPUT_MAX_LINES * INPUT_LINE_HEIGHT,
+                    outlineStyle: "none",
+                  } as any,
+                  Platform.OS === "web" ? { outlineStyle: "none" } : undefined,
+                ]}
+              />
+            </View>
+            <View
+              style={
+                expanded
+                  ? { position: "absolute", right: 0, bottom: 0 }
+                  : { marginBottom: actionLift }
+              }
+            >
+              {rightSlot}
+            </View>
         </View>
       </View>
       </SlashPaletteShell>

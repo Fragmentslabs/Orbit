@@ -25,6 +25,7 @@ import type { ConnectionErrorReason } from "@orbit/companion-client"
 import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
+import { useDictationPrefsStore } from '~/stores/dictation-prefs-store';
 import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
 import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
@@ -266,6 +267,7 @@ export default function RootLayout() {
     // What was typed without a connection shows up in the queue before the socket opens.
     void useMessageQueueStore.getState().initialize();
     void useNotificationPrefsStore.getState().loadPrefs();
+    void useDictationPrefsStore.getState().loadPrefs();
     // Loads the session cache so they show up immediately
     // (the real fetch over WS happens once it connects)
     void useSessionStore.getState().fetchSessions();
