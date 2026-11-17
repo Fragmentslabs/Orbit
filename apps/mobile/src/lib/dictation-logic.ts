@@ -63,6 +63,28 @@ export function pcmLevel(bytes: Uint8Array): number {
   return Math.min(1, Math.sqrt(rms) * 1.6)
 }
 
+/**
+ * Loudness of a PCM16 buffer on the scale the call's voice-activity rules were tuned for
+ * (the desktop's `pcmLevel`): RMS in dB from -50 (room silence) to -5 (voice close to the mic),
+ * 0..1. `isSpeech`/`turnEnded` in @orbit/shared expect this one, not the waveform curve above.
+ */
+export function pcmDbLevel(bytes: Uint8Array): number {
+  const samples = bytes.length >> 1
+  if (samples === 0) return 0
+  const view = new DataView(bytes.buffer, bytes.byteOffset, samples * 2)
+  const step = Math.max(1, Math.floor(samples / 1024))
+  let sum = 0
+  let n = 0
+  for (let i = 0; i < samples; i += step) {
+    const v = view.getInt16(i * 2, true) / 32768
+    sum += v * v
+    n++
+  }
+  const rms = Math.sqrt(sum / n)
+  if (rms <= 0) return 0
+  return Math.min(1, Math.max(0, (20 * Math.log10(rms) + 50) / 45))
+}
+
 /** Appends a level keeping at most `max` of the newest ones (mutates and returns). */
 export function pushLevel(values: number[], level: number, max: number): number[] {
   values.push(level)

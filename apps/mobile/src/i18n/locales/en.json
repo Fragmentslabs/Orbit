@@ -243,7 +243,12 @@
       "offline": "No connection to the desktop — dictation runs there",
       "failed": "Could not transcribe the audio",
       "call": "Live call",
-      "live": "Listening — tap the phone to end and send"
+      "live": "Listening — tap the phone to end and send",
+      "call_listening": "Listening",
+      "call_thinking": "Thinking",
+      "call_speaking": "Speaking",
+      "call_interrupt": "Interrupt",
+      "call_hangUp": "Hang up"
     },
     "modes": {
       "research": "Research",

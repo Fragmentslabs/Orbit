@@ -243,7 +243,12 @@
       "offline": "Sem conexão com o desktop — o ditado roda lá",
       "failed": "Falha ao transcrever o áudio",
       "call": "Ligação ao vivo",
-      "live": "Ouvindo — toque no telefone para encerrar e enviar"
+      "live": "Ouvindo — toque no telefone para encerrar e enviar",
+      "call_listening": "Ouvindo",
+      "call_thinking": "Pensando",
+      "call_speaking": "Falando",
+      "call_interrupt": "Interromper",
+      "call_hangUp": "Encerrar"
     },
     "modes": {
       "research": "Pesquisa",

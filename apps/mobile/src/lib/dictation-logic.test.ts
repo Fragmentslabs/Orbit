@@ -9,6 +9,7 @@ import {
   pcmTail,
   speechLocale,
   volumeToLevel,
+  pcmDbLevel,
   pcmLevel,
   pushLevel,
   visibleLevels,
@@ -180,5 +181,22 @@ describe('pcmTail', () => {
     expect(tail.length).toBe(16000 * 2 * 2)
     expect(tail.length % 2).toBe(0)
     expect(tail[tail.length - 1]).toBe(7)
+  })
+})
+
+describe('pcmDbLevel', () => {
+  const pcm = (value: number, n = 800) => {
+    const bytes = new Uint8Array(n * 2)
+    const view = new DataView(bytes.buffer)
+    for (let i = 0; i < n; i++) view.setInt16(i * 2, value, true)
+    return bytes
+  }
+  it('is 0 for silence and for an empty buffer', () => {
+    expect(pcmDbLevel(pcm(0))).toBe(0)
+    expect(pcmDbLevel(new Uint8Array(0))).toBe(0)
+  })
+  it('puts a loud voice near the top and room noise near the bottom', () => {
+    expect(pcmDbLevel(pcm(12000))).toBeGreaterThan(0.8)
+    expect(pcmDbLevel(pcm(40))).toBeLessThan(0.2)
   })
 })

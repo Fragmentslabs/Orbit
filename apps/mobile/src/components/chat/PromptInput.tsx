@@ -16,7 +16,9 @@ import { InputAttachment } from './Attachment'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
 import { useDictation } from '~/hooks/useDictation'
-import { DictationWave } from './DictationWave'
+import { useVoiceCall } from '~/hooks/useVoiceCall'
+import { CallCaption } from './CallCaption'
+import { CallStrip } from './CallStrip'
 import { insertTranscript, type TextSelection } from '~/lib/dictation-logic'
 import { useChatModes } from '~/hooks/useChatModes'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
@@ -535,7 +537,18 @@ export function PromptInput({
   // desktop transcribes. What it does today is the turn: speak, stop, and the text
   // already goes as a message (marked as a call, so the answer comes back speakable).
   // `liveActive` is state (and not a ref) because the banner and the icons render it.
-  const [liveActive, setLiveActive] = useState(false)
+  // The call: the desktop is the server (transcription and voice), the phone listens, judges the
+  // silence and plays the answer. See useVoiceCall.
+  const submitCall = useCallback(
+    (spoken: string) => {
+      if (disabled || sendDisabled) return false
+      submitText(spoken, true)
+      return true
+    },
+    [disabled, sendDisabled, submitText],
+  )
+  const call = useVoiceCall({ sessionId, submit: submitCall })
+  const liveActive = call.active
   // Latest text and cursor, readable from the async transcript callback.
   const dictationTextRef = useRef(text);
   useEffect(() => {
@@ -577,11 +590,6 @@ export function PromptInput({
   );
   const insertDictation = useCallback(
     (dictated: string) => {
-      if (liveActive) {
-        setLiveActive(false);
-        submitText(dictated, true);
-        return;
-      }
       const result = placeDictation(dictated);
       dictationBaseRef.current = null;
       selectionRef.current = { start: result.cursor, end: result.cursor };
@@ -594,14 +602,19 @@ export function PromptInput({
         }
       });
     },
-    [liveActive, submitText, placeDictation],
+    [placeDictation],
   );
   const dictation = useDictation(insertDictation, undefined, previewDictation);
 
   const handleLiveCall = useCallback(() => {
-    setLiveActive(true)
-    dictation.toggle()
-  }, [dictation])
+    if (call.active) {
+      call.hangUp()
+      return
+    }
+    // A plain dictation in progress gives the microphone up for the call.
+    dictation.cancel()
+    call.start()
+  }, [call, dictation])
 
   const hasText = text.trim().length > 0;
   // While dictating, the text arriving in the field must not take the mic button away: it is the way to stop.
@@ -625,10 +638,9 @@ export function PromptInput({
   const micButton = (
     <TouchableOpacity
       onPress={() => {
-        setLiveActive(false);
         dictation.toggle();
       }}
-      disabled={disabled || dictation.transcribing}
+      disabled={disabled || dictation.transcribing || liveActive}
       activeOpacity={0.75}
       className="h-10 w-10 items-center justify-center rounded-full"
       style={
@@ -668,10 +680,10 @@ export function PromptInput({
         disabled={disabled || dictation.transcribing}
         activeOpacity={0.8}
         className="h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: dictation.recording && liveActive ? tokens.destructive : tokens.primary }}
+        style={{ backgroundColor: liveActive ? tokens.destructive : tokens.primary }}
         accessibilityLabel={t('promptInput.voice.call')}
       >
-        {dictation.transcribing && liveActive
+        {call.phase === 'thinking' && liveActive
           ? <ActivityIndicator size="small" color={tokens.primaryForeground} />
           : <AudioLines size={20} color={tokens.primaryForeground} />}
       </TouchableOpacity>
@@ -727,24 +739,20 @@ export function PromptInput({
       <ReplyBar sessionId={sessionId} />
       {/* Plain dictation writes into the field as you speak (the red button is the signal); the
           recording line only belongs to the live call, which shows no text. */}
-      {dictation.recording && liveActive && (
+      {/* The call's words, above the composer like the dictation text: yours while you speak, the
+          agent's sentence by sentence while it talks. */}
+      {liveActive && call.caption && (
+        <CallCaption
+          text={call.caption.text}
+          color={call.caption.who === 'you' ? tokens.mutedForeground : tokens.foreground}
+          background={tokens.background}
+        />
+      )}
+      {call.error && !liveActive && (
         <View className="flex-row items-center gap-2 mb-1.5">
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
-          {liveActive && (
-            <Text className="text-xs" numberOfLines={1} style={{ color: tokens.mutedForeground, flexShrink: 1 }}>
-              {t('promptInput.voice.live')}
-            </Text>
-          )}
-          <View style={{ flex: 1 }}>
-            <DictationWave levels={dictation.levels} color={tokens.mutedForeground} />
-          </View>
-          <TouchableOpacity
-            onPress={() => { setLiveActive(false); dictation.cancel() }}
-            activeOpacity={0.7}
-            hitSlop={8}
-            accessibilityLabel={t('promptInput.voice.cancel')}
-          >
-            <X size={16} color={tokens.mutedForeground} />
+          <Text className="text-xs flex-1" style={{ color: tokens.destructive }}>{call.error}</Text>
+          <TouchableOpacity onPress={call.dismissError} activeOpacity={0.7}>
+            <X size={14} color={tokens.mutedForeground} />
           </TouchableOpacity>
         </View>
       )}
@@ -839,7 +847,7 @@ export function PromptInput({
                 placeholderTextColor={tokens.mutedForeground}
                 multiline
                 maxLength={4096}
-                editable={!disabled}
+                editable={!disabled && !liveActive}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 submitBehavior="newline"
@@ -857,6 +865,17 @@ export function PromptInput({
                   Platform.OS === "web" ? { outlineStyle: "none" } : undefined,
                 ]}
               />
+            {liveActive && (
+              <CallStrip
+                phase={call.phase}
+                levels={call.levels}
+                label={t(`promptInput.voice.call_${call.phase}`)}
+                color={tokens.mutedForeground}
+                background={tokens.card}
+                interruptLabel={t('promptInput.voice.call_interrupt')}
+                onInterrupt={call.interrupt}
+              />
+            )}
             </View>
             <View
               style={

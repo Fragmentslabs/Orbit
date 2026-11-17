@@ -30,6 +30,7 @@ import {
   applyNativeResult,
   dictationReducer,
   nativeText,
+  pcmDbLevel,
   pcmLevel,
   pcmTail,
   pushLevel,
@@ -51,6 +52,8 @@ const MIN_AUDIO_MS = 200
 export interface DictationLevels {
   values: number[]
   at: number
+  /** Latest buffer on the dB scale the call's speech detection uses (desktop mode only). */
+  db?: number
 }
 
 const MAX_LEVELS = 96
@@ -82,7 +85,7 @@ function messageOf(err: unknown): string {
 
 // ─── Desktop transcription, with partial text ────────────────────────────────
 
-function useDesktopDictation(onText: (text: string) => void, language?: string, onPartial?: PartialHandler): Dictation {
+export function useDesktopDictation(onText: (text: string) => void, language?: string, onPartial?: PartialHandler): Dictation {
   const [phase, dispatch] = useReducer(dictationReducer, 'idle')
   const recording = phase === 'recording'
   const transcribing = phase === 'transcribing'
@@ -110,6 +113,7 @@ function useDesktopDictation(onText: (text: string) => void, language?: string, 
     const bytes = new Uint8Array(buffer.data)
     chunksRef.current.push(bytes)
     pushLevel(levels.current.values, pcmLevel(bytes), MAX_LEVELS)
+    levels.current.db = pcmDbLevel(bytes)
     levels.current.at = Date.now()
   }, [])
 
@@ -133,8 +137,9 @@ function useDesktopDictation(onText: (text: string) => void, language?: string, 
 
   // Partial text while recording: every `PARTIAL_EVERY_MS` the last seconds of audio go to the
   // desktop — one request at a time, and an answer for an older run (or after the stop) is dropped.
+  const wantsPartial = !!onPartial
   useEffect(() => {
-    if (!recording || !http) return
+    if (!recording || !http || !wantsPartial) return
     const run = runRef.current
     let inFlight = false
     let lastBytes = 0
@@ -160,7 +165,7 @@ function useDesktopDictation(onText: (text: string) => void, language?: string, 
         })
     }, PARTIAL_EVERY_MS)
     return () => clearInterval(timer)
-  }, [recording, http, lang])
+  }, [recording, http, lang, wantsPartial])
 
   const start = useCallback(async () => {
     setError(null)
