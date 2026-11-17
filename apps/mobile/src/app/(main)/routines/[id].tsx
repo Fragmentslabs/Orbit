@@ -154,17 +154,25 @@ export default function RoutineDetailScreen() {
                 )}
                 <Text style={[s.actionText, { color: tokens.foreground }]}>{t('routines.list.runNow')}</Text>
               </Pressable>
-              {(routine.active || !finished) && (
-                <Pressable
-                  onPress={() => void update(routine.id, { active: !routine.active })}
-                  style={[s.actionBtn, { borderColor: tokens.border }]}
-                >
-                  {routine.active ? <Pause size={15} color={tokens.foreground} /> : <Play size={15} color={tokens.foreground} />}
-                  <Text style={[s.actionText, { color: tokens.foreground }]}>
-                    {t(routine.active ? 'routines.detail.pause' : 'routines.detail.activate')}
-                  </Text>
-                </Pressable>
-              )}
+              <Pressable
+                onPress={() => {
+                  // A one-off that already ran has nothing to resume: reschedule it in the settings.
+                  if (!routine.active && finished) setTab('config')
+                  else void update(routine.id, { active: !routine.active })
+                }}
+                style={[s.actionBtn, { borderColor: tokens.border }]}
+              >
+                {routine.active ? <Pause size={15} color={tokens.foreground} /> : <Play size={15} color={tokens.foreground} />}
+                <Text style={[s.actionText, { color: tokens.foreground }]}>
+                  {t(
+                    routine.active
+                      ? 'routines.detail.pause'
+                      : finished
+                        ? 'routines.detail.reschedule'
+                        : 'routines.detail.activate',
+                  )}
+                </Text>
+              </Pressable>
             </View>
           </View>
 
