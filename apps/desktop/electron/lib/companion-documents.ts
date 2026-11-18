@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http'
 
-import { viewHtml, viewRender, viewText } from './document-view'
+import { viewFile, viewHtml, viewRender, viewText } from './document-view'
 
 /**
  * Document reading for the phone's viewer.
@@ -78,4 +78,30 @@ export async function handleGetDocumentPages(
   })
   if (!rendered) return json(res, 404, { error: 'document not found' })
   json(res, 200, rendered)
+}
+
+const FILE_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+
+/**
+ * The original file of the document (PDF / .docx) as bytes: what the phone shares and prints.
+ * The name travels in `X-Orbit-Filename` (URL-encoded); 404 when the source has no file.
+ */
+export async function handleGetDocumentFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  docId: string,
+  json: Json,
+): Promise<void> {
+  const args = parse(req, docId)
+  const file = args ? await viewFile(args.sessionId, args.docId) : null
+  if (!file) return json(res, 404, { error: 'document has no file' })
+  res.writeHead(200, {
+    'Content-Type': FILE_TYPES[file.ext] ?? 'application/octet-stream',
+    'Content-Length': file.bytes.length,
+    'X-Orbit-Filename': encodeURIComponent(file.name),
+  })
+  res.end(file.bytes)
 }

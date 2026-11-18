@@ -18,6 +18,8 @@ export type DocMessage =
   | { type: 'find'; count: number; index: number }
   /** A PDF page scrolled near the viewport and still has no picture. */
   | { type: 'need'; page: number }
+  /** A tap on a link of the page: the app opens it in the system browser. */
+  | { type: 'link'; url: string }
 
 export function parseDocMessage(data: string): DocMessage | null {
   let raw: unknown
@@ -43,6 +45,9 @@ export function parseDocMessage(data: string): DocMessage | null {
   }
   if (msg.type === 'need' && typeof msg.page === 'number' && Number.isInteger(msg.page) && msg.page > 0) {
     return { type: 'need', page: msg.page }
+  }
+  if (msg.type === 'link' && typeof msg.url === 'string' && msg.url.length <= 4096) {
+    return { type: 'link', url: msg.url }
   }
   return null
 }

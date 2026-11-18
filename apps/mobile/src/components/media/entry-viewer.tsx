@@ -9,6 +9,8 @@ import { VideoView, useVideoPlayer } from 'expo-video'
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio'
 import { WebView } from 'react-native-webview'
 import { buildMarkdownHtml } from '~/lib/document-markdown'
+import { parseDocMessage } from '~/lib/document-web-script'
+import { openExternal } from '~/lib/external-link'
 import { useRemoteMarkdown } from '~/hooks/useRemoteMarkdown'
 import { canOpen, entryTitle, kindOf } from '~/lib/media'
 import { useTokens } from '~/components/list/parts'
@@ -77,6 +79,10 @@ function DocumentEntry({ entry }: { entry: MediaEntry }) {
       style={[s.pageViewer, { backgroundColor: tokens.background }]}
       originWhitelist={['about:*', 'data:*']}
       setSupportMultipleWindows={false}
+      onMessage={(e) => {
+        const msg = parseDocMessage(e.nativeEvent.data)
+        if (msg?.type === 'link') void openExternal(msg.url)
+      }}
     />
   )
 }

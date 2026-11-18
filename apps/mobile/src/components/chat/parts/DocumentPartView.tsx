@@ -14,7 +14,7 @@
  */
 import { useCallback, useState } from 'react'
 import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native'
-import * as WebBrowser from 'expo-web-browser'
+import { openExternal } from '~/lib/external-link'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
 import { BookOpen, Download, ExternalLink } from 'lucide-react-native'
@@ -61,7 +61,8 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
       if (Platform.OS === 'web') {
         window.open(part.previewSrc, '_blank')
       } else {
-        await WebBrowser.openBrowserAsync(part.previewSrc)
+        // The system's own browser, like every other link of the app.
+        if (!(await openExternal(part.previewSrc))) throw new Error('could not open')
       }
     } catch {
       setError(true)

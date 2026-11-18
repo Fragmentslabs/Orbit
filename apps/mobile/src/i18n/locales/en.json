@@ -1952,6 +1952,8 @@
     "close": "Close document",
     "share": "Share",
     "shareFailed": "Could not share the document",
+    "print": "Print",
+    "printFailed": "Could not print the document",
     "find": "Find in document",
     "findPlaceholder": "Find…",
     "findNone": "No matches",

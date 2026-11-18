@@ -40,8 +40,10 @@ describe('markdownToHtml', () => {
     expect(html).not.toContain('<img')
     expect(html).toContain('&lt;script&gt;')
   })
-  it('draws links as text and keeps images to https', () => {
-    expect(markdownToHtml('[go](https://a.com)')).toContain('<span class="a">go</span>')
+  it('draws links as text, reports web links to the app and keeps images to https', () => {
+    expect(markdownToHtml('[go](https://a.com)')).toContain('<span class="a" data-href="https://a.com">go</span>')
+    expect(markdownToHtml('[x](javascript:alert(1))')).not.toContain('data-href')
+    expect(markdownToHtml('[x](#orbit-source/doc1)')).not.toContain('data-href')
     expect(markdownToHtml('[go](https://a.com)')).not.toContain('<a ')
     expect(markdownToHtml('![x](file:///etc/passwd)')).not.toContain('<img')
     expect(markdownToHtml('![x](https://a.com/i.png)')).toContain('<img src="https://a.com/i.png"')

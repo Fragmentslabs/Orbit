@@ -1,6 +1,7 @@
 import { Marked } from 'marked'
 import type { DocumentTextView } from '@orbit/companion-client'
 import { escapeHtml, type SourceHtmlOptions } from './document-source'
+import { isExternalUrl } from './external-link'
 
 /**
  * A Markdown source drawn as a document, the way the desktop's "Document" mode does.
@@ -32,15 +33,17 @@ export function isMarkdownSource(view: Pick<DocumentTextView, 'kind' | 'filename
 
 const SAFE_IMAGE = /^https:\/\//i
 
-// Raw HTML in the file is shown as text, never run; links are drawn but not followed (a tap would
-// navigate the viewer's WebView away from the document); images only over https.
+// Raw HTML in the file is shown as text, never run; a link is never followed inside the WebView (it
+// would navigate away from the document): the page reports the tap and the app opens it in the
+// system browser; images only over https.
 const marked = new Marked({
   gfm: true,
   async: false,
   renderer: {
     html: ({ text }) => escapeHtml(text),
-    link({ tokens }) {
-      return `<span class="a">${this.parser.parseInline(tokens)}</span>`
+    link({ href, tokens }) {
+      const inner = this.parser.parseInline(tokens)
+      return isExternalUrl(href) ? `<span class="a" data-href="${escapeHtml(href)}">${inner}</span>` : `<span class="a">${inner}</span>`
     },
     image: ({ href, text }) =>
       SAFE_IMAGE.test(href) ? `<img src="${escapeHtml(href)}" alt="${escapeHtml(text)}">` : escapeHtml(text),
@@ -50,6 +53,9 @@ const marked = new Marked({
 export function markdownToHtml(markdown: string): string {
   return marked.parse(markdown) as string
 }
+
+/** Reports a tap on a link to the app, which opens it outside (see {@link parseDocMessage}'s `link`). */
+const LINK_SCRIPT = `document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('[data-href]');if(!a)return;e.preventDefault();if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'link',url:a.getAttribute('data-href')}))})`
 
 /** The rendered Markdown wrapped in the app's palette. */
 export function buildMarkdownHtml(markdown: string, colors: SourceHtmlOptions['colors']): string {
@@ -77,5 +83,5 @@ th{font-weight:600;text-align:left}
 hr{border:0;border-top:1px solid ${colors.border};margin:1.5em 0}
 img{max-width:100%;height:auto}
 del{color:${colors.muted}}
-</style></head><body>${markdownToHtml(markdown)}</body></html>`
+</style></head><body>${markdownToHtml(markdown)}<script>${LINK_SCRIPT}</script></body></html>`
 }

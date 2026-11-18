@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import { Linking, View, Text } from 'react-native'
+import { View, Text } from 'react-native'
 import { parseMemoryHref, parseOrbitUi, type OrbitUiBlock } from '@orbit/shared'
 import { CodeBlock } from '~/components/chat/CodeBlock'
 import { MermaidBlock } from '~/components/chat/MermaidBlock'
@@ -8,6 +8,7 @@ import { Highlighted } from '~/components/chat/SearchHighlight'
 import { MemoryChip } from '~/components/memories/MemoryChip'
 import { SourceChip } from '~/components/documents/SourceChip'
 import { parseSourceHref, rescueLegacyCitations } from '~/lib/document-source'
+import { openExternal } from '~/lib/external-link'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -367,7 +368,7 @@ const InlineText = memo(function InlineText({
               <Text
                 key={i}
                 style={{ color: tokens.primary, textDecorationLine: 'underline' }}
-                onPress={() => Linking.openURL(seg.url)}
+                onPress={() => void openExternal(seg.url)}
               >
                 <Highlighted text={seg.text} />
               </Text>

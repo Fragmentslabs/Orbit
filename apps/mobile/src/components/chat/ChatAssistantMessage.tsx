@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { View, Text, Pressable, ActivityIndicator, Linking, ScrollView, TouchableOpacity } from 'react-native'
+import { View, Text, Pressable, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native'
+import { openExternal } from '~/lib/external-link'
 import {
   ChevronDown,
   ChevronUp,
@@ -567,7 +568,7 @@ function SourcesBlock({ sources }: { sources: any[] }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   const handleOpenLink = (url: string) => {
-    Linking.openURL(url).catch((err) => console.error('Failed to open link:', err))
+    void openExternal(url)
   }
 
   return (

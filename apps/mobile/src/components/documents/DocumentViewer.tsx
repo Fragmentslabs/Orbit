@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -28,6 +29,7 @@ import {
   Minus,
   Plus,
   Search,
+  Printer,
   Share2,
   X,
 } from 'lucide-react-native'
@@ -50,7 +52,9 @@ import {
   zoomScript,
   type OutlineEntry,
 } from '~/lib/document-web-script'
-import { shareFileName, shareRemoteFile, shareText } from '~/lib/document-share'
+import { shareFileName, shareLocalFile, shareRemoteFile, shareText } from '~/lib/document-share'
+import { downloadOriginal, mimeOfOriginal, PRINT_COLORS, printAvailable, printHtml, printPdf } from '~/lib/document-print'
+import { openExternal } from '~/lib/external-link'
 import { usePdfPages } from '~/hooks/usePdfPages'
 import { useRemoteMarkdown } from '~/hooks/useRemoteMarkdown'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -133,7 +137,9 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   const [query, setQuery] = useState('')
   const [find, setFind] = useState({ count: 0, index: -1 })
   const [zoom, setZoom] = useState(1)
-  const [shareError, setShareError] = useState(false)
+  const [failed, setFailed] = useState<'share' | 'print' | null>(null)
+  const [busy, setBusy] = useState<'share' | 'print' | null>(null)
+  const http = useConnectionStore((s) => s.http)
   // A Markdown source opens as a rendered document, except when it comes from a citation: there the
   // numbered lines are what the cited stretch refers to (the desktop does the same).
   // A PDF opens as its pages (with the cited stretch marked), as the desktop's "Original" mode.
@@ -176,6 +182,16 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     [tokens],
   )
 
+  const pageTitleOf = useCallback(
+    (page: { label?: string; num: number }, kind: string) =>
+      page.label
+        ? t('docViewer.sheet', { name: page.label })
+        : kind === 'docx'
+          ? t('docViewer.block', { n: page.num })
+          : t('docViewer.page', { n: page.num }),
+    [t],
+  )
+
   const sourceHtml = useMemo(() => {
     if (target.kind === 'part') {
       return partMarkdown.status === 'ready' ? buildMarkdownHtml(partMarkdown.text, colors) : undefined
@@ -187,14 +203,9 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     return buildSourceHtml(source.view, {
       cite: target.fromLine !== undefined ? { page: target.page, fromLine: target.fromLine, toLine: target.toLine } : undefined,
       colors,
-      pageTitle: (page, kind) =>
-        page.label
-          ? t('docViewer.sheet', { name: page.label })
-          : kind === 'docx'
-            ? t('docViewer.block', { n: page.num })
-            : t('docViewer.page', { n: page.num }),
+      pageTitle: pageTitleOf,
     })
-  }, [target, source, colors, t, mode, partMarkdown])
+  }, [target, source, colors, pageTitleOf, mode, partMarkdown])
 
   const title =
     target.kind === 'part'
@@ -258,6 +269,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     if (!msg) return
     if (msg.type === 'outline') setOutline(msg.items)
     else if (msg.type === 'need') requestPdfPage(msg.page)
+    else if (msg.type === 'link') void openExternal(msg.url)
     else setFind({ count: msg.count, index: msg.index })
   }, [requestPdfPage])
 
@@ -283,7 +295,8 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   }
 
   const share = async () => {
-    setShareError(false)
+    setFailed(null)
+    setBusy('share')
     try {
       if (target.kind === 'part' && partMarkdown.status === 'ready') {
         await shareText(partMarkdown.text, shareFileName(target.title, target.documentId, 'md'), title)
@@ -295,14 +308,48 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           title,
         )
       } else if (source.status === 'ready') {
-        await shareText(sourceToText(source.view), shareFileName(source.view.filename, target.docId, markdownSource ? 'md' : 'txt'), title)
+        // A PDF / .docx goes as the file it is; a source born as text (no file on the desktop) as text.
+        const kind = source.view.originalKind
+        const uri =
+          kind && http
+            ? await downloadOriginal(http, target.docId, target.sessionId, shareFileName(source.view.filename, target.docId, kind))
+            : null
+        if (uri && kind) await shareLocalFile(uri, mimeOfOriginal(kind), title)
+        else await shareText(sourceToText(source.view), shareFileName(source.view.filename, target.docId, markdownSource ? 'md' : 'txt'), title)
       }
     } catch {
-      setShareError(true)
+      setFailed('share')
+    } finally {
+      setBusy(null)
     }
   }
 
-  const canShare = target.kind === 'part' || source.status === 'ready'
+  const print = async () => {
+    setFailed(null)
+    setBusy('print')
+    try {
+      if (target.kind === 'part') {
+        if (partMarkdown.status === 'ready') await printHtml(buildMarkdownHtml(partMarkdown.text, PRINT_COLORS))
+        else await printHtml(await (await fetch(target.src)).text())
+      } else if (source.status === 'ready' && http) {
+        const view = source.view
+        if (view.originalKind === 'pdf') {
+          await printPdf(http, target.docId, target.sessionId, view.totalPages, shareFileName(view.filename, target.docId, 'pdf'))
+        } else {
+          const docx = view.originalKind === 'docx' ? (source.docxHtml ?? (await http.getDocumentHtml(target.docId, target.sessionId)).data?.html) : undefined
+          if (docx) await printHtml(wrapDocxHtml(docx, PRINT_COLORS))
+          else if (markdownSource) await printHtml(buildMarkdownHtml(markdownOf(view), PRINT_COLORS))
+          else await printHtml(buildSourceHtml(view, { colors: PRINT_COLORS, pageTitle: pageTitleOf }))
+        }
+      }
+    } catch {
+      setFailed('print')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const canShare = (target.kind === 'part' || source.status === 'ready') && busy === null
   const loading =
     !mounted ||
     (target.kind === 'source' && source.status === 'loading') ||
@@ -348,6 +395,19 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
                 {badge}
               </Text>
             </View>
+          ) : null}
+          {printAvailable() ? (
+          <Pressable
+            onPress={print}
+            disabled={!canShare}
+            accessibilityRole="button"
+            accessibilityLabel={t('docViewer.print')}
+            hitSlop={10}
+            className="h-8 w-8 items-center justify-center rounded-full"
+            style={{ backgroundColor: tokens.muted, opacity: canShare ? 1 : 0.4 }}
+          >
+            {busy === 'print' ? <ActivityIndicator size="small" color={tokens.foreground} /> : <Printer size={15} color={tokens.foreground} />}
+          </Pressable>
           ) : null}
           <Pressable
             onPress={share}
@@ -507,9 +567,9 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           ) : null}
         </View>
 
-        {shareError ? (
+        {failed ? (
           <Text className="px-3 py-1 text-center text-[11px]" style={{ color: tokens.destructive }}>
-            {t('docViewer.shareFailed')}
+            {t(failed === 'print' ? 'docViewer.printFailed' : 'docViewer.shareFailed')}
           </Text>
         ) : null}
 

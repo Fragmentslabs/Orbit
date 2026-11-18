@@ -170,6 +170,19 @@ export class CompanionHttp {
     return this.get(`/api/documents/${encodeURIComponent(docId)}/pages?${query.toString()}`)
   }
 
+  /**
+   * Where to download a document's ORIGINAL file (PDF / .docx) from: the URL and the Authorization
+   * header, for a native download (the share sheet and printing take a local file). 404 for a source
+   * that was born as text. The name comes back URL-encoded in `X-Orbit-Filename`.
+   */
+  documentFileRequest(docId: string, sessionId?: string): { url: string; headers: Record<string, string> } {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
+    return {
+      url: `${this.baseUrl}/api/documents/${encodeURIComponent(docId)}/file${query}`,
+      headers: { Authorization: `Bearer ${this.token}` },
+    }
+  }
+
   /** The .docx original converted to HTML (the desktop panel's `docs:html`). */
   async getDocumentHtml(docId: string, sessionId?: string): Promise<HttpResult<{ html: string }>> {
     const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''

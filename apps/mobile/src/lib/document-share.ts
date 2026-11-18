@@ -30,3 +30,10 @@ export async function shareText(text: string, name: string, dialogTitle: string)
     await Sharing.shareAsync(uri, { mimeType: 'text/plain', dialogTitle })
   }
 }
+
+/** Hands a file that is already on the phone (the original PDF / .docx) to the system share sheet. */
+export async function shareLocalFile(uri: string, mimeType: string, dialogTitle: string) {
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, { mimeType, dialogTitle })
+  }
+}

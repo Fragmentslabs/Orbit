@@ -1952,6 +1952,8 @@
     "close": "Fechar documento",
     "share": "Compartilhar",
     "shareFailed": "Não foi possível compartilhar o documento",
+    "print": "Imprimir",
+    "printFailed": "Não foi possível imprimir o documento",
     "find": "Buscar no documento",
     "findPlaceholder": "Buscar…",
     "findNone": "Nenhum resultado",

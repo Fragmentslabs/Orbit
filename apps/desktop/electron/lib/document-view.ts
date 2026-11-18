@@ -7,8 +7,10 @@ import { printFile, rasterizePdf, type PdfOutlineItem, type PdfTextItem } from '
 import {
   exportSessionDocument,
   printSessionDocument,
+  readSessionDocument,
   readSessionText,
   renderSessionPages,
+  sessionDocumentFile,
   type SessionDocumentView,
 } from './session-documents'
 
@@ -173,4 +175,25 @@ export async function viewExport(
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
+}
+
+/**
+ * The ORIGINAL file of a document (PDF or .docx), for the phone's share sheet and printing.
+ * null for a source that was born as text (pasted excerpt, downloaded page): there are no bytes
+ * beyond the text, which the phone already has.
+ */
+export async function viewFile(
+  sessionId: string,
+  id: string,
+): Promise<{ bytes: Buffer; ext: string; name: string } | null> {
+  if (isSessionDoc(id)) {
+    const source = await sessionDocumentFile(sessionId, id)
+    if (!source) return null
+    const found = await readSessionDocument(sessionId, id)
+    return { bytes: await fsp.readFile(source.path), ext: source.ext, name: found?.doc.filename ?? id }
+  }
+  const file = await mediaFile(id)
+  if (!file) return null
+  const entry = await getMediaEntry(id)
+  return { bytes: await fsp.readFile(file.path), ext: file.ext, name: entry?.name || 'document' }
 }
