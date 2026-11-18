@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http'
 
-import { viewHtml, viewText } from './document-view'
+import { viewHtml, viewRender, viewText } from './document-view'
 
 /**
  * Document reading for the phone's viewer.
@@ -49,4 +49,33 @@ export async function handleGetDocumentHtml(
   const view = args ? await viewHtml(args.sessionId, args.docId) : null
   if (!view) return json(res, 404, { error: 'document not found' })
   json(res, 200, view)
+}
+
+/** Pages per call: each one opens a hidden window and each PNG travels as base64 over the LAN. */
+const PAGES_MAX_COUNT = 4
+
+/**
+ * PDF pages as images with their positioned text (the desktop's `docs:render`): what the phone's
+ * Original mode draws, with a transparent text layer over the picture for selection and the citation mark.
+ * `?from=1&count=3&scale=1.4&text=1&outline=1`
+ */
+export async function handleGetDocumentPages(
+  req: IncomingMessage,
+  res: ServerResponse,
+  docId: string,
+  json: Json,
+): Promise<void> {
+  const args = parse(req, docId)
+  if (!args) return json(res, 404, { error: 'document not found' })
+  const query = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`).searchParams
+  const from = Math.max(1, Math.floor(Number(query.get('from'))) || 1)
+  const count = Math.min(PAGES_MAX_COUNT, Math.max(1, Math.floor(Number(query.get('count'))) || 1))
+  const scale = Math.min(2, Math.max(0.8, Number(query.get('scale')) || 1.4))
+  const rendered = await viewRender(args.sessionId, args.docId, from, count, {
+    scale,
+    includeText: query.get('text') !== '0',
+    includeOutline: query.get('outline') === '1',
+  })
+  if (!rendered) return json(res, 404, { error: 'document not found' })
+  json(res, 200, rendered)
 }

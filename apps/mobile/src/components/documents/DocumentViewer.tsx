@@ -38,6 +38,7 @@ import { StageLoading, BarButton, ViewerBar } from '~/components/chat/pieces/vie
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { buildSourceHtml, sourceToText, wrapDocxHtml } from '~/lib/document-source'
 import { buildMarkdownHtml, isMarkdownSource, markdownOf } from '~/lib/document-markdown'
+import { addPagesScript, buildPdfShell, citedText, pdfOutline, setupScript } from '~/lib/document-pdf'
 import {
   CLEAR_FIND_SCRIPT,
   DOC_SCRIPT,
@@ -50,6 +51,7 @@ import {
   type OutlineEntry,
 } from '~/lib/document-web-script'
 import { shareFileName, shareRemoteFile, shareText } from '~/lib/document-share'
+import { usePdfPages } from '~/hooks/usePdfPages'
 import { useRemoteMarkdown } from '~/hooks/useRemoteMarkdown'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useThemeStore } from '~/stores/theme-store'
@@ -59,6 +61,15 @@ type SourceState =
   | { status: 'loading' }
   | { status: 'error'; notFound: boolean }
   | { status: 'ready'; view: DocumentTextView; docxHtml?: string }
+
+type ViewMode = 'doc' | 'original' | 'text'
+
+/** The ways a source can be drawn: a Markdown file as a document or text, a PDF as its pages or text. */
+function viewModes(markdown: boolean, pdf: boolean): ViewMode[] | null {
+  if (markdown) return ['doc', 'text']
+  if (pdf) return ['original', 'text']
+  return null
+}
 
 /** Loads a cited source through the companion. */
 function useSource(target: DocumentTarget): SourceState {
@@ -125,10 +136,33 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   const [shareError, setShareError] = useState(false)
   // A Markdown source opens as a rendered document, except when it comes from a citation: there the
   // numbered lines are what the cited stretch refers to (the desktop does the same).
-  const [picked, setPicked] = useState<'doc' | 'text' | null>(null)
+  // A PDF opens as its pages (with the cited stretch marked), as the desktop's "Original" mode.
+  const [picked, setPicked] = useState<ViewMode | null>(null)
   const markdownSource = source.status === 'ready' && isMarkdownSource(source.view)
+  const pdfSource = source.status === 'ready' && source.view.originalKind === 'pdf'
   const cited = target.kind === 'source' && target.fromLine !== undefined
-  const mode: 'doc' | 'text' = markdownSource ? (picked ?? (cited ? 'text' : 'doc')) : 'text'
+  const modes = viewModes(markdownSource, pdfSource)
+  const mode: ViewMode = markdownSource
+    ? picked === 'doc' || picked === 'text'
+      ? picked
+      : cited
+        ? 'text'
+        : 'doc'
+    : pdfSource
+      ? picked === 'text'
+        ? 'text'
+        : 'original'
+      : 'text'
+  const pdfOriginal = pdfSource && mode === 'original'
+  const pdf = usePdfPages({
+    docId: target.kind === 'source' ? target.docId : null,
+    sessionId: target.kind === 'source' ? target.sessionId : undefined,
+    enabled: pdfOriginal,
+    start: target.kind === 'source' ? target.page : 1,
+  })
+  const [shellRevision, setShellRevision] = useState(0)
+  const pdfSetUp = useRef(false)
+  const pdfDelivered = useRef<Record<number, true>>({})
 
   const colors = useMemo(
     () => ({
@@ -148,6 +182,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     }
     if (source.status !== 'ready') return undefined
     if (source.docxHtml) return wrapDocxHtml(source.docxHtml, colors)
+    if (source.view.originalKind === 'pdf' && mode === 'original') return buildPdfShell(colors)
     if (isMarkdownSource(source.view) && mode === 'doc') return buildMarkdownHtml(markdownOf(source.view), colors)
     return buildSourceHtml(source.view, {
       cite: target.fromLine !== undefined ? { page: target.page, fromLine: target.fromLine, toLine: target.toLine } : undefined,
@@ -180,14 +215,51 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     injectRef.current = inject
     setOutline([])
     inject(DOC_SCRIPT)
+    // A (re)loaded shell is empty: whatever was sent to the last one has to go again.
+    pdfSetUp.current = false
+    pdfDelivered.current = {}
+    setShellRevision((n) => n + 1)
   }, [])
+
+  const { request: requestPdfPage, prefetch: prefetchPdf } = pdf
+  const citation = target.kind === 'source' && source.status === 'ready' ? target : null
+  const citeLine = citation?.fromLine
+  const citeToLine = citation?.toLine
+  const citePage = citation?.page
+  const sourceView = source.status === 'ready' ? source.view : null
+
+  // Hands the shell what has arrived: first the page count (it draws the empty sheets), then each
+  // picture once. The shell loads asynchronously and the pictures too, so this runs for both.
+  useEffect(() => {
+    if (!pdfOriginal || shellRevision === 0 || pdf.total === 0) return
+    if (!pdfSetUp.current) {
+      pdfSetUp.current = true
+      const first = Object.values(pdf.pages)[0]
+      run(
+        setupScript({
+          total: pdf.total,
+          aspect: first ? first.width / first.height : 595 / 842,
+          outline: pdfOutline(pdf.outline),
+          cite:
+            citePage && citeLine && sourceView
+              ? { page: citePage, text: citedText(sourceView, { page: citePage, fromLine: citeLine, toLine: citeToLine }) }
+              : undefined,
+        }),
+      )
+    }
+    const fresh = Object.values(pdf.pages).filter((p) => !pdfDelivered.current[p.page])
+    if (fresh.length === 0) return
+    for (const p of fresh) pdfDelivered.current[p.page] = true
+    run(addPagesScript(fresh))
+  }, [pdfOriginal, shellRevision, pdf.total, pdf.pages, pdf.outline, run, citePage, citeLine, citeToLine, sourceView])
 
   const onMessage = useCallback((data: string) => {
     const msg = parseDocMessage(data)
     if (!msg) return
     if (msg.type === 'outline') setOutline(msg.items)
+    else if (msg.type === 'need') requestPdfPage(msg.page)
     else setFind({ count: msg.count, index: msg.index })
-  }, [])
+  }, [requestPdfPage])
 
   const changeZoom = (direction: 1 | -1) => {
     const next = stepZoom(zoom, direction)
@@ -195,7 +267,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     run(zoomScript(next))
   }
 
-  const changeMode = (next: 'doc' | 'text') => {
+  const changeMode = (next: ViewMode) => {
     if (next === mode) return
     setPicked(next)
     setOutlineOpen(false)
@@ -290,10 +362,10 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           </Pressable>
         </View>
 
-        {markdownSource ? (
+        {modes ? (
           <View className="flex-row items-center justify-center border-b px-3 py-1.5" style={{ borderColor: tokens.border }}>
             <View className="flex-row rounded-md p-0.5" style={{ backgroundColor: tokens.muted }}>
-              {(['doc', 'text'] as const).map((option) => (
+              {modes.map((option) => (
                 <Pressable
                   key={option}
                   onPress={() => changeMode(option)}
@@ -307,7 +379,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
                     className="text-xs font-medium"
                     style={{ color: mode === option ? tokens.foreground : tokens.mutedForeground }}
                   >
-                    {t(option === 'doc' ? 'docViewer.modeDocument' : 'docViewer.modeText')}
+                    {t(option === 'doc' ? 'docViewer.modeDocument' : option === 'original' ? 'docViewer.modeOriginal' : 'docViewer.modeText')}
                   </Text>
                 </Pressable>
               ))}
@@ -452,7 +524,13 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           <BarButton
             icon={Search}
             label={t('docViewer.find')}
-            onPress={() => (findOpen ? closeFind() : setFindOpen(true))}
+            onPress={() => {
+              if (findOpen) closeFind()
+              else {
+                setFindOpen(true)
+                if (pdfOriginal) void prefetchPdf()
+              }
+            }}
             active={findOpen}
             testID="document-find-button"
           />

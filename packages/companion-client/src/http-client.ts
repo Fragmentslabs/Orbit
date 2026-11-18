@@ -33,6 +33,21 @@ import type {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** A PDF page drawn by the desktop, with its text positioned as fractions (0 to 1) of the page. */
+export interface DocumentPageImage {
+  page: number
+  dataUrl: string
+  width: number
+  height: number
+  items: { x: number; y: number; width: number; height: number; text: string }[]
+}
+
+export interface DocumentPagesView {
+  total: number
+  outline: { title: string; page: number | null; level: number }[]
+  pages: DocumentPageImage[]
+}
+
 /** A document as the desktop viewer reads it: pages of lines (the same numbering a citation uses). */
 export interface DocumentTextView {
   id: string
@@ -140,6 +155,19 @@ export class CompanionHttp {
   async getDocumentText(docId: string, sessionId?: string): Promise<HttpResult<DocumentTextView>> {
     const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
     return this.get(`/api/documents/${encodeURIComponent(docId)}/text${query}`)
+  }
+
+  /** PDF pages as images + positioned text (the desktop panel's `docs:render`), at most 4 per call. */
+  async getDocumentPages(
+    docId: string,
+    options: { sessionId?: string; from: number; count: number; scale?: number; text?: boolean; outline?: boolean },
+  ): Promise<HttpResult<DocumentPagesView>> {
+    const query = new URLSearchParams({ from: String(options.from), count: String(options.count) })
+    if (options.sessionId) query.set('sessionId', options.sessionId)
+    if (options.scale) query.set('scale', String(options.scale))
+    if (options.text === false) query.set('text', '0')
+    if (options.outline) query.set('outline', '1')
+    return this.get(`/api/documents/${encodeURIComponent(docId)}/pages?${query.toString()}`)
   }
 
   /** The .docx original converted to HTML (the desktop panel's `docs:html`). */

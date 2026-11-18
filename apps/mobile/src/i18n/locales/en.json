@@ -1943,6 +1943,7 @@
     }
   },
   "docViewer": {
+    "modeOriginal": "Original",
     "modeDocument": "Document",
     "modeText": "Text",
     "open": "Read",

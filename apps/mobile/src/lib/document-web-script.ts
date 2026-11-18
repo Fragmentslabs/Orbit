@@ -16,6 +16,8 @@ export interface OutlineEntry {
 export type DocMessage =
   | { type: 'outline'; items: OutlineEntry[] }
   | { type: 'find'; count: number; index: number }
+  /** A PDF page scrolled near the viewport and still has no picture. */
+  | { type: 'need'; page: number }
 
 export function parseDocMessage(data: string): DocMessage | null {
   let raw: unknown
@@ -38,6 +40,9 @@ export function parseDocMessage(data: string): DocMessage | null {
   }
   if (msg.type === 'find' && typeof msg.count === 'number' && typeof msg.index === 'number') {
     return { type: 'find', count: msg.count, index: msg.index }
+  }
+  if (msg.type === 'need' && typeof msg.page === 'number' && Number.isInteger(msg.page) && msg.page > 0) {
+    return { type: 'need', page: msg.page }
   }
   return null
 }

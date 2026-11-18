@@ -33,7 +33,7 @@ import * as sources from './companion-sources'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia, updateMediaEntry } from './media'
 import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
-import { handleGetDocumentHtml, handleGetDocumentText } from './companion-documents'
+import { handleGetDocumentHtml, handleGetDocumentPages, handleGetDocumentText } from './companion-documents'
 import { handleFilesList, handleFilesRead, handleFilesSearch, handleFilesWrite } from './companion-files-http'
 import { handleLiveFrame, handleLiveList, handleLiveStop } from './companion-live'
 import { getMotion, registeredMotionUrl } from './video/motion-store'
@@ -988,6 +988,7 @@ function createRouter(
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
     { pattern: /^GET \/api\/documents\/([^/]+)\/text$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentText(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/documents\/([^/]+)\/html$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentHtml(r, s, id, jsonResponse) },
+    { pattern: /^GET \/api\/documents\/([^/]+)\/pages$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentPages(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
     { pattern: /^GET \/api\/voice\/status$/, paramNames: [], handler: handleGetVoiceStatus },
     { pattern: /^GET \/api\/live$/, paramNames: [], handler: handleLiveList },

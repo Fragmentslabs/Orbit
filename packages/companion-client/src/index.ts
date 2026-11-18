@@ -7,7 +7,7 @@
 
 export { CompanionWebSocket } from './websocket-client'
 export { CompanionHttp } from './http-client'
-export type { HttpResult, DocumentTextView } from './http-client'
+export type { HttpResult, DocumentTextView, DocumentPagesView, DocumentPageImage } from './http-client'
 export { generateConnectionPayload, parseConnectionPayload, isValidPin } from './qr-code'
 export type { QrPayload } from './qr-code'
 export type { ConnectionConfig, ConnectionState, ConnectionErrorReason } from './types'
