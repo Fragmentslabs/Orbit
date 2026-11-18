@@ -1350,6 +1350,15 @@ export interface VoiceStatusResponse {
   tts?: { enabled: boolean }
 }
 
+/**
+ * What the start screen needs from the desktop that the phone cannot know: the name it learned (for
+ * the greeting) and which resources are on (a capability whose tool is off is not suggested).
+ */
+export interface StartContextResponse {
+  userName: string | null
+  features: { tts: boolean; stt: boolean; browser: boolean }
+}
+
 // ─── Wire Protocol ───────────────────────────────────────────────────────────
 
 /** Message wrapped in the WebSocket (all messages go through this envelope). */

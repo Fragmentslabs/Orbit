@@ -46,6 +46,8 @@ import { ReplyBar } from '~/components/chat/ReplyBar'
 import { withReplyPrefix } from '~/stores/reply-store'
 
 interface PromptInputProps {
+  /** Tells the screen whether the field has text, so the start suggestions can fade away while typing. */
+  onHasTextChange?: (hasText: boolean) => void
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
   onAbort: () => void
   isStreaming?: boolean
@@ -91,6 +93,7 @@ const INPUT_VERTICAL_PADDING = 8
 const ACTION_SIZE = 40
 
 export function PromptInput({
+  onHasTextChange,
   onSend,
   onAbort,
   isStreaming,
@@ -124,6 +127,11 @@ export function PromptInput({
   // is the session-switch effect below, which runs after this one.
   // It also persists the per-chat draft while the user types (debounce in the
   // store): leaving the app in the middle of typing does not lose the text.
+  const typing = text.trim().length > 0
+  useEffect(() => {
+    onHasTextChange?.(typing)
+  }, [typing, onHasTextChange])
+
   useEffect(() => {
     textRef.current = text
     if (text === loadedDraftRef.current) return

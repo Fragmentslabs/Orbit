@@ -26,6 +26,7 @@ import type {
   SessionPrefsSnapshot,
   VoiceEngineId,
   VoiceSpeakResponse,
+  StartContextResponse,
   VoiceStatusResponse,
   VoiceTranscribeResponse,
   WorkerConfigSnapshot,
@@ -304,6 +305,11 @@ export class CompanionHttp {
   /** State of the desktop voice engines (ready + installed per engine). */
   async getVoiceStatus(): Promise<HttpResult<VoiceStatusResponse>> {
     return this.get('/api/voice/status')
+  }
+
+  /** The name the desktop learned and which resources are on: what the start screen suggests from. */
+  async getStartContext(): Promise<HttpResult<StartContextResponse>> {
+    return this.get('/api/start-context')
   }
 
   // ─── Git Branches ────────────────────────────────────────────────────────

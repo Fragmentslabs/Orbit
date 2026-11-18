@@ -55,6 +55,7 @@ import type {
   SessionPrefsSnapshot,
   WorkerConfigSnapshot,
   ReasoningPrefsMap,
+  StartContextResponse,
   VoiceSpeakErrorResponse,
 } from '@shared/companion'
 import type { VoiceEngineId } from '@shared/voice'
@@ -204,6 +205,15 @@ async function saveSelectedModel(model: SelectedModel): Promise<SelectedModel> {
 }
 
 // ─── Route Handlers ──────────────────────────────────────────────────────────
+
+/** What the phone's start screen needs from the desktop settings (see `StartContextResponse`). */
+function startContext(): StartContextResponse {
+  const { userName, voice, browser } = getAppSettings()
+  return {
+    userName,
+    features: { tts: voice.tts.enabled, stt: voice.stt.enabled, browser: browser.agentTools },
+  }
+}
 
 async function handleGetPreferences(_req: IncomingMessage, res: ServerResponse) {
   const prefs = await getPreferences()
@@ -991,6 +1001,7 @@ function createRouter(
     { pattern: /^GET \/api\/session-prefs$/, paramNames: [], handler: handleGetSessionPrefs },
     { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
+    { pattern: /^GET \/api\/start-context$/, paramNames: [], handler: async (_r, s) => jsonResponse(s, 200, startContext()) },
     { pattern: /^GET \/api\/documents\/([^/]+)\/text$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentText(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/documents\/([^/]+)\/html$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentHtml(r, s, id, jsonResponse) },
     { pattern: /^GET \/api\/documents\/([^/]+)\/pages$/, paramNames: ['id'], handler: (r, s, id) => handleGetDocumentPages(r, s, id, jsonResponse) },

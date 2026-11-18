@@ -1,12 +1,20 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { View, Text, Animated, Alert, Pressable } from 'react-native'
-import { ArrowDown, HelpCircle } from 'lucide-react-native'
+import { ArrowDown, HelpCircle, Sparkles } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Stack, useRouter } from 'expo-router'
 import { SafeScreen } from '~/components/layout/SafeScreen'
-import type { ChatMessage, SendMessageOptions, FilePart } from '@orbit/shared'
-import { folderKey, normalizeFolderName, replyExcerpt, showsPersonaOnWelcome } from '@orbit/shared'
+import type { ChatMessage, SendMessageOptions, FilePart, StartSuggestion } from '@orbit/shared'
+import {
+  buildStartSuggestions,
+  folderKey,
+  MAX_SUGGESTIONS,
+  normalizeFolderName,
+  pickWelcomeTitle,
+  replyExcerpt,
+  showsPersonaOnWelcome,
+} from '@orbit/shared'
 import { visibleMessageText } from '~/lib/message-utils'
 import { useReply } from '~/stores/reply-store'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
@@ -22,7 +30,12 @@ import { ChatMessageSearchBar } from '~/components/chat/ChatMessageSearchBar'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { AskCard } from '~/components/chat/AskCard'
 import { VisionHintCard } from '~/components/chat/VisionHintCard'
-import { Suggestions } from '~/components/chat/Suggestion'
+import { StartSuggestions } from '~/components/chat/StartSuggestions'
+import { CapabilitiesSheet } from '~/components/chat/CapabilitiesSheet'
+import { dayKey, lastSessionForStart } from '~/lib/start-screen'
+import { kindOf } from '~/lib/media'
+import { useMediaStore } from '~/stores/media-store'
+import { useStartContextStore } from '~/stores/start-context-store'
 import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
 import { LiveChips } from '~/components/chat/LiveChip'
@@ -202,10 +215,42 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
   // The hint card is dismissed per screen visit; choosing a folder makes it go away by itself.
   const [folderHintDismissed, setFolderHintDismissed] = useState(false)
 
-  // Suggestions of the empty state — translated and per mode, as on the desktop
-  const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
-  const codeSuggestions = t('chatScreen.suggestions.code', { returnObjects: true }) as string[]
-  const suggestions = isCode ? codeSuggestions : chatSuggestions
+  // The empty state, the desktop's way: a greeting drawn per opening (with the name the desktop
+  // learned), its subtitle, a quiet link to the capability guide and, below, either "Resume" (a
+  // conversation to go back to) or two capabilities. What is suggested only fills the composer.
+  const userName = useStartContextStore((s) => s.userName)
+  const startFeatures = useStartContextStore((s) => s.features)
+  const refreshStartContext = useStartContextStore((s) => s.refresh)
+  const allSessions = useSessionStore((s) => s.sessions)
+  const mediaEntries = useMediaStore((s) => s.entries)
+  const refreshMedia = useMediaStore((s) => s.refresh)
+  useEffect(() => {
+    void refreshStartContext()
+    void refreshMedia()
+  }, [refreshStartContext, refreshMedia])
+  const usedKinds = useMemo(() => [...new Set(mediaEntries.map(kindOf))], [mediaEntries])
+  const startDay = useMemo(() => dayKey(), [])
+  const startMode = isCode ? 'code' : 'chat'
+  const startDirectory = folders[0]
+  const startTitle = t(pickWelcomeTitle({ mode: startMode, userName }), { name: userName ?? '' })
+  const startSubtitle = t(isCode ? 'chat.empty.codeSubtitle' : 'chat.empty.chatSubtitle')
+  const startSuggestions = useMemo(() => {
+    const lastSession = lastSessionForStart(allSessions, { mode: startMode, directory: startDirectory, currentId: sessionId })
+    const built = buildStartSuggestions(
+      { mode: startMode, directory: startDirectory, lastSession, usedKinds, features: startFeatures, day: startDay },
+      (key, options) => t(key, options) as string,
+    )
+    // On the phone a conversation to resume stands alone; otherwise two capabilities fit side by side.
+    return built[0]?.action.kind === 'open' ? built.slice(0, 1) : built.slice(0, Math.min(2, MAX_SUGGESTIONS))
+  }, [allSessions, startMode, startDirectory, sessionId, usedKinds, startFeatures, startDay, t])
+  const [guideOpen, setGuideOpen] = useState(false)
+  // The suggestions fade away once the person starts typing and come back if the field is emptied.
+  // Their space stays reserved so nothing jumps.
+  const [composing, setComposing] = useState(false)
+  const [suggestionsOpacity] = useState(() => new Animated.Value(1))
+  useEffect(() => {
+    Animated.timing(suggestionsOpacity, { toValue: composing ? 0 : 1, duration: 200, useNativeDriver: true }).start()
+  }, [composing, suggestionsOpacity])
 
   // The screen can be reused with another id (switching chats in the sidebar)
   // or unmounted while "create chat" is still waiting for the desktop.
@@ -328,11 +373,30 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
     if (sessionId) abortChat(sessionId)
   }, [sessionId, abortChat])
 
-  const handleSuggestion = useCallback(
-    (suggestion: string) => {
-      void handleSend(suggestion)
+  // Fills the composer — the person is the one who sends. "Resume" opens the conversation instead.
+  const fillComposer = useCallback(
+    (text: string) => useDraftInput.getState().setDraft(sessionId ?? null, text),
+    [sessionId],
+  )
+  const handlePickStart = useCallback(
+    (suggestion: StartSuggestion) => {
+      if (suggestion.action.kind === 'fill') {
+        fillComposer(suggestion.action.text)
+        return
+      }
+      if (suggestion.action.mode !== useWorkspaceStore.getState().mode) {
+        useWorkspaceStore.getState().setMode(suggestion.action.mode)
+      }
+      router.push({ pathname: '/(main)/chat/[id]', params: { id: suggestion.action.sessionId } })
     },
-    [handleSend],
+    [fillComposer, router],
+  )
+  const handlePickGuide = useCallback(
+    (example: string) => {
+      fillComposer(example)
+      setGuideOpen(false)
+    },
+    [fillComposer],
   )
 
   const handleRename = useCallback(
@@ -577,8 +641,17 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
           >
             {personaVisible && <Persona state="idle" size={112} />}
             <View style={{ marginTop: 16, alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontSize: 18, fontWeight: '600', color: tokens.foreground }}>{t('chatScreen.newConversationTitle')}</Text>
-              <Text style={{ fontSize: 14, color: tokens.mutedForeground }}>{t('chatScreen.newConversationSubtitle')}</Text>
+              <Text style={{ fontSize: 18, fontWeight: '600', textAlign: 'center', color: tokens.foreground }}>{startTitle}</Text>
+              <Text style={{ fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 300, color: tokens.mutedForeground }}>{startSubtitle}</Text>
+              <Pressable
+                onPress={() => setGuideOpen(true)}
+                accessibilityRole="button"
+                hitSlop={8}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12 }}
+              >
+                <Sparkles size={14} color={tokens.mutedForeground} />
+                <Text style={{ fontSize: 13, color: tokens.mutedForeground }}>{t('chat.start.link')}</Text>
+              </Pressable>
             </View>
           </Animated.View>
 
@@ -601,9 +674,12 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
 
         {/* Suggestions — anchored above the input, only in the empty conversation */}
         {isEmpty && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
-            <Suggestions suggestions={suggestions} onSelect={handleSuggestion} />
-          </View>
+          <Animated.View
+            pointerEvents={composing ? 'none' : 'auto'}
+            style={{ paddingHorizontal: 16, marginBottom: 12, opacity: suggestionsOpacity }}
+          >
+            <StartSuggestions suggestions={startSuggestions} onPick={handlePickStart} />
+          </Animated.View>
         )}
 
         {/* Pending out of view: the request card is in the conversation (footer
@@ -651,6 +727,7 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
         )}
 
         <ChatInput
+          onHasTextChange={setComposing}
           onSend={handleSend}
           onAbort={handleAbort}
           isStreaming={isStreaming}
@@ -665,6 +742,14 @@ export function ChatScreen({ sessionId: routeSessionId }: ChatScreenProps) {
           foldersRequest={foldersRequest}
         />
       </KeyboardAvoidingView>
+      <CapabilitiesSheet
+        visible={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        mode={startMode}
+        features={startFeatures}
+        usedKinds={usedKinds}
+        onPick={handlePickGuide}
+      />
     </SafeScreen>
   )
 }

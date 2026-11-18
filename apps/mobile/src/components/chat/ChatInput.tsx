@@ -3,6 +3,7 @@ import { PromptInput } from './PromptInput'
 import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
 
 interface ChatInputProps {
+  onHasTextChange?: (hasText: boolean) => void
   onSend: (text: string, options?: SendMessageOptions, files?: FilePart[]) => void
   onAbort: () => void
   isStreaming?: boolean
@@ -20,9 +21,10 @@ interface ChatInputProps {
 
 // memo: the input (with model picker, bottom sheet etc.) does not need to
 // re-render on every delta flush of the conversation streaming.
-export const ChatInput = memo(function ChatInput({ onSend, onAbort, isStreaming, sessionId, disabled, sendDisabled, onCreateSession, onNavigateToSession, folders, onFoldersChange, foldersRequest }: ChatInputProps) {
+export const ChatInput = memo(function ChatInput({ onHasTextChange, onSend, onAbort, isStreaming, sessionId, disabled, sendDisabled, onCreateSession, onNavigateToSession, folders, onFoldersChange, foldersRequest }: ChatInputProps) {
   return (
     <PromptInput
+      onHasTextChange={onHasTextChange}
       onSend={(text, options, files) => {
         onSend(text, options, files)
       }}
