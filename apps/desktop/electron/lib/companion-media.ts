@@ -207,7 +207,8 @@ export function rewriteMediaPart(
     const previewSrc = rewriteScopedUrl(part.previewSrc, 'artifact', ARTIFACT_URL_RE, base, token)
     if (!previewSrc) return null
     const thumb = rewriteScopedUrl(part.thumb, 'artifact', ARTIFACT_URL_RE, base, token)
-    return { ...part, previewSrc, ...(thumb ? { thumb } : {}) }
+    const sourceSrc = rewriteScopedUrl(`orbit-artifact://${part.documentId}`, 'artifact', ARTIFACT_URL_RE, base, token)
+    return { ...part, previewSrc, ...(sourceSrc ? { sourceSrc } : {}), ...(thumb ? { thumb } : {}) }
   }
   if (part.type === 'tool') {
     const kind = PIECE_TOOLS[part.tool]

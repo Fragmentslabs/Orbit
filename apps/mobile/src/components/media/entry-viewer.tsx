@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { Image } from 'expo-image'
 import { ImageOff, Maximize2, Music, Pause, Play, Trash2 } from 'lucide-react-native'
@@ -8,6 +8,8 @@ import type { MediaEntry } from '@orbit/shared'
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio'
 import { WebView } from 'react-native-webview'
+import { buildMarkdownHtml } from '~/lib/document-markdown'
+import { useRemoteMarkdown } from '~/hooks/useRemoteMarkdown'
 import { canOpen, entryTitle, kindOf } from '~/lib/media'
 import { useTokens } from '~/components/list/parts'
 import { isPieceKind, usePieceAvailability } from '~/lib/media-availability'
@@ -35,6 +37,45 @@ function PageViewer({ url }: { url: string }) {
           <ActivityIndicator color={tokens.primary} />
         </View>
       )}
+      setSupportMultipleWindows={false}
+    />
+  )
+}
+
+/**
+ * A live document is Markdown: drawn in the app's theme, as the desktop does, instead of the
+ * white-sheet HTML preview. The preview stays when the desktop sends no source or it fails to load.
+ */
+function DocumentEntry({ entry }: { entry: MediaEntry }) {
+  const tokens = useTokens()
+  const markdown = useRemoteMarkdown(entry.sourceUrl, entry.createdAt)
+  const html = useMemo(
+    () =>
+      markdown.status === 'ready'
+        ? buildMarkdownHtml(markdown.text, {
+            background: tokens.background,
+            foreground: tokens.foreground,
+            muted: tokens.mutedForeground,
+            border: tokens.border,
+            accent: tokens.primary,
+            highlight: tokens.border,
+          })
+        : null,
+    [markdown, tokens],
+  )
+  if (markdown.status === 'loading') {
+    return (
+      <View style={[s.pageViewer, s.center, { backgroundColor: tokens.background }]}>
+        <ActivityIndicator color={tokens.primary} />
+      </View>
+    )
+  }
+  if (!html) return <PageViewer url={entry.url as string} />
+  return (
+    <WebView
+      source={{ html }}
+      style={[s.pageViewer, { backgroundColor: tokens.background }]}
+      originWhitelist={['about:*', 'data:*']}
       setSupportMultipleWindows={false}
     />
   )
@@ -144,6 +185,7 @@ export function EntryViewer({ entry, onExpand, onRemove }: { entry: MediaEntry; 
   // The pieces have their own players (clock, ruler, screens, slides): the same ones the chat
   // opens, so a motion from the gallery plays instead of sitting there as a still page.
   if (isPieceKind(kind)) return <PieceEntry entry={entry} onRemove={onRemove} />
+  if (kind === 'document' && entry.sourceUrl) return <DocumentEntry entry={entry} />
   // The rest is page: artifact and document (.html preview).
   return <PageViewer url={url} />
 }

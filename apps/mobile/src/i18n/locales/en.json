@@ -1943,6 +1943,8 @@
     }
   },
   "docViewer": {
+    "modeDocument": "Document",
+    "modeText": "Text",
     "open": "Read",
     "openLabel": "Open in the document viewer",
     "title": "Document",

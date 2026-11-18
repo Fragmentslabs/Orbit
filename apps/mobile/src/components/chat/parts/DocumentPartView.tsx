@@ -47,6 +47,7 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
       kind: 'part',
       title: part.title,
       src: part.previewSrc,
+      sourceSrc: part.sourceSrc,
       documentId: part.documentId,
       revision: part.revision,
     })

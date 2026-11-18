@@ -8,7 +8,7 @@ import type { SourceRef } from '~/lib/document-source'
  */
 export type DocumentTarget =
   /** A document the agent wrote: its HTML preview, already signed by the desktop. */
-  | { kind: 'part'; title: string; src: string; documentId: string; revision?: number }
+  | { kind: 'part'; title: string; src: string; sourceSrc?: string; documentId: string; revision?: number }
   /** A conversation source cited in the answer (`docN`/`srcN`), at page and lines. */
   | ({ kind: 'source'; sessionId?: string } & SourceRef)
 

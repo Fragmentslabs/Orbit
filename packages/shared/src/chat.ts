@@ -856,6 +856,8 @@ export interface DocumentPart {
   title: string
   /** orbit-artifact:// URL of the preview HTML */
   previewSrc: string
+  /** Only on the companion: signed URL of the Markdown source, drawn by the phone in its own theme. */
+  sourceSrc?: string
   /** Renderings ALREADY on disk. Empty is the norm: the document is born only in
    *  Markdown, and the PDF/DOCX is generated on the first download. */
   formats: ("pdf" | "docx")[]

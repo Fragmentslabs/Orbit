@@ -585,7 +585,10 @@ async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
           entry.thumb && (kind === 'motion' || kind === 'design' || kind === 'slides')
             ? fileUrlFor(req, 'artifact', entry.thumb)
             : undefined
-        return { ...entry, url: await mediaEntryUrl(req, entry), ...(thumbUrl ? { thumbUrl } : {}) }
+        // A LIVE document is Markdown: hand the phone the source too, to draw it in its own theme.
+        // One requested as a file keeps the white sheet as its face, as on the desktop.
+        const sourceUrl = kind === 'document' && !entry.delivery?.length ? fileUrlFor(req, 'artifact', `${documentBase(entry.id)}.md`) : undefined
+        return { ...entry, url: await mediaEntryUrl(req, entry), ...(thumbUrl ? { thumbUrl } : {}), ...(sourceUrl ? { sourceUrl } : {}) }
       }),
     ),
   )

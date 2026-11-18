@@ -157,6 +157,9 @@ export interface MediaEntry {
   videoUrl?: string
   /** Only in videos: duration in ms (the tile label). */
   durationMs?: number
+  /** Only on the companion, in documents: signed URL of the Markdown source (the document IS the
+   *  Markdown), so the phone can draw it in the app's own theme instead of the white-sheet preview. */
+  sourceUrl?: string
   /** Only in documents: which renderings exist on disk. Empty is the normal
    *  case — the document is born only in Markdown and the file is generated on
    *  the first download. */

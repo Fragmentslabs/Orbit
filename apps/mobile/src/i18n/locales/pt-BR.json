@@ -1943,6 +1943,8 @@
     }
   },
   "docViewer": {
+    "modeDocument": "Documento",
+    "modeText": "Texto",
     "open": "Ler",
     "openLabel": "Abrir no visualizador de documentos",
     "title": "Documento",

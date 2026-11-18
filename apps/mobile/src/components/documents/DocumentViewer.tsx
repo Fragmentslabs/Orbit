@@ -37,6 +37,7 @@ import { PieceView } from '~/components/chat/PieceView'
 import { StageLoading, BarButton, ViewerBar } from '~/components/chat/pieces/viewers/kit'
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { buildSourceHtml, sourceToText, wrapDocxHtml } from '~/lib/document-source'
+import { buildMarkdownHtml, isMarkdownSource, markdownOf } from '~/lib/document-markdown'
 import {
   CLEAR_FIND_SCRIPT,
   DOC_SCRIPT,
@@ -49,6 +50,7 @@ import {
   type OutlineEntry,
 } from '~/lib/document-web-script'
 import { shareFileName, shareRemoteFile, shareText } from '~/lib/document-share'
+import { useRemoteMarkdown } from '~/hooks/useRemoteMarkdown'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useThemeStore } from '~/stores/theme-store'
 import type { DocumentTarget } from '~/stores/document-viewer-store'
@@ -107,6 +109,12 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   }, [])
 
   const source = useSource(target)
+  // A document the agent wrote IS Markdown: draw it in the app's theme instead of the desktop's
+  // white-sheet preview. Without the source (older desktop, failed download) the preview stays.
+  const partMarkdown = useRemoteMarkdown(
+    target.kind === 'part' ? target.sourceSrc : undefined,
+    target.kind === 'part' ? target.revision : undefined,
+  )
   const injectRef = useRef<((js: string) => void) | null>(null)
   const [outline, setOutline] = useState<OutlineEntry[]>([])
   const [outlineOpen, setOutlineOpen] = useState(false)
@@ -115,6 +123,12 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   const [find, setFind] = useState({ count: 0, index: -1 })
   const [zoom, setZoom] = useState(1)
   const [shareError, setShareError] = useState(false)
+  // A Markdown source opens as a rendered document, except when it comes from a citation: there the
+  // numbered lines are what the cited stretch refers to (the desktop does the same).
+  const [picked, setPicked] = useState<'doc' | 'text' | null>(null)
+  const markdownSource = source.status === 'ready' && isMarkdownSource(source.view)
+  const cited = target.kind === 'source' && target.fromLine !== undefined
+  const mode: 'doc' | 'text' = markdownSource ? (picked ?? (cited ? 'text' : 'doc')) : 'text'
 
   const colors = useMemo(
     () => ({
@@ -129,8 +143,12 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   )
 
   const sourceHtml = useMemo(() => {
-    if (target.kind !== 'source' || source.status !== 'ready') return undefined
+    if (target.kind === 'part') {
+      return partMarkdown.status === 'ready' ? buildMarkdownHtml(partMarkdown.text, colors) : undefined
+    }
+    if (source.status !== 'ready') return undefined
     if (source.docxHtml) return wrapDocxHtml(source.docxHtml, colors)
+    if (isMarkdownSource(source.view) && mode === 'doc') return buildMarkdownHtml(markdownOf(source.view), colors)
     return buildSourceHtml(source.view, {
       cite: target.fromLine !== undefined ? { page: target.page, fromLine: target.fromLine, toLine: target.toLine } : undefined,
       colors,
@@ -141,7 +159,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
             ? t('docViewer.block', { n: page.num })
             : t('docViewer.page', { n: page.num }),
     })
-  }, [target, source, colors, t])
+  }, [target, source, colors, t, mode, partMarkdown])
 
   const title =
     target.kind === 'part'
@@ -177,6 +195,15 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
     run(zoomScript(next))
   }
 
+  const changeMode = (next: 'doc' | 'text') => {
+    if (next === mode) return
+    setPicked(next)
+    setOutlineOpen(false)
+    setOutline([])
+    setZoom(1)
+    setFind({ count: 0, index: -1 })
+  }
+
   const closeFind = () => {
     setFindOpen(false)
     setQuery('')
@@ -186,7 +213,9 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   const share = async () => {
     setShareError(false)
     try {
-      if (target.kind === 'part') {
+      if (target.kind === 'part' && partMarkdown.status === 'ready') {
+        await shareText(partMarkdown.text, shareFileName(target.title, target.documentId, 'md'), title)
+      } else if (target.kind === 'part') {
         await shareRemoteFile(
           target.src,
           shareFileName(target.title, target.documentId, 'html'),
@@ -194,7 +223,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           title,
         )
       } else if (source.status === 'ready') {
-        await shareText(sourceToText(source.view), shareFileName(source.view.filename, target.docId, 'txt'), title)
+        await shareText(sourceToText(source.view), shareFileName(source.view.filename, target.docId, markdownSource ? 'md' : 'txt'), title)
       }
     } catch {
       setShareError(true)
@@ -202,7 +231,10 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
   }
 
   const canShare = target.kind === 'part' || source.status === 'ready'
-  const loading = !mounted || (target.kind === 'source' && source.status === 'loading')
+  const loading =
+    !mounted ||
+    (target.kind === 'source' && source.status === 'loading') ||
+    (target.kind === 'part' && partMarkdown.status === 'loading')
   const citeLabel =
     target.kind === 'source' && target.fromLine !== undefined
       ? target.toLine && target.toLine > target.fromLine
@@ -258,6 +290,31 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
           </Pressable>
         </View>
 
+        {markdownSource ? (
+          <View className="flex-row items-center justify-center border-b px-3 py-1.5" style={{ borderColor: tokens.border }}>
+            <View className="flex-row rounded-md p-0.5" style={{ backgroundColor: tokens.muted }}>
+              {(['doc', 'text'] as const).map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => changeMode(option)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: mode === option }}
+                  testID={`document-mode-${option}`}
+                  className="rounded px-4 py-1"
+                  style={{ backgroundColor: mode === option ? tokens.background : 'transparent' }}
+                >
+                  <Text
+                    className="text-xs font-medium"
+                    style={{ color: mode === option ? tokens.foreground : tokens.mutedForeground }}
+                  >
+                    {t(option === 'doc' ? 'docViewer.modeDocument' : 'docViewer.modeText')}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {findOpen ? (
           <View className="flex-row items-center gap-2 border-b px-3 py-2" style={{ borderColor: tokens.border }}>
             <TextInput
@@ -307,7 +364,7 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
         ) : null}
 
         <View className="flex-1">
-          {!loading && target.kind === 'part' ? (
+          {!loading && target.kind === 'part' && !sourceHtml ? (
             <PieceView
               bare
               src={target.src}
@@ -319,8 +376,9 @@ export function DocumentViewer({ target, onClose }: { target: DocumentTarget; on
               errorLabel={t('docViewer.error')}
             />
           ) : null}
-          {!loading && target.kind === 'source' && sourceHtml ? (
+          {!loading && sourceHtml ? (
             <PieceView
+              key={mode}
               bare
               html={sourceHtml}
               title={title}
