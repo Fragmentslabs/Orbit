@@ -22,6 +22,8 @@ import {
 } from "@/src/components/ai/artifact";
 import { cn } from "@/lib/utils";
 import { Hint } from "@/components/ui/hint";
+import { NoGitState } from "@/src/components/no-git-state";
+import { isNotRepoError } from "@/src/lib/git-errors";
 import {
   getBaseName,
   joinPath,
@@ -305,6 +307,8 @@ export function ChangesView({
   const [patches, setPatches] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  /** Bumped after `git init`, so the folder is read again. */
+  const [localReload, setLocalReload] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState<Set<string>>(new Set());
   /** Sections with the body mounted. It only grows: remounting on scrolling back
@@ -341,7 +345,7 @@ export function ChangesView({
     return () => {
       cancelled = true;
     };
-  }, [list, reloadToken]);
+  }, [list, reloadToken, localReload]);
 
   /** The diff of each project, already split and with its totals. */
   const groups = useMemo(
@@ -365,6 +369,11 @@ export function ChangesView({
       }),
     [list, patches, errors],
   );
+
+  /** Every folder read failed because it has no repository: a state with a way out, not an error. */
+  const notRepo =
+    groups.length > 0 &&
+    groups.every((group) => group.error != null && isNotRepoError(group.error));
 
   const totals = useMemo(
     () =>
@@ -524,6 +533,11 @@ export function ChangesView({
             <Loader2 className="size-4 animate-spin" />
             {t("folders.changesLoading")}
           </div>
+        ) : notRepo ? (
+          <NoGitState
+            folder={list[0].path}
+            onStarted={() => setLocalReload((n) => n + 1)}
+          />
         ) : changeCount === 0 && !groups.some((g) => g.error) ? (
           // Same empty state as the Files tab: a big icon in the center and the sentence
           // below. The icon follows the tab — in the history the reading is the same,

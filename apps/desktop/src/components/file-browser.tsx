@@ -108,6 +108,8 @@ import {
   type ReaddirResult,
   type ViewerLens,
 } from "@/src/lib/folders";
+import { isNotRepoError } from "@/src/lib/git-errors";
+import { NoGitState } from "@/src/components/no-git-state";
 import { useGitRepos } from "@/src/lib/use-git-repos";
 import type { WsMatchOptions } from "@/src/lib/ipc";
 import { WorkspaceSearch } from "@/src/components/workspace-search";
@@ -1380,11 +1382,21 @@ export function FileBrowser({
                             {t("folders.loadingCommits")}
                           </div>
                         )}
-                        {!commitsLoading && commitsError && (
-                          <div className="p-4 text-center text-muted-foreground">
-                            {t("folders.gitHistoryError")}
-                          </div>
-                        )}
+                        {!commitsLoading &&
+                          commitsError &&
+                          isNotRepoError(commitsError) && (
+                            <NoGitState
+                              folder={section.path}
+                              onStarted={() => setCommitsReload((n) => n + 1)}
+                            />
+                          )}
+                        {!commitsLoading &&
+                          commitsError &&
+                          !isNotRepoError(commitsError) && (
+                            <div className="p-4 text-center text-muted-foreground">
+                              {t("folders.gitHistoryError")}
+                            </div>
+                          )}
                         {!commitsLoading &&
                           !commitsError &&
                           commits?.length === 0 && (
