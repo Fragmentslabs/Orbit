@@ -21,6 +21,7 @@ import { discoverWorkspaceRepos } from '../git-repos'
  *   invoke "git:branches"         repoPath      -> { ok, branches, current } | { ok:false, error }
  *   invoke "git:checkout"         repoPath, branch -> { ok } | { ok:false, error }
  *   invoke "git:createBranch"     repoPath, branch -> { ok } | { ok:false, error }
+ *   invoke "git:init"             repoPath      -> { ok } | { ok:false, error }
  *   invoke "git:commitAll"        repoPath, message -> { ok } | { ok:false, error }
  *   invoke "git:branchInfo"       repoPath      -> { ok, info } | { ok:false, error }
  *   invoke "git:pull"             repoPath      -> { ok } | { ok:false, ...gitError }
@@ -30,7 +31,7 @@ import { discoverWorkspaceRepos } from '../git-repos'
 
 const execFileAsync = promisify(execFile)
 
-interface CommitFileEntry {
+export interface CommitFileEntry {
   status: 'added' | 'modified' | 'deleted' | 'renamed'
   path: string
 }
@@ -42,7 +43,7 @@ interface GitStatusEntry {
   status: 'added' | 'modified' | 'deleted' | 'untracked' | 'renamed'
 }
 
-interface CommitEntry {
+export interface CommitEntry {
   hash: string
   author: string
   date: string
@@ -70,7 +71,7 @@ const RECORD_SEP = '\x1e'
 /** Page size of the commit log (paging by --skip for the infinite scroll). */
 const GIT_LOG_PAGE_SIZE = 30
 
-async function getGitLog(
+export async function getGitLog(
   repoPath: string,
   skip = 0,
 ): Promise<{ ok: true; commits: CommitEntry[]; hasMore: boolean } | { ok: false; error: string }> {
@@ -215,13 +216,32 @@ async function getGitLog(
 
     return { ok: true, commits, hasMore: commits.length === GIT_LOG_PAGE_SIZE }
   } catch (err) {
+    // A repository just started has no commit yet: an empty history, not a failure.
+    if (isNoCommitsError(err)) return { ok: true, commits: [], hasMore: false }
     return { ok: false, error: (err as Error).message }
   }
 }
 
+/** git's complaint when `HEAD` points at a branch with no commit (a repository just started). */
+export function isNoCommitsError(err: unknown): boolean {
+  const e = err as { message?: string; stderr?: string }
+  return /does not have any commits yet|bad default revision 'HEAD'|unknown revision or path not in the working tree/i.test(
+    `${e.stderr ?? ''} ${e.message ?? ''}`,
+  )
+}
+
+/** The diffs below compare against HEAD; with no commit yet there is nothing to compare with. */
+async function headArgs(repoPath: string): Promise<string[]> {
+  const has = await runGit(repoPath, ['rev-parse', '--verify', '--quiet', 'HEAD'], 15_000).then(
+    () => true,
+    () => false,
+  )
+  return has ? ['HEAD'] : []
+}
+
 /** Runs git with the terminal prompt disabled (fails fast instead of
  *  hanging while asking for credentials) and without opening the merge editor. */
-function runGit(repoPath: string, args: string[], timeout = 120_000) {
+export function runGit(repoPath: string, args: string[], timeout = 120_000) {
   return execFileAsync('git', args, {
     cwd: repoPath,
     maxBuffer: 10 * 1024 * 1024,
@@ -230,7 +250,7 @@ function runGit(repoPath: string, args: string[], timeout = 120_000) {
   })
 }
 
-function gitError(err: unknown): { message: string; kind: 'auth' | 'noUpstream' | 'noRemote' | 'other' } {
+export function gitError(err: unknown): { message: string; kind: 'auth' | 'noUpstream' | 'noRemote' | 'other' } {
   const e = err as { message?: string; stderr?: string }
   const message = (e.stderr?.trim() || e.message || String(err)).replace(/\s+/g, ' ').trim()
   const lower = message.toLowerCase()
@@ -243,7 +263,7 @@ function gitError(err: unknown): { message: string; kind: 'auth' | 'noUpstream' 
   return { message, kind: 'other' }
 }
 
-interface BranchSyncInfo {
+export interface BranchSyncInfo {
   current: string | null
   defaultBranch: string | null
   ahead: number
@@ -255,7 +275,7 @@ interface BranchSyncInfo {
 
 /** VS Code style indicator: current branch vs default branch (main/master),
  *  ahead/behind, upstream, dirty (uncommitted changes). */
-async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
+export async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
   const info: BranchSyncInfo = {
     current: null,
     defaultBranch: null,
@@ -406,7 +426,7 @@ export async function getWorkingNumstat(
     // match the path that `git status` reports.
     const { stdout } = await runGit(
       repoPath,
-      ['diff', 'HEAD', '--numstat', '--no-renames'],
+      ['diff', ...(await headArgs(repoPath)), '--numstat', '--no-renames'],
       30_000,
     )
     const stats: Record<string, { added: number; deleted: number }> = {}
@@ -473,7 +493,7 @@ export async function getWorkingDiff(
   repoPath: string,
 ): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {
   try {
-    const { stdout } = await runGit(repoPath, ['diff', 'HEAD'], 60_000)
+    const { stdout } = await runGit(repoPath, ['diff', ...(await headArgs(repoPath))], 60_000)
     const { stdout: others } = await runGit(
       repoPath,
       ['ls-files', '--others', '--exclude-standard'],
@@ -514,7 +534,7 @@ export async function getWorkingFileDiff(
       .then(() => true)
       .catch(() => false)
     if (isTracked) {
-      const { stdout } = await runGit(repoPath, ['diff', 'HEAD', '--', relPath])
+      const { stdout } = await runGit(repoPath, ['diff', ...(await headArgs(repoPath)), '--', relPath])
       return { ok: true, patch: stdout }
     }
     // Untracked (new) file: a diff against /dev/null shows it all as added.
@@ -530,7 +550,7 @@ export async function getWorkingFileDiff(
 }
 
 /** Diff a commit introduced in one file (diff against its parent). */
-async function getCommitFileDiff(
+export async function getCommitFileDiff(
   repoPath: string,
   hash: string,
   relPath: string,
@@ -540,6 +560,78 @@ async function getCommitFileDiff(
     return { ok: true, patch: stdout }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
+  }
+}
+
+/** Stages everything and commits (the desktop's "Commit" button). */
+export async function commitAll(repoPath: string, message: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await execFileAsync('git', ['add', '-A'], { cwd: repoPath })
+    await execFileAsync('git', ['commit', '-m', message], { cwd: repoPath })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/** Turns the folder into a git repository (`git init`, on `main` when git is new enough). A folder
+ *  that already is one is left alone. */
+export async function initRepo(repoPath: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const inside = await runGit(repoPath, ['rev-parse', '--is-inside-work-tree'], 15_000).then(
+      (r) => r.stdout.trim() === 'true',
+      () => false,
+    )
+    if (inside) return { ok: true }
+    // `-b` needs git 2.28; an older one gets the plain init (its own default branch name).
+    await runGit(repoPath, ['init', '-b', 'main'], 30_000).catch(() => runGit(repoPath, ['init'], 30_000))
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: gitError(err).message }
+  }
+}
+
+export type GitSyncResult =
+  | { ok: true; created?: boolean }
+  | { ok: false; message: string; kind: 'auth' | 'noUpstream' | 'noRemote' | 'other' }
+
+export async function pullRepo(repoPath: string): Promise<GitSyncResult> {
+  try {
+    await runGit(repoPath, ['pull', '--no-edit'])
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, ...gitError(err) }
+  }
+}
+
+/** Pushes the current branch; creates the remote branch (`-u origin`) when it has none. */
+export async function pushRepo(repoPath: string): Promise<GitSyncResult> {
+  try {
+    const { stdout: branchOut } = await runGit(repoPath, ['branch', '--show-current'], 15_000)
+    const branch = branchOut.trim()
+    if (!branch) return { ok: false, message: 'No current branch', kind: 'other' }
+
+    let upstream: string | null = null
+    try {
+      const { stdout: upOut } = await runGit(repoPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], 15_000)
+      upstream = upOut.trim() || null
+    } catch {
+      // no upstream yet
+    }
+
+    if (upstream) {
+      await runGit(repoPath, ['push'])
+      return { ok: true, created: false }
+    }
+
+    const { stdout: remoteOut } = await runGit(repoPath, ['remote'], 15_000)
+    if (!remoteOut.trim()) return { ok: false, message: 'No remote configured', kind: 'noRemote' }
+    // No remote branch: create it via -u origin <branch> (authenticated by the credentials
+    // already configured in git — token/SSH; never prompts in the terminal)
+    await runGit(repoPath, ['push', '-u', 'origin', branch])
+    return { ok: true, created: true }
+  } catch (err) {
+    return { ok: false, ...gitError(err) }
   }
 }
 
@@ -617,15 +709,9 @@ export function registerGitIpc(): void {
     }
   })
 
-  ipcMain.handle('git:commitAll', async (_event, repoPath: string, message: string) => {
-    try {
-      await execFileAsync('git', ['add', '-A'], { cwd: repoPath })
-      await execFileAsync('git', ['commit', '-m', message], { cwd: repoPath })
-      return { ok: true as const }
-    } catch (err) {
-      return { ok: false as const, error: (err as Error).message }
-    }
-  })
+  ipcMain.handle('git:init', async (_event, repoPath: string) => initRepo(repoPath))
+
+  ipcMain.handle('git:commitAll', async (_event, repoPath: string, message: string) => commitAll(repoPath, message))
 
   ipcMain.handle('git:branchInfo', async (_event, repoPath: string) => {
     try {
@@ -635,14 +721,7 @@ export function registerGitIpc(): void {
     }
   })
 
-  ipcMain.handle('git:pull', async (_event, repoPath: string) => {
-    try {
-      await runGit(repoPath, ['pull', '--no-edit'])
-      return { ok: true as const }
-    } catch (err) {
-      return { ok: false as const, ...gitError(err) }
-    }
-  })
+  ipcMain.handle('git:pull', async (_event, repoPath: string) => pullRepo(repoPath))
 
   // Creates the repository on GitHub when the folder has no remote yet — the
   // token comes from the git credential helper or from `gh`, never from the user
@@ -650,41 +729,5 @@ export function registerGitIpc(): void {
   ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean) =>
     createRemoteRepo(repoPath, name, isPrivate))
 
-  ipcMain.handle('git:push', async (_event, repoPath: string) => {
-    try {
-      const { stdout: branchOut } = await runGit(repoPath, ['branch', '--show-current'], 15_000)
-      const branch = branchOut.trim()
-      if (!branch) {
-        return { ok: false as const, message: 'No current branch', kind: 'other' as const }
-      }
-
-      let upstream: string | null = null
-      try {
-        const { stdout: upOut } = await runGit(
-          repoPath,
-          ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-          15_000,
-        )
-        upstream = upOut.trim() || null
-      } catch {
-        // no upstream yet
-      }
-
-      if (upstream) {
-        await runGit(repoPath, ['push'])
-        return { ok: true as const, created: false }
-      }
-
-      const { stdout: remoteOut } = await runGit(repoPath, ['remote'], 15_000)
-      if (!remoteOut.trim()) {
-        return { ok: false as const, message: 'No remote configured', kind: 'noRemote' as const }
-      }
-      // No remote branch: create it via -u origin <branch> (authenticated by the
-      // credentials already configured in git — token/SSH; never prompts in the terminal)
-      await runGit(repoPath, ['push', '-u', 'origin', branch])
-      return { ok: true as const, created: true }
-    } catch (err) {
-      return { ok: false as const, ...gitError(err) }
-    }
-  })
+  ipcMain.handle('git:push', async (_event, repoPath: string) => pushRepo(repoPath))
 }

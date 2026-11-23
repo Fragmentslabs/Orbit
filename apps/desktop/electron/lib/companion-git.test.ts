@@ -11,10 +11,17 @@ vi.mock('./github-repo', () => ({ createRemoteRepo: vi.fn() }))
 import {
   MAX_PATCH_CHARS,
   capPatch,
+  gitCommitDiffForPhone,
+  gitCommitForPhone,
   gitCreateBranch,
   gitDiffForPhone,
+  gitInfoForPhone,
+  gitInitForPhone,
+  gitLogForPhone,
   gitStatusForPhone,
+  gitSyncForPhone,
   isValidBranchName,
+  isValidHash,
 } from './companion-git'
 
 const base = path.join(os.tmpdir(), `orbit-companion-git-${Date.now()}`)
@@ -82,5 +89,63 @@ describe('git for the phone', () => {
     expect(res.branch).toBe('feature/x')
     expect(res.files.length).toBe(3)
     await expect(gitCreateBranch(base, 'feature/x')).rejects.toThrow()
+  })
+})
+
+describe('commits, info and sync for the phone', () => {
+  it('only takes a hash git itself would print', () => {
+    expect(isValidHash('a1b2c3d')).toBe(true)
+    for (const bad of ['', '--all', 'HEAD', 'abc', 'a1b2c3d..HEAD', 'a1b2 c3d']) expect(isValidHash(bad)).toBe(false)
+  })
+
+  it('refuses an empty message, commits everything and lists the commit with its files', async () => {
+    await expect(gitCommitForPhone(base, '   ')).rejects.toThrow('empty')
+    await gitCommitForPhone(base, 'second commit')
+    expect((await gitStatusForPhone(base)).files).toEqual([])
+    const log = await gitLogForPhone(base)
+    expect(log.hasMore).toBe(false)
+    expect(log.commits.map((c) => c.message)).toEqual(['second commit', 'init'])
+    expect(log.commits[0].files.map((f) => f.path).sort()).toEqual(['a.txt', 'gone.txt', 'new.txt'])
+    expect(log.commits[0].pushed).toBe(false)
+  })
+
+  it('shows what one commit changed in one file and refuses a non-hash', async () => {
+    const [head] = (await gitLogForPhone(base)).commits
+    expect((await gitCommitDiffForPhone(base, head.hash, 'a.txt')).patch).toContain('+three')
+    await expect(gitCommitDiffForPhone(base, '--all', 'a.txt')).rejects.toThrow('Invalid commit')
+  })
+
+  it('reports the branch state and a push without a remote as a result, not a throw', async () => {
+    const info = await gitInfoForPhone(base)
+    expect(info).toMatchObject({ isRepo: true, current: 'feature/x', hasRemote: false, dirty: false, upstream: null })
+    const plain = await fsp.mkdtemp(path.join(os.tmpdir(), 'orbit-no-git-'))
+    try {
+      expect(await gitInfoForPhone(plain)).toMatchObject({ isRepo: false, current: null, hasRemote: false })
+    } finally {
+      await fsp.rm(plain, { recursive: true, force: true })
+    }
+    const res = await gitSyncForPhone(base, 'push')
+    expect(res).toMatchObject({ ok: false, kind: 'noRemote' })
+  })
+})
+
+describe('git init for the phone', () => {
+  it('turns a plain folder into a repository and leaves an existing one alone', async () => {
+    const plain = await fsp.mkdtemp(path.join(os.tmpdir(), 'orbit-init-'))
+    try {
+      expect((await gitInfoForPhone(plain)).isRepo).toBe(false)
+      await gitInitForPhone(plain)
+      // A repository just started: no commits is an empty history, and what is on disk is a change.
+      await fsp.writeFile(path.join(plain, 'a.txt'), 'x\ny\n')
+      expect(await gitLogForPhone(plain)).toEqual({ commits: [], hasMore: false })
+      expect((await gitStatusForPhone(plain)).files).toMatchObject([{ path: 'a.txt', status: 'untracked', added: 2 }])
+      expect((await gitDiffForPhone(plain)).patch).toContain('+x')
+      await fsp.rm(path.join(plain, 'a.txt'))
+      expect(await gitInfoForPhone(plain)).toMatchObject({ isRepo: true, hasRemote: false, dirty: false })
+      await gitInitForPhone(plain)
+      await expect(gitInitForPhone(path.join(plain, 'missing'))).rejects.toThrow()
+    } finally {
+      await fsp.rm(plain, { recursive: true, force: true })
+    }
   })
 })

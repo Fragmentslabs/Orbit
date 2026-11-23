@@ -20,7 +20,7 @@ import { app, BrowserWindow } from 'electron'
 import crypto from 'node:crypto'
 import os from 'node:os'
 import nodePath from 'node:path'
-import { readdir } from 'node:fs/promises'
+import { readdir, stat as fsStat } from 'node:fs/promises'
 import type {
   CompanionRequest,
   CompanionEvent,
@@ -97,6 +97,7 @@ import {
   rewriteMessages as rewriteMessagesMedia,
 } from './companion-media'
 import { handleGitRequest } from './companion-git'
+import { createChatWorktree, listWorktrees, removeChatWorktree } from './worktrees/service'
 import { hasUnresolvedPiece, resolvePart, resolvePieceIds } from './companion-pieces'
 import { folderCreateRemote, folderGitInfo, folderInitStatus, type FolderDeps } from './companion-folders'
 import { createRemoteRepo } from './github-repo'
@@ -648,12 +649,75 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
       case 'git:status':
       case 'git:diff':
-      case 'git:create-branch': {
+      case 'git:create-branch':
+      case 'git:log':
+      case 'git:commit-diff':
+      case 'git:info':
+      case 'git:commit':
+      case 'git:init':
+      case 'git:pull':
+      case 'git:push': {
         try {
           sendResponse(ws, requestId, true, await handleGitRequest(req))
         } catch (err) {
           sendResponse(ws, requestId, false, undefined, (err as Error).message)
         }
+        break
+      }
+
+      case 'worktree:list': {
+        // The same service as the desktop's selector and the agent's worktree_* tools.
+        try {
+          sendResponse(ws, requestId, true, await listWorktrees(req.folder))
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'worktree:create': {
+        try {
+          const name = req.name?.trim()
+          if (!name) throw new Error('The worktree needs a name')
+          sendResponse(ws, requestId, true, await createChatWorktree({ folder: req.folder, name, base: req.base }))
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'worktree:remove': {
+        try {
+          await removeChatWorktree({ folder: req.folder, path: req.path, deleteBranch: req.deleteBranch })
+          sendResponse(ws, requestId, true)
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'sessions:set-directory': {
+        // Same effect as the desktop's worktree selector: the chat's main folder changes
+        // (the extra ones stay) and the next turn already runs there. Refused while it runs.
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (!session) {
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
+          break
+        }
+        if (runningSessionIds().has(req.sessionId)) {
+          sendResponse(ws, requestId, false, undefined, SESSION_BUSY_ERROR)
+          break
+        }
+        const stat = await fsStat(req.directory).catch(() => null)
+        if (!stat?.isDirectory()) {
+          sendResponse(ws, requestId, false, undefined, 'Folder not found')
+          break
+        }
+        session.directory = req.directory
+        session.updatedAt = Date.now()
+        await writeJson(StorageKeys.session(session.id), session)
+        broadcastSessionEvent({ type: 'session', sessionId: session.id, session })
+        sendResponse(ws, requestId, true, session)
         break
       }
 

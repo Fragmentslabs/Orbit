@@ -9,6 +9,7 @@ import type { VoiceEngineId, VoiceEngineStatus } from './voice'
 import type { AnalyticsRange, UsageSummaryRequest } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type { MemoryEvent } from './memory'
+import type { CreateWorktreeResult, WorktreeList } from './worktrees'
 import type { LiveEventMessage } from './live'
 import type {
   NewPipelineInput,
@@ -739,6 +740,127 @@ export interface CreateBranchRequest {
   branch: string
 }
 
+/** A commit of the log, as the desktop's Commits tab lists it. */
+export interface GitCommit {
+  hash: string
+  author: string
+  /** ISO date */
+  date: string
+  message: string
+  body: string
+  files: { status: 'added' | 'modified' | 'deleted' | 'renamed'; path: string }[]
+  /** Branches and tags pointing exactly at this commit. */
+  refs: string[]
+  /** Already on the default branch. */
+  onDefault: boolean
+  /** Already on the remote (reachable from the upstream). */
+  pushed: boolean
+}
+
+/** One page (30) of the commit log; `skip` pages forward. */
+export interface GitLogRequest {
+  type: 'git:log'
+  directory: string
+  skip?: number
+}
+
+export interface GitLogResponse {
+  commits: GitCommit[]
+  hasMore: boolean
+}
+
+/** Patch a commit introduced in one file. */
+export interface GitCommitDiffRequest {
+  type: 'git:commit-diff'
+  directory: string
+  hash: string
+  path: string
+}
+
+/** Where the branch stands: remote, upstream, commits ahead/behind the default branch, dirty tree. */
+export interface GitInfoRequest {
+  type: 'git:info'
+  directory: string
+}
+
+export interface GitInfoResponse {
+  /** The folder is inside a git work tree; false = nothing else here is meaningful. */
+  isRepo: boolean
+  current: string | null
+  defaultBranch: string | null
+  ahead: number
+  behind: number
+  upstream: string | null
+  hasRemote: boolean
+  dirty: boolean
+}
+
+/** Stages everything and commits it (`git add -A` + `git commit -m`), like the desktop. */
+export interface GitCommitRequest {
+  type: 'git:commit'
+  directory: string
+  message: string
+}
+
+/** `git init` in a folder that is not a repository yet (a no-op when it already is one). */
+export interface GitInitRequest {
+  type: 'git:init'
+  directory: string
+}
+
+export interface GitPullRequest {
+  type: 'git:pull'
+  directory: string
+}
+
+export interface GitPushRequest {
+  type: 'git:push'
+  directory: string
+}
+
+/** Answer of pull/push: a failure keeps the git message and a kind the app words by itself. */
+export interface GitSyncResponse {
+  ok: boolean
+  created?: boolean
+  message?: string
+  kind?: 'auth' | 'noUpstream' | 'noRemote' | 'other'
+}
+
+// --- Worktrees of a chat's folder -------------------------------------------
+
+export interface WorktreeListRequest {
+  type: 'worktree:list'
+  /** A folder of the repository (the chat's). */
+  folder: string
+}
+
+/** null when the folder is not inside a git repository. */
+export type WorktreeListResponse = WorktreeList | null
+
+export interface WorktreeCreateRequest {
+  type: 'worktree:create'
+  folder: string
+  name: string
+  /** Base branch; `@remote` = the origin's default branch after a fetch. */
+  base?: string
+}
+
+export type WorktreeCreateResponse = CreateWorktreeResult
+
+export interface WorktreeRemoveRequest {
+  type: 'worktree:remove'
+  folder: string
+  path: string
+  deleteBranch?: boolean
+}
+
+/** Points the chat at another working folder (a worktree): the next message already runs there. */
+export interface SetSessionDirectoryRequest {
+  type: 'sessions:set-directory'
+  sessionId: string
+  directory: string
+}
+
 export interface RevertSessionRequest {
   type: 'sessions:revert'
   sessionId: string
@@ -1075,6 +1197,17 @@ export type CompanionRequest =
   | GitStatusRequest
   | GitDiffRequest
   | CreateBranchRequest
+  | GitLogRequest
+  | GitCommitDiffRequest
+  | GitInfoRequest
+  | GitCommitRequest
+  | GitInitRequest
+  | GitPullRequest
+  | GitPushRequest
+  | WorktreeListRequest
+  | WorktreeCreateRequest
+  | WorktreeRemoveRequest
+  | SetSessionDirectoryRequest
   | ListDirsRequest
   | FolderInitStatusRequest
   | FolderGitInfoRequest
