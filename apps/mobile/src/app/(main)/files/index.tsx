@@ -1,232 +1,251 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useState } from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, FolderTree } from 'lucide-react-native'
-import type { FileDirEntry, FilesListResponse } from '@orbit/shared'
+import { FileDiff, FolderTree, GitBranch, History } from 'lucide-react-native'
+import type { GitInfoResponse, WorktreeList } from '@orbit/shared'
 import { SafeScreen } from '~/components/layout/SafeScreen'
-import { ListHeader, SearchField, useTokens } from '~/components/list/parts'
-import { FileIcon } from '~/components/files/FileIcon'
-import { filesApi } from '~/lib/files-api'
-import { baseName, breadcrumbs, formatBytes, parentPath } from '~/lib/files'
+import { ListHeader, useTokens } from '~/components/list/parts'
+import { FilesTab } from '~/components/files/FilesTab'
+import { BranchSheet } from '~/components/git/BranchSheet'
+import { ChangesTab } from '~/components/git/ChangesTab'
+import { CommitsTab } from '~/components/git/CommitsTab'
+import { RepoBar } from '~/components/git/RepoBar'
+import { WorktreeSheet } from '~/components/git/WorktreeSheet'
+import { gitInfo, gitInit, gitPull, gitPush, gitStatus, worktreeList } from '~/lib/git-api'
+import { syncErrorKey } from '~/lib/git-format'
+import { baseName } from '~/lib/files'
+import { useSessionStore } from '~/stores/session-store'
 
-interface Row {
-  key: string
-  name: string
-  path: string
-  dir: string
-  isDirectory: boolean
-  size?: number
-}
+type Tab = 'files' | 'changes' | 'commits'
 
 /**
- * Files of a chat's working folder: a tree you walk one folder at a time (each folder is a
- * screen, so the native back gesture goes up a level), a breadcrumb to jump to any
- * ancestor, and a by-name search over the whole project. The desktop does the listing and
- * keeps every path inside the session's folders.
+ * The project of a code chat in one screen, like the desktop's panel: Files, Changes (with the
+ * commit box) and Commits as tabs, and under the title the worktree and branch pickers plus the
+ * pull / push buttons. Without a git repository only the files remain.
  */
-export default function FilesScreen() {
+export default function ProjectScreen() {
   const { t } = useTranslation()
   const router = useRouter()
   const tokens = useTokens()
-  const params = useLocalSearchParams<{ sessionId: string; root?: string; path?: string }>()
+  const params = useLocalSearchParams<{ sessionId: string; root?: string; tab?: string }>()
   const sessionId = params.sessionId
-  const path = params.path ?? ''
+  const session = useSessionStore((st) => st.sessions.find((x) => x.id === sessionId))
 
+  const [tab, setTab] = useState<Tab>(params.tab === 'changes' || params.tab === 'commits' ? params.tab : 'files')
+  // A folder picked here (another worktree, or one of the chat's extra folders) wins over the session's.
   const [rootOverride, setRootOverride] = useState<string | undefined>(params.root || undefined)
-  const [listing, setListing] = useState<FilesListResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [hitsRaw, setHits] = useState<Row[] | null>(null)
-  const [truncated, setTruncated] = useState(false)
-  const searchSeq = useRef(0)
+  const directory = rootOverride ?? session?.directory
+  const [info, setInfo] = useState<GitInfoResponse | null>(null)
+  const [changeCount, setChangeCount] = useState(0)
+  const insets = useSafeAreaInsets()
+  const [worktrees, setWorktrees] = useState<WorktreeList | null>(null)
+  const [isRepo, setIsRepo] = useState<boolean | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [initializing, setInitializing] = useState(false)
+  const [syncing, setSyncing] = useState<'pull' | 'push' | null>(null)
+  const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null)
+  const [branchOpen, setBranchOpen] = useState(false)
+  const [worktreeOpen, setWorktreeOpen] = useState(false)
 
-  // An emptied field drops the results without an effect-driven state reset.
-  const hits = query.trim() ? hitsRaw : null
-
-  const scope = useMemo(() => ({ sessionId, root: rootOverride }), [sessionId, rootOverride])
-
-  const [reload, setReload] = useState(0)
-  const load = () => setReload((n) => n + 1)
-
-  useEffect(() => {
-    let alive = true
-    filesApi
-      .list(scope, path)
-      .then((res) => {
-        if (!alive) return
-        setListing(res)
-        setError(null)
-      })
-      .catch((err: Error) => alive && setError(err.message))
-      .finally(() => alive && setLoading(false))
-    return () => {
-      alive = false
+  const loadRepo = useCallback(async () => {
+    if (!directory) return
+    try {
+      const res = await gitInfo(directory)
+      setInfo(res)
+      setIsRepo(res.isRepo)
+      // A folder without git has no changes, no commits and no worktrees to read.
+      if (!res.isRepo) return
+    } catch {
+      setInfo(null)
+      setIsRepo(false)
+      return
     }
-  }, [scope, path, reload])
+    // The badge of the Changes tab, read even while another tab is open.
+    setChangeCount(await gitStatus(directory).then((r) => r.files.length, () => 0))
+    // The list is the label of the worktree pill; a repository without one just hides the pill.
+    setWorktrees(await worktreeList(directory).catch(() => null))
+  }, [directory])
 
-  // Debounced name search across the whole project; an older answer never overwrites a newer one.
   useEffect(() => {
-    const q = query.trim()
-    if (!q) return
-    const seq = ++searchSeq.current
-    const timer = setTimeout(() => {
-      filesApi
-        .search(scope, q)
-        .then((res) => {
-          if (seq !== searchSeq.current) return
-          setTruncated(res.truncated)
-          setHits(res.hits.map((h) => ({ key: h.path, name: h.name, path: h.path, dir: h.dir, isDirectory: false })))
-        })
-        .catch((err: Error) => {
-          if (seq === searchSeq.current) setError(err.message)
-        })
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [query, scope])
+    // Reads the repository once the folder is known and again after a switch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadRepo()
+  }, [loadRepo])
 
-  const root = listing?.root ?? rootOverride ?? ''
-  const rootName = baseName(root) || t('filesBrowser.title')
-  const crumbs = useMemo(() => breadcrumbs(path, rootName), [path, rootName])
+  const refreshAll = useCallback(() => {
+    setRefreshKey((n) => n + 1)
+    void loadRepo()
+  }, [loadRepo])
 
-  const rows: Row[] = useMemo(() => {
-    if (hits) return hits
-    return (listing?.entries ?? []).map((e: FileDirEntry) => ({
-      key: e.path,
-      name: e.name,
-      path: e.path,
-      dir: parentPath(e.path),
-      isDirectory: e.isDirectory,
-      size: e.size,
-    }))
-  }, [hits, listing])
-
-  const go = (nextPath: string) =>
-    router.push({ pathname: '/(main)/files', params: { sessionId, root: root || undefined, path: nextPath } })
-
-  const open = (row: Row) => {
-    if (row.isDirectory) go(row.path)
-    else router.push({ pathname: '/(main)/files/view', params: { sessionId, root: root || undefined, path: row.path } })
+  const sync = async (op: 'pull' | 'push') => {
+    if (!directory || syncing) return
+    setSyncing(op)
+    setNotice(null)
+    try {
+      const res = await (op === 'pull' ? gitPull(directory) : gitPush(directory))
+      if (res.ok) {
+        setNotice({ text: t(op === 'pull' ? 'project.sync.pulled' : res.created ? 'project.sync.pushedNew' : 'project.sync.pushed'), bad: false })
+        refreshAll()
+      } else {
+        setNotice({ text: t(syncErrorKey(op, res)) + (res.kind === 'other' && res.message ? `: ${res.message}` : ''), bad: true })
+      }
+    } catch (err) {
+      setNotice({ text: (err as Error).message, bad: true })
+    } finally {
+      setSyncing(null)
+    }
   }
 
-  const roots = listing?.roots ?? []
+  const startRepo = async () => {
+    if (!directory || initializing) return
+    setInitializing(true)
+    setNotice(null)
+    try {
+      await gitInit(directory)
+      refreshAll()
+    } catch (err) {
+      setNotice({ text: (err as Error).message, bad: true })
+    } finally {
+      setInitializing(false)
+    }
+  }
+
+  // The notice is a passing line, not a state: it clears itself.
+  useEffect(() => {
+    if (!notice || notice.bad) return
+    const timer = setTimeout(() => setNotice(null), 3000)
+    return () => clearTimeout(timer)
+  }, [notice])
+
+  const current = worktrees?.worktrees.find((w) => w.path === worktrees.current)
+  const worktreeLabel = worktrees ? (!current || current.primary ? t('project.worktree.main') : current.name) : null
+  const showGit = isRepo === true && !!directory
+
+  const tabs: { key: Tab; label: string; icon: typeof FolderTree; count?: number }[] = [
+    { key: 'files', label: t('project.tabs.files'), icon: FolderTree },
+    ...(showGit
+      ? [
+          { key: 'changes' as const, label: t('project.tabs.changes'), icon: FileDiff, count: changeCount },
+          { key: 'commits' as const, label: t('project.tabs.commits'), icon: History },
+        ]
+      : []),
+  ]
+  const shown: Tab = showGit ? tab : 'files'
+
+  if (!sessionId || !directory) {
+    return (
+      <SafeScreen>
+        <ListHeader title={t('filesBrowser.title')} onBack={() => router.back()} />
+        <Text style={{ color: tokens.mutedForeground, textAlign: 'center', padding: 28 }}>{t('filesBrowser.noFolder')}</Text>
+      </SafeScreen>
+    )
+  }
 
   return (
     <SafeScreen>
-      <ListHeader title={path ? baseName(path) : rootName} subtitle={path || undefined} onBack={() => router.back()} />
-
-      <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-        <SearchField value={query} onChange={setQuery} placeholder={t('filesBrowser.searchPlaceholder')} />
+      <ListHeader title={baseName(directory)} subtitle={t('project.subtitle')} onBack={() => router.back()} />
+      {showGit && (
+        <RepoBar
+          info={info}
+          worktreeLabel={worktreeLabel}
+          syncing={syncing}
+          onWorktree={() => setWorktreeOpen(true)}
+          onBranch={() => setBranchOpen(true)}
+          onPull={() => void sync('pull')}
+          onPush={() => void sync('push')}
+        />
+      )}
+      {isRepo === false ? (
+        <View style={[st.noGit, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: tokens.foreground }}>{t('project.noGit')}</Text>
+            <Text style={{ fontSize: 12.5, lineHeight: 18, color: tokens.mutedForeground }}>{t('project.noGitHint')}</Text>
+          </View>
+          <Pressable
+            onPress={() => void startRepo()}
+            disabled={initializing}
+            accessibilityRole="button"
+            style={[st.initBtn, { backgroundColor: tokens.primary, opacity: initializing ? 0.6 : 1 }]}
+          >
+            {initializing ? (
+              <ActivityIndicator size="small" color={tokens.primaryForeground} />
+            ) : (
+              <GitBranch size={15} color={tokens.primaryForeground} />
+            )}
+            <Text style={{ color: tokens.primaryForeground, fontWeight: '600', fontSize: 13 }}>{t('project.gitInit')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {notice ? (
+        <Text style={{ fontSize: 12.5, paddingHorizontal: 16, paddingVertical: 6, color: notice.bad ? tokens.destructive : tokens.mutedForeground }}>
+          {notice.text}
+        </Text>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        {shown === 'files' && (
+          <FilesTab key={directory} sessionId={sessionId} root={rootOverride} onRootChange={setRootOverride} refreshKey={refreshKey} />
+        )}
+        {shown === 'changes' && <ChangesTab key={directory} directory={directory} refreshKey={refreshKey} onChanged={refreshAll} />}
+        {shown === 'commits' && <CommitsTab key={directory} directory={directory} refreshKey={refreshKey} />}
       </View>
 
-      {!hits && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.crumbs} contentContainerStyle={s.crumbsContent}>
-          {crumbs.map((crumb, i) => (
-            <View key={crumb.path} style={s.crumbItem}>
-              {i > 0 && <ChevronRight size={14} color={tokens.mutedForeground} />}
-              <Pressable onPress={() => (i === crumbs.length - 1 ? undefined : go(crumb.path))} hitSlop={6}>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: i === crumbs.length - 1 ? '700' : '500',
-                    color: i === crumbs.length - 1 ? tokens.foreground : tokens.mutedForeground,
-                  }}
-                >
-                  {crumb.name}
-                </Text>
-              </Pressable>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      {!hits && roots.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rootsRow}>
-          {roots.map((r) => {
-            const active = r === root
+      {tabs.length > 1 && (
+        <View style={[st.bar, { borderTopColor: tokens.border, backgroundColor: tokens.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
+          {tabs.map(({ key, label, icon: Icon, count }) => {
+            const active = key === shown
             return (
               <Pressable
-                key={r}
-                onPress={() => {
-                  setRootOverride(r)
-                  router.replace({ pathname: '/(main)/files', params: { sessionId, root: r } })
-                }}
-                style={[s.rootChip, { borderColor: tokens.border, backgroundColor: active ? tokens.accent : 'transparent' }]}
+                key={key}
+                onPress={() => setTab(key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                style={st.tab}
               >
-                <FolderTree size={13} color={tokens.foreground} />
-                <Text style={{ fontSize: 12.5, color: tokens.foreground }}>{baseName(r)}</Text>
+                <View>
+                  <Icon size={22} color={active ? tokens.foreground : tokens.mutedForeground} />
+                  {count ? (
+                    <View style={[st.badge, { backgroundColor: tokens.primary }]}>
+                      <Text style={[st.badgeText, { color: tokens.primaryForeground }]}>{count > 99 ? '99+' : count}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[st.tabText, { color: active ? tokens.foreground : tokens.mutedForeground }]}>{label}</Text>
               </Pressable>
             )
           })}
-        </ScrollView>
+        </View>
       )}
 
-      {loading && !listing ? (
-        <View style={s.center}>
-          <ActivityIndicator color={tokens.mutedForeground} />
-        </View>
-      ) : error && !listing ? (
-        <View style={s.center}>
-          <Text style={{ color: tokens.destructive, textAlign: 'center', paddingHorizontal: 24 }}>
-            {t('filesBrowser.loadFailed', { error })}
-          </Text>
-          <Pressable onPress={load} style={[s.retry, { borderColor: tokens.border }]}>
-            <Text style={{ color: tokens.foreground, fontWeight: '600' }}>{t('filesBrowser.retry')}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(r) => r.key}
-          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 32, paddingTop: 6 }}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
-          ListHeaderComponent={
-            hits && truncated ? (
-              <Text style={{ fontSize: 12, color: tokens.mutedForeground, padding: 10 }}>{t('filesBrowser.truncated')}</Text>
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={s.center}>
-              <Text style={{ color: tokens.mutedForeground }}>
-                {hits ? t('filesBrowser.noResults') : t('filesBrowser.empty')}
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <Pressable onPress={() => open(item)} style={({ pressed }) => [s.row, pressed && { backgroundColor: tokens.accent }]}>
-              <FileIcon name={item.name} isDirectory={item.isDirectory} color={item.isDirectory ? '#3b82f6' : tokens.mutedForeground} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 15, color: tokens.foreground }}>
-                  {item.name}
-                </Text>
-                {hits && item.dir ? (
-                  <Text numberOfLines={1} style={{ fontSize: 12, color: tokens.mutedForeground }}>
-                    {item.dir}
-                  </Text>
-                ) : null}
-              </View>
-              {item.isDirectory ? (
-                <ChevronRight size={16} color={tokens.mutedForeground} />
-              ) : (
-                <Text style={{ fontSize: 12, color: tokens.mutedForeground }}>{formatBytes(item.size)}</Text>
-              )}
-            </Pressable>
-          )}
-        />
-      )}
+      <BranchSheet
+        open={branchOpen}
+        directory={directory}
+        onClose={() => setBranchOpen(false)}
+        onChanged={refreshAll}
+      />
+      <WorktreeSheet
+        open={worktreeOpen}
+        folder={directory}
+        sessionId={sessionId}
+        suggestedName={session?.title}
+        onClose={() => setWorktreeOpen(false)}
+        onSwitched={(next) => {
+          setRootOverride(next)
+          setInfo(null)
+          setRefreshKey((n) => n + 1)
+        }}
+      />
     </SafeScreen>
   )
 }
 
-const s = StyleSheet.create({
-  crumbs: { flexGrow: 0, marginTop: 6 },
-  crumbsContent: { paddingHorizontal: 14, paddingVertical: 8, gap: 4, alignItems: 'center' },
-  crumbItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rootsRow: { paddingHorizontal: 12, paddingBottom: 6, gap: 8 },
-  rootChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, height: 32 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 48 },
-  retry: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, minHeight: 48, paddingVertical: 8, borderRadius: 12 },
+const st = StyleSheet.create({
+  noGit: { flexDirection: 'row', alignItems: 'center', gap: 12, margin: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
+  initBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 12, borderRadius: 10 },
+  bar: { flexDirection: 'row', paddingTop: 6, paddingHorizontal: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  tab: { flex: 1, minHeight: 50, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  tabText: { fontSize: 11.5, fontWeight: '600' },
+  badge: { position: 'absolute', top: -5, right: -11, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontSize: 10, fontWeight: '700' },
 })

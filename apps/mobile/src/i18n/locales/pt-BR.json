@@ -2326,5 +2326,62 @@
       },
       "close": "Fechar"
     }
+  },
+  "project": {
+    "menu": "Arquivos e git",
+    "subtitle": "Arquivos, alterações e commits",
+    "detached": "HEAD solto",
+    "pull": "Pull",
+    "push": "Push",
+    "tabs": {
+      "files": "Arquivos",
+      "changes": "Alterações",
+      "commits": "Commits"
+    },
+    "sync": {
+      "pulled": "Tudo atualizado",
+      "pushed": "Push feito",
+      "pushedNew": "Push feito; a branch agora existe no remoto",
+      "auth": "O git não conseguiu entrar no remoto. Confira as credenciais no desktop.",
+      "noRemote": "Este repositório não tem remoto.",
+      "noUpstream": "Esta branch não tem upstream para puxar.",
+      "failed": "A operação falhou"
+    },
+    "commit": {
+      "placeholder": "Mensagem do commit",
+      "button_one": "Commitar {{count}} arquivo",
+      "button_other": "Commitar {{count}} arquivos",
+      "failed": "Não foi possível commitar."
+    },
+    "commits": {
+      "empty": "Ainda não há commits.",
+      "pushed": "No remoto",
+      "local": "Só neste computador"
+    },
+    "worktree": {
+      "title": "Worktree",
+      "main": "Principal",
+      "new": "Nova worktree…",
+      "namePlaceholder": "nome-da-worktree",
+      "create": "Criar e trocar",
+      "baseCurrent": "A partir da branch atual",
+      "baseRemote": "A partir de {{remote}}",
+      "notRepo": "Esta pasta não é um repositório git.",
+      "changes_one": "{{count}} alteração",
+      "changes_other": "{{count}} alterações",
+      "ahead_one": "{{count}} commit à frente",
+      "ahead_other": "{{count}} commits à frente",
+      "pipeline": "tarefa do pipeline",
+      "external": "fora do Orbit",
+      "missing": "pasta ausente",
+      "remove": "Remover",
+      "removeTitle": "Remover {{name}}?",
+      "removeBody": "A pasta é apagada; a branch continua.",
+      "removeDirty_one": "{{count}} alteração sem commit será perdida. A branch continua.",
+      "removeDirty_other": "{{count}} alterações sem commit serão perdidas. A branch continua."
+    },
+    "noGit": "Esta pasta não tem git",
+    "noGitHint": "Inicie um repositório para acompanhar alterações e commits aqui.",
+    "gitInit": "Iniciar repositório"
   }
 }

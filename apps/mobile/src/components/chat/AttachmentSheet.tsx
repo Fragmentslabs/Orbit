@@ -46,7 +46,7 @@ import { useBottomBreathing } from '~/lib/keyboard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { DirBrowserBody } from './DirBrowserBody'
-import { KnownFolderChoices } from '~/components/folders/KnownFolderChoices'
+import { WorktreeList } from '~/components/git/WorktreeList'
 import { ModelPickerContent } from './ModelPickerModal'
 
 export type PermissionModeValue = 'ask' | 'approve' | 'full'
@@ -103,7 +103,7 @@ const PAGE_HEIGHT: Record<Page, number> = {
   [PAGE_THINKING]: 420,
   [PAGE_PERMISSIONS]: 300,
   [PAGE_TOOLS]: 420,
-  [PAGE_FOLDERS]: 460,
+  [PAGE_FOLDERS]: 520,
   [PAGE_BROWSE]: 500,
   [PAGE_MODEL]: 500,
 }
@@ -720,14 +720,6 @@ export function AttachmentSheet({
                       <ChevronRight size={16} color={tokens.mutedForeground} />
                     </Pressable>
 
-                    <KnownFolderChoices
-                      current={mainFolder}
-                      onPick={(path) => {
-                        if (path) void saveRecentFolder(path)
-                        onFoldersChange?.(path ? [path, ...extras.filter((f) => f !== path)] : [])
-                      }}
-                    />
-
                     <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
                       {extras.length > 0
                         ? `${t('workspace.additional')} · ${extras.length}`
@@ -825,6 +817,24 @@ export function AttachmentSheet({
 
                     {branchError ? (
                       <Text style={[s.hint, { color: tokens.destructive }]}>{branchError}</Text>
+                    ) : null}
+
+                    {mainFolder ? (
+                      <>
+                        <View style={[s.wsDivider, { backgroundColor: tokens.border }]} />
+                        <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                          {t('project.worktree.title')}
+                        </Text>
+                        <WorktreeList
+                          folder={mainFolder}
+                          active={visible && page === PAGE_FOLDERS}
+                          // Same as picking a folder: the chat's main folder changes now and the next
+                          // message already runs there (the extras stay).
+                          onSwitch={async (next) => {
+                            onFoldersChange?.([next, ...extras.filter((f) => f !== next)])
+                          }}
+                        />
+                      </>
                     ) : null}
 
                     <View style={s.wsNote}>

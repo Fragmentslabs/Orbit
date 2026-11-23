@@ -2326,5 +2326,62 @@
       },
       "close": "Close"
     }
+  },
+  "project": {
+    "menu": "Files & git",
+    "subtitle": "Files, changes and commits",
+    "detached": "detached HEAD",
+    "pull": "Pull",
+    "push": "Push",
+    "tabs": {
+      "files": "Files",
+      "changes": "Changes",
+      "commits": "Commits"
+    },
+    "sync": {
+      "pulled": "Up to date",
+      "pushed": "Pushed",
+      "pushedNew": "Pushed; the branch now exists on the remote",
+      "auth": "Git could not sign in to the remote. Check the credentials on the desktop.",
+      "noRemote": "This repository has no remote.",
+      "noUpstream": "This branch has no upstream to pull from.",
+      "failed": "The operation failed"
+    },
+    "commit": {
+      "placeholder": "Commit message",
+      "button_one": "Commit {{count}} file",
+      "button_other": "Commit {{count}} files",
+      "failed": "Could not commit."
+    },
+    "commits": {
+      "empty": "No commits yet.",
+      "pushed": "On the remote",
+      "local": "Only on this computer"
+    },
+    "worktree": {
+      "title": "Worktree",
+      "main": "Main",
+      "new": "New worktree…",
+      "namePlaceholder": "worktree-name",
+      "create": "Create and switch",
+      "baseCurrent": "From the current branch",
+      "baseRemote": "From {{remote}}",
+      "notRepo": "This folder is not a git repository.",
+      "changes_one": "{{count}} change",
+      "changes_other": "{{count}} changes",
+      "ahead_one": "{{count}} commit ahead",
+      "ahead_other": "{{count}} commits ahead",
+      "pipeline": "pipeline task",
+      "external": "outside Orbit",
+      "missing": "folder missing",
+      "remove": "Remove",
+      "removeTitle": "Remove {{name}}?",
+      "removeBody": "The folder goes away; the branch stays.",
+      "removeDirty_one": "{{count}} change not committed will be lost. The branch stays.",
+      "removeDirty_other": "{{count}} changes not committed will be lost. The branch stays."
+    },
+    "noGit": "This folder has no git",
+    "noGitHint": "Start a repository to track changes and commits here.",
+    "gitInit": "Start repository"
   }
 }

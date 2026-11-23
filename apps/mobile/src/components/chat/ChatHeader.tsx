@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, GitCompare, Search, Trash2, Folder, FolderTree, ChevronDown, Library, Settings } from 'lucide-react-native'
-import { useRouter } from 'expo-router'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, Search, Trash2, Folder, FolderGit2, ChevronDown, Library, Settings } from 'lucide-react-native'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { routineChatSessionId, type SessionInfo, type BranchesResponse } from '@orbit/shared'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { openDrawer } from '~/components/layout/sidebar-control'
@@ -17,8 +17,6 @@ import { folderName } from '~/lib/folder-name'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
 import { useChatModes } from '~/hooks/useChatModes'
 import { ContextMeter } from './ContextMeter'
-import { ChangesSheet } from '~/components/git/ChangesSheet'
-import { BranchSheet } from '~/components/git/BranchSheet'
 
 interface ChatHeaderProps {
   /** Current session — undefined while the chat is a draft (not sent yet). */
@@ -97,8 +95,13 @@ export const ChatHeader = memo(function ChatHeader({
     }
   }, [directory])
   const [renaming, setRenaming] = useState(false)
-  const [changesOpen, setChangesOpen] = useState(false)
-  const [branchOpen, setBranchOpen] = useState(false)
+
+  // The project screen switches branch and worktree: the strip reads again when the chat is back.
+  useFocusEffect(
+    useCallback(() => {
+      if (code) void loadBranch()
+    }, [code, loadBranch]),
+  )
 
   useEffect(() => {
     // One git call per opened chat, only in code mode — the strip needs the branch.
@@ -167,7 +170,7 @@ export const ChatHeader = memo(function ChatHeader({
         </View>
 
         {session ? (
-          <Pressable onPress={() => { setMenuOpen(true); void loadBranch() }} style={s.iconButton}>
+          <Pressable onPress={() => setMenuOpen(true)} style={s.iconButton}>
             <Ellipsis size={22} color={tokens.foreground} />
           </Pressable>
         ) : (
@@ -248,34 +251,15 @@ export const ChatHeader = memo(function ChatHeader({
           },
           ...(code && directory && session
             ? [{
-                icon: FolderTree,
-                label: t('filesBrowser.menu'),
+                icon: FolderGit2,
+                label: t('project.menu'),
                 onPress: () => router.push({ pathname: '/(main)/files', params: { sessionId: session.id } }),
               }]
-            : []),
-          ...(code
-            ? [
-                { icon: GitCompare, label: t('changes.menu'), onPress: () => setChangesOpen(true) },
-                { icon: GitBranch, label: branch ? t('branch.menuWith', { branch }) : t('branch.menu'), onPress: () => setBranchOpen(true) },
-                { icon: Folder, label: t('workspace.menu'), onPress: () => onOpenWorkspace?.() },
-              ]
             : []),
           { icon: GitFork, label: t('chatHeader.fork'), onPress: onFork },
           { icon: Trash2, label: t('sidebar.delete'), destructive: true, onPress: handleDeletePress },
         ]}
       />
-
-      {code && directory ? (
-        <>
-          <ChangesSheet visible={changesOpen} directory={directory} onClose={() => setChangesOpen(false)} />
-          <BranchSheet
-            open={branchOpen}
-            directory={directory}
-            onClose={() => setBranchOpen(false)}
-            onChanged={(next) => setBranch(next)}
-          />
-        </>
-      ) : null}
 
       <RenamePrompt
         visible={renaming}
