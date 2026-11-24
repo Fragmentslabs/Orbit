@@ -1,16 +1,14 @@
 import { useTranslation } from "react-i18next"
-import { Pin, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { FragmentManifest } from "@shared/fragments"
 import { FragmentIcon } from "./fragment-icon"
 import { FragmentPreview } from "./fragment-preview"
 import { FragmentActionsMenu } from "./fragment-actions-menu"
-import { KIND_META } from "./kind-meta"
 
 
 export function FragmentCard({ fragment, onOpen }: { fragment: FragmentManifest; onOpen: () => void }) {
   const { t, i18n } = useTranslation()
-  const meta = KIND_META[fragment.kind]
       return (
     <div
       role="button"
@@ -45,7 +43,6 @@ export function FragmentCard({ fragment, onOpen }: { fragment: FragmentManifest;
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{fragment.name}</p>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span>{t(meta.name)}</span>
             {fragment.requests.includes("ai") && (
               <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 text-primary">
                 <Sparkles className="size-2.5" />
@@ -54,7 +51,6 @@ export function FragmentCard({ fragment, onOpen }: { fragment: FragmentManifest;
             )}
           </div>
         </div>
-        {fragment.pinned.sidebar && <Pin className="size-3 shrink-0 text-primary" aria-label={t("fragments.unpinSidebar")} />}
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {new Date(fragment.updatedAt).toLocaleDateString(i18n.language, { day: "2-digit", month: "2-digit" })}
         </span>

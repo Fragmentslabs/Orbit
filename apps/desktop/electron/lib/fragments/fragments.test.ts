@@ -160,26 +160,33 @@ describe('fragment-store', () => {
   })
 })
 
-describe('fragment kind, pins and model', () => {
-  it('pins a new fragment where its kind lives', async () => {
-    const screen = await store.createFragment({ name: 's', html: 'x', kind: 'screen' })
-    const panel = await store.createFragment({ name: 'p', html: 'x', kind: 'panel' })
-    expect(screen.pinned).toEqual({ sidebar: true, panel: false })
-    expect(panel.pinned).toEqual({ sidebar: false, panel: true })
-    expect((await store.createFragment({ name: 'd', html: 'x' })).kind).toBe('screen')
-    // an unknown kind from a model falls back instead of poisoning the manifest
-    expect((await store.createFragment({ name: 'bad', html: 'x', kind: 'nope' as never })).kind).toBe('screen')
+describe('fragment pins and model', () => {
+  it('pins a new fragment to the sidebar, and only there', async () => {
+    const m = await store.createFragment({ name: 's', html: 'x' })
+    expect(m.pinned).toEqual({ sidebar: true, panel: false, list: false })
+    // A model that still sends the old `kind` poisons nothing: it is not a field any more.
+    const stray = await store.createFragment({ name: 'bad', html: 'x', kind: 'panel' } as never)
+    expect(stray.pinned).toEqual({ sidebar: true, panel: false, list: false })
+    expect((stray as unknown as { kind?: string }).kind).toBeUndefined()
+  })
+
+  it('pins at the top of the list on its own, without touching the sidebar or panel pins', async () => {
+    const m = await store.createFragment({ name: 'topo', html: 'x' })
+    const next = await store.updateFragmentMeta(m.id, { pinned: { list: true } })
+    expect(next?.pinned).toEqual({ sidebar: true, panel: false, list: true })
+    expect((await store.updateFragmentMeta(m.id, { pinned: { sidebar: false } }))?.pinned).toEqual({ sidebar: false, panel: false, list: true })
+    expect((await store.updateFragmentMeta(m.id, { pinned: { list: false } }))?.pinned.list).toBe(false)
   })
 
   it('updates meta without bumping the revision (the page must not reload)', async () => {
-    const m = await store.createFragment({ name: 'meta', html: 'x', kind: 'panel' })
+    const m = await store.createFragment({ name: 'meta', html: 'x', pinned: { sidebar: false, panel: true, list: false } })
     const seen: number[] = []
     store.fragmentEvents.on('updated', (e: { fragmentId: string; revision: number }) => {
       if (e.fragmentId === m.id) seen.push(e.revision)
     })
     const next = await store.updateFragmentMeta(m.id, { name: '  Renamed  ', pinned: { sidebar: true } })
     expect(next?.name).toBe('Renamed')
-    expect(next?.pinned).toEqual({ sidebar: true, panel: true })
+    expect(next?.pinned).toEqual({ sidebar: true, panel: true, list: false })
     // A pin the patch does not name keeps its value (it stays in the panel hub).
     expect(next?.revision).toBe(m.revision)
     expect(seen).toEqual([m.revision]) // announced, so open views re-read the manifest
@@ -232,8 +239,8 @@ describe('fragment kind, pins and model', () => {
     delete raw.pinned
     await fsp.writeFile(file, JSON.stringify(raw), 'utf8')
     const read = await store.getFragment(m.id)
-    expect(read?.kind).toBe('screen')
-    expect(read?.pinned).toEqual({ sidebar: true, panel: false })
+    expect((read as unknown as { kind?: string }).kind).toBeUndefined()
+    expect(read?.pinned).toEqual({ sidebar: true, panel: false, list: false })
   })
 })
 

@@ -169,9 +169,9 @@ export interface SessionInfo {
    * The chat that builds a Fragment. It runs LEAN: a minimal system prompt, only the
    * fragment tools, no memories or skills. It does not show in the chat list; its work is
    * followed from the fragment itself (the activity feed), and the full conversation
-   * opens on demand in the side panel. `kind` is where the person asked it to live.
+   * opens on demand in the side panel. Older sessions stored `{ kind }` here: only the presence counts.
    */
-  fragment?: { kind: 'screen' | 'panel' }
+  fragment?: true
   /**
    * A specialist chat: it runs with the lean profile of its craft (a focused prompt, only the
    * tools of the craft, none of the usual memory/skills blocks). The Fragment chat is the
@@ -584,8 +584,12 @@ export interface DesignQuotePayload {
   name: string
   /** Absolute folder of the canvas — the address in code mode (design_preview). */
   path?: string
-  /** Artboard file inside the canvas (e.g. `Main.html`). */
+  /** Artboard file inside the canvas (e.g. `Main.html`); empty when the whole canvas is referenced. */
   file: string
+  /** `canvas` = the user pointed at the canvas as a whole, not at one artboard or element. */
+  scope?: "canvas"
+  /** With scope `canvas`: the artboards in it, as `file ("title")`, so the model knows what the canvas holds. */
+  boards?: string[]
   /** Artboard title, when it has one. */
   boardTitle?: string
   /** Path of child elements from the <body>; absent = the whole artboard. */
@@ -629,6 +633,19 @@ export type QuotePayload = DocumentQuotePayload | MotionQuotePayload | DesignQuo
  * motion (see formatMotionQuoteText).
  */
 export function formatDesignQuoteText(quote: DesignQuotePayload, userText?: string): string {
+  if (quote.scope === "canvas") {
+    const lines = [`[Design canvas referenced by the user — canvas "${quote.name}"]`]
+    lines.push(
+      quote.path
+        ? `Canvas folder: ${quote.path} — read canvas.json there, then the artboard files.`
+        : `Read it with design_read({ name: "${quote.name}" }) and edit it with design_edit.`,
+    )
+    if (quote.boards?.length) lines.push(`Artboards: ${quote.boards.join("; ")}`)
+    lines.push("Selection: the whole canvas (every artboard), not one element.")
+    const note = userText?.trim()
+    if (note) lines.push("---", note)
+    return lines.join("\n")
+  }
   const board = quote.boardTitle ? `${quote.file} ("${quote.boardTitle}")` : quote.file
   const lines = [`[Design element selected by the user — canvas "${quote.name}", artboard ${board}]`]
   lines.push(

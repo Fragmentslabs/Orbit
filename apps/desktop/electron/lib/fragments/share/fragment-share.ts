@@ -43,7 +43,7 @@ export async function buildFragmentArchive(id: string): Promise<{ bytes: Uint8Ar
     if (asset) files.push({ path: rel, data: asset.data })
   }
   if (!files.some((f) => f.path === 'index.html')) return null
-  const bytes = packFragment({ name: manifest.name, kind: manifest.kind, icon: manifest.icon, requests: manifest.requests, files })
+  const bytes = packFragment({ name: manifest.name, icon: manifest.icon, requests: manifest.requests, files })
   return { bytes, suggestedName: `${slugify(manifest.name)}${FRAGMENT_PACKAGE_EXTENSION}` }
 }
 
@@ -65,7 +65,6 @@ export function previewFragmentImport(fileName: unknown, data: unknown): Fragmen
       sha256: result.sha256,
       archiveBytes: bytes.byteLength,
       name: manifest.name,
-      kind: manifest.kind,
       icon: manifest.icon,
       requests: manifest.requests,
       author: manifest.author,
@@ -91,12 +90,11 @@ export async function confirmFragmentImport(token: unknown): Promise<FragmentImp
     const created = await createFragment({
       name: manifest.name,
       html: Buffer.from(entry.data).toString('utf8'),
-      kind: manifest.kind,
       icon: manifest.icon,
       requests: manifest.requests,
       files: files.filter((f) => f !== entry).map((f) => ({ path: f.path, data: Buffer.from(f.data) })),
       // Not on the sidebar or the panel hub until the person chooses so.
-      pinned: { sidebar: false, panel: false },
+      pinned: { sidebar: false, panel: false, list: false },
       recordProvenance: (id) => recordThirdPartyProvenance(id, { arrival: 'file', fileName, fileHash: sha256, author: manifest.author }),
     })
     return { ok: true, fragmentId: created.id }

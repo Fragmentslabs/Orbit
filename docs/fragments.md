@@ -70,12 +70,13 @@ What the MVP does:
   work in the normal chat, in both chat and code mode. Every write bumps the
   fragment's `revision`, the tab reloads, and the page's console/errors come back to
   the agent through `fragment_logs`.
-- A fragment has a **kind** (`screen`, `panel`, `widget`) and two **pins**
-  (`sidebar`, `panel`). The kind is the default placement; the pins decide where it is
-  reachable. Screens are pinned to the sidebar on creation, panel fragments to the
-  panel's "Open" hub; widgets are only recorded (the home-screen widget host is not
-  built yet).
-- **Fragments page** (sidebar): a gallery with search and a kind filter, and a
+- A fragment has no kind: it is one page that works as a screen of the app, in a tab of the
+  side panel and on the phone (see "RESPONSIVE" in the fragment tools guide). Two **pins** decide
+  where it is reachable: `sidebar` (on for a new fragment — the button the person turns on or off)
+  and `panel` (the side panel's "Open" hub, one more way to use it, not the focus). The old
+  `screen` / `panel` kind was dropped; a manifest or package that still carries `kind` is read and
+  the field ignored.
+- **Fragments page** (sidebar): a gallery with search, and a
   *New fragment* action. Pinned fragments get their own row under the sidebar entry.
 - The fragment also opens in a **panel tab** next to the conversation (and the "+"
   selector lists the existing ones; panel-pinned ones are cards in the "Open" hub).
@@ -236,13 +237,12 @@ Errors from `orbit.*` always carry a `code` (`permission_denied`, `rate_limited`
 **Gallery.** A grid of cards, each with a **live thumbnail** of the fragment (the real page,
 scaled, read-only: it mounts only when it scrolls into view and every `window.orbit` call
 is refused, so a card can never spend tokens or write data just by being on screen).
-Fragments pinned to the sidebar or the panel come first. Search, filter by kind, and a
+Fragments pinned to the sidebar or the panel come first. Search, and a
 *New fragment* action.
 
 **Creating** happens in a chat, like every other piece. *New fragment* opens a normal
 conversation running the fragment agent, with a ready-made sentence in the composer whose
-fields the person fills: what it does, what it shows and where it lives (screen / side panel
-/ widget). The agent builds it with `fragment_create`; the fragment opens in the panel tab
+fields the person fills: what it does and what it shows. The agent builds it with `fragment_create`; the fragment opens in the panel tab
 and keeps that conversation as its own chat — the one edit mode talks to. The page is the
 library and the full-bleed view: there is no canvas or creating screen of its own.
 
@@ -265,7 +265,7 @@ each fragment gets its own chat (`SessionInfo.fragment`) that:
 - uses a **minimal system prompt** (`fragmentSystemPrompt`) instead of Orbit's usual one;
 - gets **only the fragment tools** — no files, shell, browser, media or catalog;
 - receives **no memories, skills or subchat blocks**;
-- is told, every turn, **which fragment it is looking at** (id, kind, files, what was
+- is told, every turn, **which fragment it is looking at** (id, files, what was
   asked and allowed) — so a fresh chat editing an old fragment starts oriented, with no
   briefing message;
 - is **hidden from the chat list** when it was made inside the fragment (from its card); a
@@ -695,7 +695,7 @@ name still has to be reserved by hand when the first release is decided.
   (`dist/orbit-fragments.js`):
 
   ```bash
-  npx orbit-fragments init my-notes --kind panel   # manifest.json, src/{index.html,app.js,style.css}, jsconfig.json
+  npx orbit-fragments init my-notes   # manifest.json, src/{index.html,app.js,style.css}, jsconfig.json
   npx orbit-fragments validate my-notes [--json]   # exit 1 on errors; warnings do not fail
   ```
 
@@ -732,7 +732,7 @@ Open product decisions: per-host / per-tool consent instead of one switch per ca
 Section 11 describes the long-term package format; this is the part that exists, for sharing one
 file between people. It adds no registry, no URL import and no `npx` flow.
 
-**`.orbitfrag` (a zip).** `manifest.json` (`format: "orbitfrag"`, `version: 1`, name, kind, icon,
+**`.orbitfrag` (a zip).** `manifest.json` (`format: "orbitfrag"`, `version: 1`, name, icon,
 `requests`, optional author and description, and every file with its size and SHA-256) plus
 `src/**`. Never `data.json`, history, grants, chats, the provenance record or any key. Allowed file
 types are exactly what the scheme serves (`html css js mjs json svg txt csv md`), so there are no

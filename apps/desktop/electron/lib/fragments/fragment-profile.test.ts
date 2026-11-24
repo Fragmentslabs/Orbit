@@ -56,22 +56,22 @@ function input(sessionId: string, fragment: boolean): SendMessageInput {
 
 describe('fragment profile', () => {
   it('recognises a fragment chat from the session on disk, and only that', async () => {
-    await storage.writeJson(StorageKeys.session('sess-frag'), session('sess-frag', { fragment: { kind: 'panel' } }))
+    await storage.writeJson(StorageKeys.session('sess-frag'), session('sess-frag', { fragment: true }))
     await storage.writeJson(StorageKeys.session('sess-plain'), session('sess-plain'))
-    expect(await profile.fragmentProfileOf('sess-frag')).toEqual({ kind: 'panel' })
+    expect(await profile.fragmentProfileOf('sess-frag')).toBe(true)
     expect(await profile.fragmentProfileOf('sess-plain')).toBeNull()
     expect(await profile.fragmentProfileOf('sess-missing')).toBeNull()
   })
 
-  it('tells a chat with no fragment yet to create one of the asked kind', async () => {
-    await storage.writeJson(StorageKeys.session('sess-new'), session('sess-new', { fragment: { kind: 'panel' } }))
+  it('tells a chat with no fragment yet to create one', async () => {
+    await storage.writeJson(StorageKeys.session('sess-new'), session('sess-new', { fragment: true }))
     const block = await profile.fragmentTurnBlock('sess-new')
     expect(block).toContain('fragment_create')
-    expect(block).toContain('panel')
+    expect(block).not.toContain('kind')
   })
 
   it('orients a chat that already owns a fragment: which one, its files, what was asked', async () => {
-    await storage.writeJson(StorageKeys.session('sess-own'), session('sess-own', { fragment: { kind: 'screen' } }))
+    await storage.writeJson(StorageKeys.session('sess-own'), session('sess-own', { fragment: true }))
     const m = await store.createFragment({ name: 'Owned', html: '<p>x</p>', requests: ['ai'], sessionId: 'sess-own' })
     await store.writeFragmentFile(m.id, 'style.css', 'p{}')
     const block = await profile.fragmentTurnBlock('sess-own')
@@ -86,6 +86,9 @@ describe('fragment profile', () => {
     const normal = await prompts.buildSystemPrompt(input('sess-plain', false))
     expect(lean).toBe(profile.fragmentSystemPrompt(undefined))
     expect(lean).toContain('fragment_create')
+    // The fragment is also opened on the phone: the lean agent is told so from the first message.
+    expect(lean).toContain('RESPONSIVE')
+    expect(lean).toContain('390px')
     expect(lean.length).toBeLessThan(normal.length)
     expect(lean.toLowerCase()).not.toContain('memory')
   })

@@ -67,6 +67,13 @@ LOOK — every screen and every widget follows this, no exceptions:
 - Spacing on a 4px grid (4/8/12/16/24), generous. One idea per screen: a title, the thing, and air.
 - A widget inherits all of this at miniature scale: 1x1 is one number plus one word (10-18px); 2x2 may add a tiny inline SVG sparkline. No header, no buttons, no legend.
 
+RESPONSIVE — always. The same fragment is shown on the desktop AND on the person's phone (a screen about 390px wide, touch, inside a web view), so it must work from 360px to 1400px wide with no sideways scroll:
+- index.html carries <meta name="viewport" content="width=device-width, initial-scale=1">.
+- Fluid layout: flex or grid with gap, grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)), flex-wrap, max-width containers, %, rem and clamp(). Never a fixed pixel width on a page-level container. Images, SVG and canvas get max-width:100%; a chart scales with its box (viewBox, or redraw on a ResizeObserver).
+- Collapse by width: columns stack in one below ~600px (@media (max-width: 600px), or @container), toolbars wrap, a wide table sits in a box with overflow-x:auto. Every flex child that holds text gets min-width:0.
+- Touch: every button, link and field is at least 44px tall with 8px between neighbours; nothing works only on hover; inputs use font-size 16px or more (smaller makes iOS zoom the page). Page padding 16px at phone width, body text 14px or more.
+- Before answering, picture the page at 390px: nothing clipped, nothing that needs a sideways scroll.
+
 Hard limits of the page (a closed sandbox): NO direct network — no fetch to the internet from the page (use orbit.http), no CDN scripts, no external images, fonts or iframes. Write plain HTML/CSS/JavaScript (ES modules between your own files are fine); draw charts with inline SVG or <canvas>. Files: index.html is the entry; add style.css, app.js, etc. with fragment_write_file and reference them relatively (<link href="style.css">, <script src="app.js">). Allowed file types: html, css, js, mjs, json, svg, txt, csv, md.
 After writing, the panel reloads by itself. Call fragment_logs to read the page's console and errors and fix what is broken.`
 
@@ -118,12 +125,6 @@ export function createFragmentTools(sessionId: string) {
           .describe(
             'A lucide icon that represents the fragment, in kebab-case ("wallet", "chart-bar", "timer", "notebook-pen", "dumbbell"). Always pick one that fits; it shows in the sidebar, the header and the gallery.',
           ),
-        kind: z
-          .enum(['screen', 'panel'])
-          .optional()
-          .describe(
-            'Where it is meant to live. "screen" (default): a full page of the app. "panel": a compact tab of the side panel, designed for a narrow column. Use the kind the user asked for; it changes how much room the layout has.',
-          ),
         usesAi: z
           .boolean()
           .optional()
@@ -160,14 +161,14 @@ export function createFragmentTools(sessionId: string) {
             'Small versions of this screen for the board beside the chat. Only when the person asked for widgets: the same page renders each one when loaded with ?widget=<id>&size=<size>.',
           ),
       }),
-      execute: async ({ name, html, icon, kind, usesAi, usesNotify, usesMicrophone, widgets }) => {
+      execute: async ({ name, html, icon, usesAi, usesNotify, usesMicrophone, widgets }) => {
         try {
           const requests = [
             ...(usesAi ? (['ai'] as const) : []),
             ...(usesNotify ? (['notify'] as const) : []),
             ...(usesMicrophone ? (['microphone'] as const) : []),
           ]
-          const manifest = await createFragment({ name, html, icon, kind, requests: [...requests], widgets, sessionId })
+          const manifest = await createFragment({ name, html, icon, requests: [...requests], widgets, sessionId })
           return {
             fragmentId: manifest.id,
             message: await opened(manifest.id, manifest.revision, `Fragment "${manifest.name}" created`),
@@ -441,7 +442,7 @@ export function createFragmentTools(sessionId: string) {
     }),
 
     fragment_list: tool({
-      description: 'Lists the fragments that exist (id, name, kind, last change, what each asked for and what the user allowed), newest first.',
+      description: 'Lists the fragments that exist (id, name, last change, what each asked for and what the user allowed), newest first.',
       inputSchema: z.object({}),
       execute: async () => {
         const all = await listFragments()
@@ -449,7 +450,6 @@ export function createFragmentTools(sessionId: string) {
         return all.map((m) => ({
           fragmentId: m.id,
           name: m.name,
-          kind: m.kind,
           updatedAt: new Date(m.updatedAt).toISOString(),
           asked: m.requests,
           allowedByUser: m.grants,

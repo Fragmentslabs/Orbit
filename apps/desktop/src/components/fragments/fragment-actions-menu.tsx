@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, MoreHorizontal, Share, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
+import { Check, MoreHorizontal, Share, PanelLeft, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   DropdownMenu,
@@ -49,8 +49,12 @@ export function FragmentActionsMenu({
         <DropdownMenuContent align={align} className="min-w-56">
           {extraItems}
           {extraItems && <DropdownMenuSeparator />}
+          <DropdownMenuItem onClick={() => update({ pinned: { list: !fragment.pinned.list } })}>
+            <Pin className="size-3.5" />
+            {t(fragment.pinned.list ? "fragments.unpinList" : "fragments.pinList")}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => update({ pinned: { sidebar: !fragment.pinned.sidebar } })}>
-            {fragment.pinned.sidebar ? <Check className="size-3.5" /> : <Pin className="size-3.5" />}
+            {fragment.pinned.sidebar ? <Check className="size-3.5" /> : <PanelLeft className="size-3.5" />}
             {t("fragments.pinSidebar")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => update({ pinned: { panel: !fragment.pinned.panel } })}>

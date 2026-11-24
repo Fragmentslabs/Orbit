@@ -1,6 +1,5 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { FRAGMENT_KINDS, type FragmentKind } from '@orbit/shared/fragments'
 import { scaffoldFiles } from './templates'
 
 export interface ScaffoldOptions {
@@ -8,7 +7,6 @@ export interface ScaffoldOptions {
   dir: string
   /** Display name; defaults to the folder's name. */
   name?: string
-  kind?: FragmentKind
 }
 
 function slugOf(text: string): string {
@@ -22,8 +20,6 @@ function titleOf(slug: string): string {
 /** Writes a small working fragment (manifest, entry page, script, styles) and returns the files it created. */
 export async function scaffoldFragment(options: ScaffoldOptions): Promise<string[]> {
   const dir = path.resolve(options.dir)
-  const kind = options.kind ?? 'screen'
-  if (!FRAGMENT_KINDS.includes(kind)) throw new Error(`kind must be one of: ${FRAGMENT_KINDS.join(', ')}`)
 
   const existing = await fsp.readdir(dir).catch(() => null)
   if (existing && existing.length > 0) throw new Error(`${dir} is not empty`)
@@ -32,7 +28,7 @@ export async function scaffoldFragment(options: ScaffoldOptions): Promise<string
   const name = (options.name ?? titleOf(slug)).trim()
   if (!name) throw new Error('name cannot be empty')
 
-  const files = scaffoldFiles({ name, kind, slug })
+  const files = scaffoldFiles({ name, slug })
   for (const [rel, content] of Object.entries(files)) {
     const target = path.join(dir, rel)
     await fsp.mkdir(path.dirname(target), { recursive: true })

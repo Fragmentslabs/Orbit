@@ -16,7 +16,7 @@ import { useFragmentImport } from "./share/use-fragment-import"
 
 /**
  * The page's first level: a grid of cards, each with a LIVE thumbnail of the fragment.
- * Fragments the person pinned to the sidebar come first (they are the ones used every
+ * Fragments the person pinned (Pin, in the card's menu) come first (they are the ones used every
  * day); the rest follow. Searchable, filterable by origin, with the "new" action — which
  * opens a normal chat with the fragment agent, the one place a fragment is created.
  *
@@ -73,8 +73,8 @@ export function FragmentGallery() {
         (source === "all" || fragmentSource(fragment, origins[fragment.id]) === source),
     )
     return {
-      pinned: visible.filter((f) => f.pinned.sidebar || f.pinned.panel),
-      others: visible.filter((f) => !f.pinned.sidebar && !f.pinned.panel),
+      pinned: visible.filter((f) => f.pinned.list),
+      others: visible.filter((f) => !f.pinned.list),
     }
   }, [items, origins, query, source])
 

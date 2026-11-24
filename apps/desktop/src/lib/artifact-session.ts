@@ -1,6 +1,5 @@
 import type { ArtifactRef } from "@shared/artifacts"
 import type { SessionInfo } from "@shared/chat"
-import type { FragmentKind } from "@shared/fragments"
 
 /**
  * The fields of a chat made INSIDE an artifact (from its card). The one place that knows how
@@ -12,11 +11,9 @@ import type { FragmentKind } from "@shared/fragments"
 export function embeddedChatFields(
   kind: ArtifactRef["kind"],
   ref?: ArtifactRef,
-  /** Fragment only: where it lives (screen / panel / widget), a hint for the agent. */
-  fragmentKind: FragmentKind = "screen",
 ): Partial<SessionInfo> {
   const artifact = { kind, ...(ref ? { id: ref.id } : {}) }
-  return kind === "fragment" ? { fragment: { kind: fragmentKind }, artifact } : { profile: kind, artifact }
+  return kind === "fragment" ? { fragment: true as const, artifact } : { profile: kind, artifact }
 }
 
 /**

@@ -39,8 +39,6 @@ export function FragmentImportDialog({
                 <dd className="truncate">{preview.fileName}</dd>
                 <dt className="text-muted-foreground">{t("fragments.share.author")}</dt>
                 <dd>{preview.author ? t("fragments.share.authorClaim", { author: preview.author }) : t("fragments.share.noAuthor")}</dd>
-                <dt className="text-muted-foreground">{t("fragments.share.kind")}</dt>
-                <dd>{t(`fragments.kind.${preview.kind}.name`)}</dd>
                 <dt className="text-muted-foreground">{t("fragments.share.hash")}</dt>
                 <dd className="truncate font-mono">{preview.sha256.slice(0, 16)}…</dd>
               </dl>

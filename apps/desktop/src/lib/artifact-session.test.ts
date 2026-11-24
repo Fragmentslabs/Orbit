@@ -3,8 +3,8 @@ import { embeddedChatFields, isOwnArtifact } from "./artifact-session"
 
 describe("embeddedChatFields", () => {
   it("marks a fragment chat with its own field and the artifact", () => {
-    expect(embeddedChatFields("fragment", { kind: "fragment", id: "frag-1" }, "panel")).toEqual({
-      fragment: { kind: "panel" },
+    expect(embeddedChatFields("fragment", { kind: "fragment", id: "frag-1" })).toEqual({
+      fragment: true,
       artifact: { kind: "fragment", id: "frag-1" },
     })
   })

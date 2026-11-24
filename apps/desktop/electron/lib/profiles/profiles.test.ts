@@ -55,7 +55,7 @@ function input(sessionId: string, profile?: 'motion' | 'design'): SendMessageInp
 
 describe('specialistProfileOf', () => {
   it('reads both the fragment field and the profile field', () => {
-    expect(specialistProfileOf(session('a', { fragment: { kind: 'screen' } }))).toBe('fragment')
+    expect(specialistProfileOf(session('a', { fragment: true }))).toBe('fragment')
     expect(specialistProfileOf(session('b', { profile: 'motion' }))).toBe('motion')
     expect(specialistProfileOf(session('d', { profile: 'fragment' }))).toBe('fragment')
     expect(specialistProfileOf(session('c'))).toBeNull()

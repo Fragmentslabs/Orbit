@@ -1,4 +1,3 @@
-import { FRAGMENT_KINDS, type FragmentKind } from '@orbit/shared/fragments'
 import { FRAGMENT_SDK_VERSION, type FragmentIssue } from '@orbit/shared/fragment-rules'
 import cliPackage from '../package.json'
 import { scaffoldFragment } from './scaffold'
@@ -12,7 +11,7 @@ export interface CliIo {
 const USAGE = `orbit-fragments ${cliPackage.version} (fragment sdk ${FRAGMENT_SDK_VERSION})
 
 Usage:
-  orbit-fragments init <dir> [--name <name>] [--kind ${FRAGMENT_KINDS.join('|')}]
+  orbit-fragments init <dir> [--name <name>]
       Create a small working fragment in <dir> (new or empty).
   orbit-fragments validate [dir] [--json]
       Check manifest.json and src/ against the rules Orbit enforces. Exit code 1 on errors.
@@ -76,15 +75,13 @@ export async function run(args: string[], io: CliIo): Promise<number> {
     if (command === 'init') {
       const dir = positional[0]
       if (!dir) throw new Error('init needs a folder: orbit-fragments init <dir>')
-      const kind = flags.get('kind')
-      if (kind !== undefined && !FRAGMENT_KINDS.includes(kind as FragmentKind)) {
-        throw new Error(`--kind must be one of: ${FRAGMENT_KINDS.join(', ')}`)
+      if (flags.has('kind')) {
+        throw new Error('--kind no longer exists: a fragment is one responsive page that opens as a screen, in the side panel and on the phone')
       }
       const name = flags.get('name')
       const created = await scaffoldFragment({
         dir,
         name: typeof name === 'string' ? name : undefined,
-        kind: kind as FragmentKind | undefined,
       })
       io.out(`Created ${dir}:\n${created.map((f) => `  ${f}`).join('\n')}\n\nNext: orbit-fragments validate ${dir}`)
       return 0

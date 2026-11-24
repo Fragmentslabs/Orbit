@@ -31,7 +31,8 @@ export function fragmentSystemPrompt(language?: string): string {
     '- When a real choice changes the result (layout, data source, design system, where the numbers come from) ask it with the question tool: at most TWO, one at a time, with options the person can click. Ask while you build — the first version does not wait for the answer.',
     '- Pick a fitting lucide icon for the fragment (the `icon` field of fragment_create), in kebab-case, e.g. "wallet", "chart-bar", "timer".',
     '- LOOK: every color comes from the app variables (var(--background), var(--foreground), var(--card), var(--muted-foreground), var(--border), var(--primary)) — never a fixed black or white, which disappears in the dark theme. Icons are inline SVG in the lucide style; never emoji. The full rules are in the LOOK section of the tools. Always read them before writing HTML.',
-    '- Honor the kind the person asked for: "screen" (a full page) or "panel" (a compact column that sits next to a chat).',
+    '- RESPONSIVE, always: the same fragment opens on the desktop and on the person\'s phone (about 390px wide, touch). Build it fluid from the first version — viewport meta tag, flex/grid that wraps and stacks below ~600px, no fixed page widths, no sideways scroll, touch targets of at least 44px, inputs at 16px or more, nothing that works only on hover. The details are in the RESPONSIVE section of the tools.',
+    '- The fragment opens as a page of the app and, when the person prefers, in a tab of the side panel next to the chat: design it as a page that also holds up in a narrow column.',
     '- When the person wants small versions of the screen on the board beside the chat, declare them with the `widgets` field: the SAME page renders each one when loaded with ?widget=<id>&size=<size>, filling the box exactly (1x1 = 72x72, 2x1 = 152x72, 1x2 = 72x152, 2x2 = 152x152; no scrollbars, no fixed widths, text that fits). A widget is a glance: a 1x1 is one value and one short label — nothing else. Declare only the sizes it reads well at.',
     '- The page has no network of its own: for the internet declare hosts with fragment_set_http and use orbit.http; for the person\'s connected MCP tools declare them with fragment_set_mcp and use orbit.mcp. Both only ask; the person allows.',
     '- You only ever touch fragments. You have no other tools, and that is on purpose.',
@@ -41,24 +42,23 @@ export function fragmentSystemPrompt(language?: string): string {
 }
 
 /**
- * What this turn needs to know: the kind asked for, or — when the fragment already
+ * What this turn needs to know: that none exists yet, or — when the fragment already
  * exists — which one it is, what files it has and what it requested. Per turn, in the
  * user message, so a fresh chat editing an old fragment starts oriented.
  */
 export async function fragmentTurnBlock(sessionId: string): Promise<string> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId)).catch(() => null)
-  const kind = session?.fragment?.kind
   // A chat made for an existing fragment (from its card) names it; the chat a fragment was
   // born in is found by the link the fragment keeps to it.
   const bound = session?.artifact?.id
   const own = (await listFragments()).find((f) => (bound ? f.id === bound : f.sessionId === sessionId))
   if (!own) {
-    return `<fragment-context>\nNo fragment exists in this conversation yet. Create it with fragment_create${kind ? ` (kind: "${kind}")` : ''}.\n</fragment-context>`
+    return `<fragment-context>\nNo fragment exists in this conversation yet. Create it with fragment_create.\n</fragment-context>`
   }
   const files = await listFragmentFiles(own.id)
   return [
     '<fragment-context>',
-    `Fragment: "${own.name}" — id ${own.id} — kind ${own.kind} — revision ${own.revision}`,
+    `Fragment: "${own.name}" — id ${own.id} — revision ${own.revision}`,
     `Files: ${files.join(', ') || '(none)'}`,
     `Asked for: ${own.requests.join(', ') || 'nothing'}; allowed by the person: ${own.grants.join(', ') || 'nothing'}`,
     own.widgets.length

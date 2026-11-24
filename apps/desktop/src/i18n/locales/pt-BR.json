@@ -3530,23 +3530,13 @@
     "edit": "Editar",
     "more": "Mais opções",
     "rename": "Renomear",
+    "pinList": "Fixar",
+    "unpinList": "Desafixar",
     "pinSidebar": "Fixar na barra lateral",
     "unpinSidebar": "Desafixar da barra lateral",
     "pinPanel": "Mostrar na lista Abrir do painel",
     "openInPanel": "Abrir no painel lateral",
     "modelFollowChat": "Modelo do chat",
-    "kind": {
-      "screen": {
-        "name": "Tela",
-        "description": "Uma página inteira do app. Fixe na barra lateral.",
-        "indef": "uma tela"
-      },
-      "panel": {
-        "name": "Painel lateral",
-        "description": "Uma aba compacta para o painel lateral, ao lado do chat.",
-        "indef": "um painel lateral"
-      }
-    },
     "sectionPinned": "Fixados",
     "sectionOthers": "Outros",
     "activity": "O que o Orbit está fazendo",
@@ -3719,7 +3709,6 @@
       "author": "Autor",
       "authorClaim": "{{author}} (informado pelo arquivo, não verificado)",
       "noAuthor": "Não informado",
-      "kind": "Tipo",
       "hash": "SHA-256",
       "asks": "Ele pede para usar",
       "asksNothing": "Nada: não pede nenhuma capacidade.",
@@ -3882,6 +3871,9 @@
       "cut": "Recortar",
       "paste": "Colar",
       "pasteHere": "Colar aqui",
+      "referenceElement": "Referenciar no chat",
+      "referenceFrame": "Referenciar artboard no chat",
+      "referenceCanvas": "Referenciar canvas no chat",
       "copyFrame": "Copiar frame",
       "delete": "Excluir",
       "group": "Agrupar",

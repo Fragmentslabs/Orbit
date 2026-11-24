@@ -1,6 +1,5 @@
 import { useCallback, useEffect } from "react"
 import { artifactKey, type ArtifactRef } from "@shared/artifacts"
-import type { FragmentKind } from "@shared/fragments"
 import { artifactChatsApi } from "@/src/lib/ipc"
 import { embeddedChatFields } from "@/src/lib/artifact-session"
 import { chatsOf, useArtifactChatsStore } from "@/src/stores/artifact-chats-store"
@@ -17,8 +16,8 @@ import { useSessionStore } from "@/src/stores/session-store"
  *  - `createEmbedded`: a new chat made inside the artifact (out of the sidebar).
  *  - `ensure`: the shown chat, making an embedded one when the artifact has none.
  */
-export function useArtifactChat(ref: ArtifactRef | null, options: { fallback?: string; fragmentKind?: FragmentKind } = {}) {
-  const { fallback, fragmentKind } = options
+export function useArtifactChat(ref: ArtifactRef | null, options: { fallback?: string } = {}) {
+  const { fallback } = options
   const ensureLoaded = useArtifactChatsStore((s) => s.ensure)
   const registry = useArtifactChatsStore((s) => chatsOf(s.byKey, ref))
   const sessions = useSessionStore((s) => s.sessions)
@@ -46,10 +45,10 @@ export function useArtifactChat(ref: ArtifactRef | null, options: { fallback?: s
     if (!ref) return undefined
     const session = await useSessionStore
       .getState()
-      .createSession("chat", { setActive: false, ...embeddedChatFields(ref.kind, ref, fragmentKind) })
+      .createSession("chat", { setActive: false, ...embeddedChatFields(ref.kind, ref) })
     await artifactChatsApi.associate(ref, session.id, true)
     return session.id
-  }, [ref, fragmentKind])
+  }, [ref])
 
   const ensure = useCallback(async () => sessionId ?? createEmbedded(), [sessionId, createEmbedded])
 

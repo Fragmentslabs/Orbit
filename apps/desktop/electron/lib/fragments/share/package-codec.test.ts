@@ -9,7 +9,6 @@ const html = strToU8('<h1>hi</h1>')
 
 const input = (extra: Partial<PackInput> = {}): PackInput => ({
   name: 'Budget',
-  kind: 'screen',
   icon: 'wallet',
   requests: ['ai'],
   files: [{ path: 'index.html', data: html }],
@@ -37,7 +36,7 @@ describe('round trip', () => {
     const result = unpackFragment(bytes)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.manifest).toMatchObject({ name: 'Budget', kind: 'screen', icon: 'wallet', requests: ['ai'], author: 'Ana', version: FRAGMENT_PACKAGE_VERSION })
+    expect(result.manifest).toMatchObject({ name: 'Budget', icon: 'wallet', requests: ['ai'], author: 'Ana', version: FRAGMENT_PACKAGE_VERSION })
     expect(result.files.map((f) => f.path)).toEqual(['css/app.css', 'index.html'])
     expect(Buffer.from(result.files[1].data).toString()).toBe('<h1>hi</h1>')
     expect(result.sha256).toMatch(/^[0-9a-f]{64}$/)
@@ -167,7 +166,9 @@ describe('manifest validation', () => {
     expect(code(zipSync({ 'manifest.json': strToU8('[]'), ...entries }))).toBe('bad_manifest')
     expect(code(forge(entries, { format: 'zip' }))).toBe('bad_manifest')
     expect(code(forge(entries, { name: '' }))).toBe('bad_manifest')
-    expect(code(forge(entries, { kind: 'desktop' }))).toBe('bad_manifest')
+    // An old package carries `kind`, and a new one does not: neither matters.
+    expect(code(forge(entries, { kind: 'desktop' }))).toBe('ok')
+    expect(code(forge(entries, { kind: undefined }))).toBe('ok')
     expect(code(forge(entries, { version: 'one' }))).toBe('bad_manifest')
     expect(code(forge(entries, { version: 0 }))).toBe('bad_manifest')
     expect(code(forge(entries, { files: 'all' }))).toBe('bad_manifest')

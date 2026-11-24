@@ -3530,23 +3530,13 @@
     "edit": "Edit",
     "more": "More options",
     "rename": "Rename",
+    "pinList": "Pin",
+    "unpinList": "Unpin",
     "pinSidebar": "Pin to the sidebar",
     "unpinSidebar": "Unpin from the sidebar",
     "pinPanel": "Show in the panel's Open list",
     "openInPanel": "Open in the side panel",
     "modelFollowChat": "Model of the chat",
-    "kind": {
-      "screen": {
-        "name": "Screen",
-        "description": "A full page of the app. Pin it to the sidebar.",
-        "indef": "a screen"
-      },
-      "panel": {
-        "name": "Side panel",
-        "description": "A compact tab for the side panel, next to the chat.",
-        "indef": "a side panel"
-      }
-    },
     "sectionPinned": "Pinned",
     "sectionOthers": "Others",
     "activity": "What Orbit is doing",
@@ -3719,7 +3709,6 @@
       "author": "Author",
       "authorClaim": "{{author}} (stated by the file, not verified)",
       "noAuthor": "Not stated",
-      "kind": "Kind",
       "hash": "SHA-256",
       "asks": "It asks to use",
       "asksNothing": "Nothing: it asks for no capability.",
@@ -3882,6 +3871,9 @@
       "cut": "Cut",
       "paste": "Paste",
       "pasteHere": "Paste here",
+      "referenceElement": "Reference in chat",
+      "referenceFrame": "Reference artboard in chat",
+      "referenceCanvas": "Reference canvas in chat",
       "copyFrame": "Copy frame",
       "delete": "Delete",
       "group": "Group",

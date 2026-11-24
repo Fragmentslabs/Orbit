@@ -153,7 +153,7 @@ describe('what a chat made (the way back)', () => {
 describe('isEmbeddedArtifactChat', () => {
   it('is a chat made inside an artifact with no parent chat', () => {
     expect(isEmbeddedArtifactChat({ artifact: { kind: 'motion', id: 'mv_1' } })).toBe(true)
-    expect(isEmbeddedArtifactChat({ fragment: { kind: 'screen' } })).toBe(true)
+    expect(isEmbeddedArtifactChat({ fragment: true })).toBe(true)
   })
 
   it('is false for a plain chat, a selector-made specialist chat, or an artifact subchat', () => {

@@ -8,7 +8,7 @@ import {
   type FragmentImportErrorCode,
   type FragmentPackageManifest,
 } from '@shared/fragment-package'
-import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FRAGMENT_KINDS } from '@shared/fragments'
+import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, } from '@shared/fragments'
 
 /**
  * The `.orbitfrag` codec: pure bytes in, bytes out, no disk and no Electron, so it can be
@@ -34,7 +34,6 @@ export interface PackFile {
 
 export interface PackInput {
   name: string
-  kind: FragmentPackageManifest['kind']
   icon: string
   requests: FragmentPackageManifest['requests']
   author?: string
@@ -88,7 +87,6 @@ export function packFragment(input: PackInput): Uint8Array {
     format: FRAGMENT_PACKAGE_FORMAT,
     version: FRAGMENT_PACKAGE_VERSION,
     name: cleanText(input.name, LIMITS.name),
-    kind: input.kind,
     icon: input.icon,
     requests: FRAGMENT_CAPABILITIES.filter((c) => input.requests.includes(c)),
     ...(input.author ? { author: cleanText(input.author, LIMITS.author) } : {}),
@@ -116,8 +114,8 @@ function parseManifest(bytes: Uint8Array): { ok: true; manifest: FragmentPackage
   if (m.version > FRAGMENT_PACKAGE_VERSION) return fail('unsupported_version')
 
   const name = cleanText(m.name, LIMITS.name)
-  const kind = FRAGMENT_KINDS.find((k) => k === m.kind)
-  if (!name || !kind || !Array.isArray(m.files) || m.files.length === 0) return fail('bad_manifest')
+  // Packages from before the kind was dropped carry `kind`: it is read past, not required.
+  if (!name || !Array.isArray(m.files) || m.files.length === 0) return fail('bad_manifest')
   if (m.files.length > LIMITS.files) return fail('too_many_files')
 
   const files: FragmentPackageManifest['files'] = []
@@ -142,7 +140,6 @@ function parseManifest(bytes: Uint8Array): { ok: true; manifest: FragmentPackage
       format: FRAGMENT_PACKAGE_FORMAT,
       version: m.version,
       name,
-      kind,
       icon,
       requests,
       ...(author ? { author } : {}),

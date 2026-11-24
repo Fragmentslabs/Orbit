@@ -7,13 +7,11 @@ import {
   FRAGMENT_CAPABILITIES,
   FRAGMENT_DEFAULT_ICON,
   FRAGMENT_ICON_PATTERN,
-  FRAGMENT_KINDS,
   FRAGMENT_MAX_WIDGETS,
   FRAGMENT_WIDGET_ID_PATTERN,
   FRAGMENT_WIDGET_SIZES,
   isFragmentId,
   type FragmentCapability,
-  type FragmentKind,
   type FragmentMethod,
   type FragmentModel,
   type FragmentPins,
@@ -145,18 +143,19 @@ export function sanitizeFragmentWidgets(value: unknown): FragmentWidget[] {
   return out
 }
 
-/** A new fragment is pinned where its kind lives; an old manifest without pins gets the same. */
-export function defaultFragmentPins(kind: FragmentKind): FragmentPins {
-  return { sidebar: kind === "screen", panel: kind === "panel" }
+/** A new fragment gets its own entry in the sidebar; an old manifest without pins gets the same. */
+export function defaultFragmentPins(): FragmentPins {
+  return { sidebar: true, panel: false, list: false }
 }
 
-export function sanitizeFragmentPins(value: unknown, kind: FragmentKind): FragmentPins {
-  const base = defaultFragmentPins(kind)
+export function sanitizeFragmentPins(value: unknown): FragmentPins {
+  const base = defaultFragmentPins()
   if (!value || typeof value !== "object") return base
   const raw = value as Partial<FragmentPins>
   return {
     sidebar: typeof raw.sidebar === "boolean" ? raw.sidebar : base.sidebar,
     panel: typeof raw.panel === "boolean" ? raw.panel : base.panel,
+    list: typeof raw.list === "boolean" ? raw.list : base.list,
   }
 }
 
@@ -195,6 +194,7 @@ const MANIFEST_KEYS = new Set([
   "id",
   "name",
   "icon",
+  // `kind` (screen | panel) existed once: a manifest that still carries it is accepted and ignored.
   "kind",
   "pinned",
   "model",
@@ -244,16 +244,12 @@ export function validateFragmentManifest(raw: unknown): FragmentIssue[] {
     }
   }
 
-  if (m.kind !== undefined && !FRAGMENT_KINDS.includes(m.kind as FragmentKind)) {
-    error("manifest.kind", `must be one of: ${FRAGMENT_KINDS.join(", ")}`)
-  }
-
   if (m.pinned !== undefined) {
     if (!m.pinned || typeof m.pinned !== "object" || Array.isArray(m.pinned)) {
-      error("manifest.pinned", "must be an object with boolean sidebar and panel")
+      error("manifest.pinned", "must be an object with boolean sidebar, panel and list")
     } else {
       for (const [key, value] of Object.entries(m.pinned)) {
-        if (key !== "sidebar" && key !== "panel") warning(`manifest.pinned.${key}`, "unknown pin, the app ignores it")
+        if (key !== "sidebar" && key !== "panel" && key !== "list") warning(`manifest.pinned.${key}`, "unknown pin, the app ignores it")
         else if (typeof value !== "boolean") error(`manifest.pinned.${key}`, "must be true or false")
       }
     }

@@ -163,16 +163,6 @@ export function mcpIsSubset(next: FragmentMcpAccess[], prev: FragmentMcpAccess[]
 }
 
 /**
- * Where a fragment is meant to live:
- * - `screen`: a page of the app (the Fragments page, pinnable in the sidebar);
- * - `panel`: a tab of the side panel (pinnable in its "Open" hub).
- * It is the DEFAULT placement; the pins below decide where it is actually reachable.
- */
-export type FragmentKind = "screen" | "panel"
-
-export const FRAGMENT_KINDS: readonly FragmentKind[] = ["screen", "panel"]
-
-/**
  * The sizes a widget may occupy on the board beside the chat: a grid of 2 columns by
  * 5 rows. `1x1` is one cell, `2x1` two columns, `1x2` two rows, `2x2` both.
  */
@@ -239,11 +229,16 @@ export interface FragmentReasoning {
 export const FRAGMENT_ICON_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 export const FRAGMENT_DEFAULT_ICON = "app-window"
 
+/** The page that hosts a fragment in the phone's web view: a reserved file name under its signed address. */
+export const FRAGMENT_PHONE_HOST_FILE = "__orbit-host.html"
+
 export interface FragmentPins {
-  /** Listed as its own entry in the sidebar. */
+  /** Listed as its own entry in the sidebar (the button the person turns on). */
   sidebar: boolean
-  /** Listed as its own card in the side panel's "Open" hub. */
+  /** Listed as its own card in the side panel's "Open" hub: opening in the side panel is one more way to use it. */
   panel: boolean
+  /** Fixed at the top of the list (the gallery, and the phone's list). Independent of the two above and with no mark of its own. */
+  list: boolean
 }
 
 /** What the UI (never the agent) may change about a fragment. */
@@ -264,7 +259,6 @@ export interface FragmentManifest {
   name: string
   /** Lucide icon name (kebab-case), chosen by the agent and changeable by the person. */
   icon: string
-  kind: FragmentKind
   pinned: FragmentPins
   /** Model for `orbit.ai`; absent = the model of the chat the person last used. */
   model?: FragmentModel

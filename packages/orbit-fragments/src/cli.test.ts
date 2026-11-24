@@ -38,7 +38,8 @@ describe('init', () => {
   it('scaffolds a fragment that validates', async () => {
     const dir = await scaffold('my-notes')
     const manifest = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'))
-    expect(manifest).toMatchObject({ name: 'My notes', kind: 'screen', sdk: 1, requests: [] })
+    expect(manifest).toMatchObject({ name: 'My notes', sdk: 1, requests: [] })
+    expect(manifest.kind).toBeUndefined()
     expect(await fsp.readFile(path.join(dir, 'src/app.js'), 'utf8')).toContain('orbit.store')
 
     const result = await cli('validate', dir)
@@ -47,22 +48,22 @@ describe('init', () => {
     expect(result.out).not.toContain('warning')
   })
 
-  it('takes a name and a kind', async () => {
+  it('takes a name', async () => {
     const dir = path.join(tmp, 'w')
-    expect((await cli('init', dir, '--name', 'Quick <b>', '--kind=widget')).code).toBe(0)
-    expect(JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'))).toMatchObject({ name: 'Quick <b>', kind: 'widget' })
+    expect((await cli('init', dir, '--name', 'Quick <b>')).code).toBe(0)
+    expect(JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'))).toMatchObject({ name: 'Quick <b>' })
     expect(await fsp.readFile(path.join(dir, 'src/index.html'), 'utf8')).toContain('Quick &lt;b&gt;')
     expect((await cli('validate', dir)).code).toBe(0)
   })
 
-  it('refuses a folder that already has files and a kind that does not exist', async () => {
+  it('refuses a folder that already has files and the old --kind flag', async () => {
     const dir = await scaffold()
     const again = await cli('init', dir)
     expect(again.code).toBe(1)
     expect(again.err).toContain('is not empty')
-    const kind = await cli('init', path.join(tmp, 'x'), '--kind', 'banner')
+    const kind = await cli('init', path.join(tmp, 'x'), '--kind', 'panel')
     expect(kind.code).toBe(1)
-    expect(kind.err).toContain('--kind must be one of: screen, panel, widget')
+    expect(kind.err).toContain('--kind no longer exists')
   })
 })
 
@@ -88,7 +89,6 @@ describe('validate', () => {
       m.name = ''
       m.id = 'Bad Id'
       m.icon = 'Not An Icon'
-      m.kind = 'banner'
       m.sdk = 2
       m.requests = ['ai', 'network']
       m.grants = ['ai']
@@ -99,7 +99,6 @@ describe('validate', () => {
       'manifest.name: is required',
       'manifest.id: must be lowercase',
       'manifest.icon: must be a lucide icon name',
-      'manifest.kind: must be one of: screen, panel, widget',
       'manifest.sdk: is 2 but this tooling supports sdk 1',
       'manifest.requests: unknown capability "network"',
       'manifest.grants: must be empty or absent',

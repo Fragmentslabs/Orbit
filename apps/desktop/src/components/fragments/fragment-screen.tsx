@@ -41,7 +41,7 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
   // needs no briefing, because each turn of a fragment chat is told which fragment it is.
   // The person is looking at the fragment: what its chats did counts as seen.
   useMarkArtifactSeen({ kind: "fragment", id: fragmentId }, true)
-  const chat = useArtifactChat({ kind: "fragment", id: fragmentId }, { fallback: manifest?.sessionId, fragmentKind: manifest?.kind })
+  const chat = useArtifactChat({ kind: "fragment", id: fragmentId }, { fallback: manifest?.sessionId })
   const sessionId = chat.sessionId
 
   // Edit mode needs a chat: make an embedded one the first time it is turned on with none.

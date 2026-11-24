@@ -67,7 +67,7 @@ describe('import', () => {
     const manifest = (await store.getFragment(done.fragmentId))!
     expect(manifest.grants).toEqual([])
     expect(manifest.requests).toEqual(['ai'])
-    expect(manifest.pinned).toEqual({ sidebar: false, panel: false })
+    expect(manifest.pinned).toEqual({ sidebar: false, panel: false, list: false })
     expect(await store.storeKeys(done.fragmentId)).toEqual([])
     expect(await store.readFragmentFile(done.fragmentId, 'app.js')).toBe('console.log(1)')
 
@@ -102,7 +102,7 @@ describe('import', () => {
   it('the author is a claim: recorded as such, and the owner stays empty for a file', async () => {
     const { packFragment } = await import('./package-codec')
     const bytes = packFragment({
-      name: 'Claimed', kind: 'screen', icon: 'app-window', requests: [], author: 'github.com/fracta',
+      name: 'Claimed', icon: 'app-window', requests: [], author: 'github.com/fracta',
       files: [{ path: 'index.html', data: new TextEncoder().encode('<p>x</p>') }],
     })
     const preview = share.previewFragmentImport('claimed.orbitfrag', bytes)

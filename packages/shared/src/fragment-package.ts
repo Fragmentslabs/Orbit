@@ -1,4 +1,4 @@
-import type { FragmentCapability, FragmentKind } from "./fragments"
+import type { FragmentCapability } from "./fragments"
 
 /**
  * The `.orbitfrag` file: a zip with `manifest.json` and the fragment's code under `src/`.
@@ -33,7 +33,6 @@ export interface FragmentPackageManifest {
   format: typeof FRAGMENT_PACKAGE_FORMAT
   version: number
   name: string
-  kind: FragmentKind
   icon: string
   /** What the fragment asks for. Importing grants nothing. */
   requests: FragmentCapability[]
@@ -67,7 +66,6 @@ export interface FragmentImportPreview {
   sha256: string
   archiveBytes: number
   name: string
-  kind: FragmentKind
   icon: string
   requests: FragmentCapability[]
   author?: string

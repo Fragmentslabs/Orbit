@@ -530,12 +530,12 @@ describe('withSpecialistOffer', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
-  it('passes the fragment kind the agent asked for into the new subchat', async () => {
+  it('opens a fragment chat without any kind: there is no kind to pass on', async () => {
     mocks.dispatchAsk.mockResolvedValue('new')
     const { tools } = make()
     const wrapped = withSpecialistOffer(tools, input({ sessionId: 'offer-kind' }), win)
     await call(wrapped, 'fragment_create', { name: 'clock', kind: 'panel' })
-    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'fragment', fragmentKind: 'panel' }))
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith({ parentId: expect.any(String), title: expect.any(String), body: expect.any(String), profile: 'fragment' })
   })
 
   it('on "here" runs the original tool and does not ask again in that conversation', async () => {

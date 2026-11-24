@@ -1,13 +1,11 @@
 import apiPackage from '../../orbit-fragments-api/package.json'
 import { FRAGMENT_SDK_VERSION } from '@orbit/shared/fragment-rules'
-import type { FragmentKind } from '@orbit/shared/fragments'
 
 /** The files `orbit-fragments init` writes, relative to the new fragment's folder. */
-export function scaffoldFiles(options: { name: string; kind: FragmentKind; slug: string }): Record<string, string> {
+export function scaffoldFiles(options: { name: string; slug: string }): Record<string, string> {
   const manifest = {
     name: options.name,
     icon: 'sparkles',
-    kind: options.kind,
     sdk: FRAGMENT_SDK_VERSION,
     requests: [],
   }

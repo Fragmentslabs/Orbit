@@ -5,7 +5,6 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type {
   FragmentCapability,
-  FragmentKind,
   FragmentMcpAccess,
   FragmentLogEntry,
   FragmentManifest,
@@ -16,7 +15,6 @@ import type {
 } from '@shared/fragments'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import {
-  FRAGMENT_KINDS,
   hostsAreSubset,
   isFragmentId,
   mcpIsSubset,
@@ -123,13 +121,12 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
   try {
     const parsed = JSON.parse(await fsp.readFile(manifestFile(id), 'utf8')) as Partial<FragmentManifest>
     if (!parsed || parsed.id !== id || typeof parsed.name !== 'string') return null
-    const kind = FRAGMENT_KINDS.find((k) => k === parsed.kind) ?? 'screen'
+    // An old manifest may still carry `kind` (screen | panel): it is ignored, and gone on the next write.
     return {
       id,
       name: parsed.name,
       icon: sanitizeFragmentIcon(parsed.icon),
-      kind,
-      pinned: sanitizeFragmentPins(parsed.pinned, kind),
+      pinned: sanitizeFragmentPins(parsed.pinned),
       model: sanitizeFragmentModel(parsed.model),
       reasoning: sanitizeFragmentReasoning(parsed.reasoning),
       sdk: 1,
@@ -188,7 +185,6 @@ export async function listFragments(): Promise<FragmentManifest[]> {
 export async function createFragment(input: {
   name: string
   html: string
-  kind?: FragmentKind
   icon?: string
   requests?: FragmentCapability[]
   /** The widgets the fragment offers to the board (sanitized before it is written). */
@@ -198,7 +194,7 @@ export async function createFragment(input: {
   files?: Array<{ path: string; data: Buffer }>
   /** Writes the provenance record. Default: local. An import passes its third-party record. */
   recordProvenance?: (id: string) => Promise<void>
-  /** Pins the new fragment gets. Default: where its kind lives; an import passes none. */
+  /** Pins the new fragment gets. Default: its own entry in the sidebar; an import passes none. */
   pinned?: FragmentPins
 }): Promise<FragmentManifest> {
   if (Buffer.byteLength(input.html, 'utf8') > MAX_FILE_BYTES) {
@@ -206,13 +202,11 @@ export async function createFragment(input: {
   }
   const id = `frag-${slugify(input.name)}-${randomBytes(3).toString('hex')}`
   const now = Date.now()
-  const kind = FRAGMENT_KINDS.find((k) => k === input.kind) ?? 'screen'
   const manifest: FragmentManifest = {
     id,
     name: input.name.trim().slice(0, 80) || 'Fragment',
     icon: sanitizeFragmentIcon(input.icon),
-    kind,
-    pinned: input.pinned ?? defaultFragmentPins(kind),
+    pinned: input.pinned ?? defaultFragmentPins(),
     sdk: 1,
     requests: sanitizeFragmentCaps(input.requests),
     grants: [],
@@ -263,9 +257,9 @@ export async function updateFragmentMeta(id: string, patch: FragmentMetaPatch): 
     if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 80)
     if (typeof patch.icon === 'string') next.icon = sanitizeFragmentIcon(patch.icon)
     if (patch.pinned) {
-      // Only the pins the patch names: a pin it leaves out keeps its value, not its kind's default.
+      // Only the pins the patch names: a pin it leaves out keeps its value, not the default.
       const named = Object.fromEntries(Object.entries(patch.pinned).filter(([, v]) => typeof v === 'boolean'))
-      next.pinned = { ...manifest.pinned, ...sanitizeFragmentPins({ ...manifest.pinned, ...named }, manifest.kind) }
+      next.pinned = { ...manifest.pinned, ...sanitizeFragmentPins({ ...manifest.pinned, ...named }) }
     }
     if (patch.model === null) delete next.model
     else if (patch.model) next.model = sanitizeFragmentModel(patch.model) ?? manifest.model

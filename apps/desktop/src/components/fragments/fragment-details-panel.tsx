@@ -22,7 +22,7 @@ import {
 import { FragmentDataView } from "./details/fragment-data-view"
 import { FragmentHistoryView } from "./details/fragment-history-view"
 import { useFragmentDetails } from "./details/use-fragment-details"
-import { KIND_META } from "./kind-meta"
+import { FragmentIcon } from "./fragment-icon"
 
 /**
  * The details of the open fragment, floating over it on the right like the app's sidebar:
@@ -34,8 +34,6 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
   const { t } = useTranslation()
   const toggle = useFragmentsStore((s) => s.toggleDetails)
   const details = useFragmentDetails(manifest.id)
-  const kind = KIND_META[manifest.kind]
-  const KindIcon = kind.icon
   const locked = details ? isUntrusted(details.provenance) : false
   const granted = manifest.requests.filter((cap) => manifest.grants.includes(cap)).length
   const pending = granted < manifest.requests.length
@@ -48,9 +46,9 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
     >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-sidebar-border/60 px-3">
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
-          <KindIcon className="size-3.5" />
+          <FragmentIcon name={manifest.icon} className="size-3.5" />
         </span>
-        <h2 className="min-w-0 truncate text-sm font-medium">{t(kind.name)}</h2>
+        <h2 className="min-w-0 truncate text-sm font-medium">{manifest.name}</h2>
         <span className="shrink-0 rounded-full border border-sidebar-border px-1.5 py-px text-[10px] tabular-nums text-muted-foreground">
           {t("fragments.details.revisionShort", { revision: manifest.revision })}
         </span>
