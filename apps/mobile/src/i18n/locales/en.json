@@ -144,7 +144,8 @@
     "sessions": "Sessions",
     "theme": "Theme",
     "pipeline": "Pipelines",
-    "newChatInFolder": "New chat in this folder"
+    "newChatInFolder": "New chat in this folder",
+    "fragments": "Fragments"
   },
   "media": {
     "title": "Media",
@@ -2383,5 +2384,55 @@
     "noGit": "This folder has no git",
     "noGitHint": "Start a repository to track changes and commits here.",
     "gitInit": "Start repository"
+  },
+  "fragments": {
+    "title": "Fragments",
+    "subtitle": "Pages the agent builds with you",
+    "search": "Search fragments",
+    "emptyTitle": "No fragments yet",
+    "emptyHint": "Ask in a chat for a tracker, a dashboard or a small tool: the agent builds it and it shows up here.",
+    "noMatch": "No fragment found",
+    "ask": {
+      "ai": "This fragment wants to use your AI model.",
+      "models": "This fragment wants to let you pick the AI model inside its screen.",
+      "http": "This fragment wants to reach the internet: {{what}}.",
+      "mcp": "This fragment wants to use your connected MCP tools: {{what}}.",
+      "notify": "This fragment wants to send you notifications."
+    },
+    "askPrefill": "Create a fragment that ",
+    "updated": "Updated {{age}} ago",
+    "justNow": "Updated just now",
+    "reload": "Reload",
+    "more": "More options",
+    "edit": "Ask the agent for a change",
+    "notFound": "This fragment no longer exists.",
+    "pageError": "This fragment could not be opened.",
+    "loadFailed": "Could not load: {{error}}",
+    "open": "Open",
+    "card": {
+      "created": "Fragment created"
+    },
+    "askAllow": "Allow",
+    "notNow": "Not now",
+    "askUntrusted": "This fragment was imported and has not been reviewed. Review and allow it on the desktop.",
+    "permissions": "Permissions",
+    "permissionsEmpty": "It asked for no permissions",
+    "desktopOnly": "Only on the desktop",
+    "locked": "Imported and not reviewed: allow it on the desktop first.",
+    "cap": {
+      "ai": "Use your AI model",
+      "models": "Choose the model inside its screen",
+      "http": "Reach these internet hosts",
+      "mcp": "Use these connected MCP tools",
+      "notify": "Send notifications",
+      "microphone": "Record audio from the microphone"
+    },
+    "askNew": "Ask for a new fragment",
+    "holdHint": "Hold for more options",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "It is deleted on the desktop too: its files, its saved data and its notifications. This cannot be undone.",
+    "pin": "Pin",
+    "unpin": "Unpin"
   }
 }

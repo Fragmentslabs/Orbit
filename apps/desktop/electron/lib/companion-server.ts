@@ -42,6 +42,9 @@ import type {
   ReasoningPrefsChangeEvent,
   RotationChangeEvent,
   SourcesChangedEvent,
+  FragmentsChangedEvent,
+  FragmentsPermissionAskEvent,
+  FragmentPhoneEntry,
   WorkerConfigSnapshot,
   WorkerConfigChangeEvent,
   AppPreferences,
@@ -97,6 +100,13 @@ import {
   rewriteMessages as rewriteMessagesMedia,
 } from './companion-media'
 import { handleGitRequest } from './companion-git'
+import { handleFragmentCall } from './fragments/fragment-bridge'
+import { fragmentEvents, listFragments, updateFragmentMeta } from './fragments/fragment-store'
+import { deleteFragment } from './fragments/fragment-delete'
+import type { FragmentCapability } from '@shared/fragments'
+import { grantFragmentCapability } from './fragments/fragment-grant'
+import { isFragmentUntrusted } from './fragments/fragment-provenance'
+import { fragmentPhoneEntry } from './fragments/fragment-phone'
 import { createChatWorktree, listWorktrees, removeChatWorktree } from './worktrees/service'
 import { hasUnresolvedPiece, resolvePart, resolvePieceIds } from './companion-pieces'
 import { folderCreateRemote, folderGitInfo, folderInitStatus, type FolderDeps } from './companion-folders'
@@ -662,6 +672,78 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         } catch (err) {
           sendResponse(ws, requestId, false, undefined, (err as Error).message)
         }
+        break
+      }
+
+      case 'fragments:list': {
+        // Newest first, like the desktop's gallery. Every fragment carries the signed address of the
+        // page that hosts it in the web view; the token lives in the path, so the page's own files
+        // (style.css, app.js) inherit it.
+        const base = mediaBaseUrl(client)
+        const all = await listFragments()
+        const entries: FragmentPhoneEntry[] = await Promise.all(
+          all.map(async (m) =>
+            fragmentPhoneEntry(
+              m,
+              `${base}/api/file/fragment/${encodeURIComponent(m.id)}/${createAssetToken('fragment', m.id)}/`,
+              await isFragmentUntrusted(m.id),
+            ),
+          ),
+        )
+        sendResponse(ws, requestId, true, entries)
+        break
+      }
+
+      case 'fragments:call': {
+        // The same broker the desktop's tab uses: a call needs a known method, the capability declared by
+        // the fragment AND granted by the person on the desktop, and its budget. The phone only asks.
+        if (typeof req.fragmentId !== 'string' || typeof req.method !== 'string') {
+          sendResponse(ws, requestId, false, undefined, 'Invalid fragment call')
+          break
+        }
+        sendResponse(ws, requestId, true, await handleFragmentCall({ fragmentId: req.fragmentId, method: req.method, params: req.params }))
+        break
+      }
+
+      case 'fragments:grant': {
+        // The person's click, from the phone. The same function as the desktop tab's: an unreviewed import is
+        // refused, an unknown capability grants nothing, and turning "notify" off cancels what was scheduled.
+        if (typeof req.fragmentId !== 'string' || typeof req.capability !== 'string' || typeof req.on !== 'boolean') {
+          sendResponse(ws, requestId, false, undefined, 'Invalid grant request')
+          break
+        }
+        const next = await grantFragmentCapability(req.fragmentId, req.capability, req.on)
+        if (!next) {
+          sendResponse(ws, requestId, false, undefined, 'This permission could not be changed')
+          break
+        }
+        sendResponse(ws, requestId, true, { grants: next.grants })
+        break
+      }
+
+      case 'fragments:pin': {
+        if (typeof req.fragmentId !== 'string' || typeof req.pinned !== 'boolean') {
+          sendResponse(ws, requestId, false, undefined, 'Invalid pin request')
+          break
+        }
+        // Only the list pin: the sidebar and panel pins are the desktop's own.
+        const next = await updateFragmentMeta(req.fragmentId, { pinned: { list: req.pinned } })
+        if (!next) {
+          sendResponse(ws, requestId, false, undefined, 'Fragment not found')
+          break
+        }
+        sendResponse(ws, requestId, true, { pinned: next.pinned.list })
+        break
+      }
+
+      case 'fragments:remove': {
+        if (typeof req.fragmentId !== 'string') {
+          sendResponse(ws, requestId, false, undefined, 'Invalid remove request')
+          break
+        }
+        // The same function as the desktop's Delete; the 'removed' event tells every view (and every phone).
+        const removed = await deleteFragment(req.fragmentId)
+        sendResponse(ws, requestId, removed, undefined, removed ? undefined : 'Fragment not found')
         break
       }
 
@@ -2014,6 +2096,27 @@ export function broadcastSourcesChanged(): void {
   }, 150)
 }
 onDocumentsChanged(broadcastSourcesChanged)
+
+/** A fragment changed (written by the agent, renamed, pinned) or went away: each phone reads the list
+ *  again, and the one that has it open reloads the page when the revision moved. */
+export function broadcastFragmentsChanged(event: Omit<FragmentsChangedEvent, 'type'>): void {
+  for (const client of clients) {
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'fragments:changed', ...event } satisfies FragmentsChangedEvent))
+  }
+}
+fragmentEvents.on('updated', (event: { fragmentId: string; revision: number }) =>
+  broadcastFragmentsChanged({ fragmentId: event.fragmentId, revision: event.revision }),
+)
+fragmentEvents.on('permission-ask', (event: { fragmentId: string; capability: FragmentCapability }) => {
+  for (const client of clients) {
+    if (!client.authenticated || !receivesSyncEvents(client) || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'fragments:permission-ask', ...event } satisfies FragmentsPermissionAskEvent))
+  }
+})
+fragmentEvents.on('removed', (event: { fragmentId: string }) =>
+  broadcastFragmentsChanged({ fragmentId: event.fragmentId, removed: true }),
+)
 
 /** Same idea as broadcastSessionModels, for the modes active per chat
  *  (research, browser, plan, subagents, orchestration, vision, simple and

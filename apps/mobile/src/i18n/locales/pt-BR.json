@@ -144,7 +144,8 @@
     "sessions": "Sessões",
     "theme": "Tema",
     "pipeline": "Esteira",
-    "newChatInFolder": "Novo chat nesta pasta"
+    "newChatInFolder": "Novo chat nesta pasta",
+    "fragments": "Fragmentos"
   },
   "media": {
     "title": "Mídia",
@@ -2383,5 +2384,55 @@
     "noGit": "Esta pasta não tem git",
     "noGitHint": "Inicie um repositório para acompanhar alterações e commits aqui.",
     "gitInit": "Iniciar repositório"
+  },
+  "fragments": {
+    "title": "Fragmentos",
+    "subtitle": "Páginas que o agente cria com você",
+    "search": "Buscar fragmentos",
+    "emptyTitle": "Nenhum fragmento ainda",
+    "emptyHint": "Peça num chat um acompanhamento, um painel ou uma ferramenta pequena: o agente monta e ele aparece aqui.",
+    "noMatch": "Nenhum fragmento encontrado",
+    "ask": {
+      "ai": "Este fragmento quer usar o seu modelo de IA.",
+      "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela.",
+      "http": "Este fragmento quer acessar a internet: {{what}}.",
+      "mcp": "Este fragmento quer usar suas ferramentas MCP conectadas: {{what}}.",
+      "notify": "Este fragmento quer te enviar avisos."
+    },
+    "askPrefill": "Crie um fragmento que ",
+    "updated": "Atualizado há {{age}}",
+    "justNow": "Atualizado agora",
+    "reload": "Recarregar",
+    "more": "Mais opções",
+    "edit": "Pedir uma mudança ao agente",
+    "notFound": "Este fragmento não existe mais.",
+    "pageError": "Não foi possível abrir este fragmento.",
+    "loadFailed": "Não foi possível carregar: {{error}}",
+    "open": "Abrir",
+    "card": {
+      "created": "Fragmento criado"
+    },
+    "askAllow": "Permitir",
+    "notNow": "Agora não",
+    "askUntrusted": "Este fragmento foi importado e ainda não foi revisado. Revise e permita no desktop.",
+    "permissions": "Permissões",
+    "permissionsEmpty": "Não pediu nenhuma permissão",
+    "desktopOnly": "Só no desktop",
+    "locked": "Importado e não revisado: permita primeiro no desktop.",
+    "cap": {
+      "ai": "Usar seu modelo de IA",
+      "models": "Escolher o modelo dentro da própria tela",
+      "http": "Acessar estes endereços da internet",
+      "mcp": "Usar estas ferramentas MCP conectadas",
+      "notify": "Enviar avisos",
+      "microphone": "Gravar áudio do microfone"
+    },
+    "askNew": "Pedir um fragmento novo",
+    "holdHint": "Segure para mais opções",
+    "delete": "Excluir",
+    "deleteTitle": "Excluir {{name}}?",
+    "deleteBody": "Ele também é excluído no desktop: arquivos, dados salvos e avisos. Isso não pode ser desfeito.",
+    "pin": "Fixar",
+    "unpin": "Desafixar"
   }
 }

@@ -98,7 +98,12 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('lucide-react-native', async () => {
   const React = await import('react')
   const Icon = () => React.createElement('i')
+  // The fragment card draws the icon the agent picked: its whole curated set.
+  const fragmentIcons = Object.fromEntries(
+    'AppWindow BookOpen Calculator Calendar ChartBar ChartLine ChartPie CircleCheck Clock Code CookingPot CreditCard Database Dumbbell FileText Flame Globe GraduationCap Heart House Image Languages ListChecks ListTodo Map Music NotebookPen Orbit PiggyBank Plane Receipt Server ShoppingCart Sparkles Target Timer TrendingUp Trophy Wallet Pin'.split(' ').map((name) => [name, Icon]),
+  )
   return {
+    ...fragmentIcons,
     AlertCircle: Icon,
     Bot: Icon,
     Brain: Icon,

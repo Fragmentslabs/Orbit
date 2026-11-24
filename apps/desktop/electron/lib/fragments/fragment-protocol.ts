@@ -1,6 +1,6 @@
 import { protocol } from 'electron'
 import { FRAGMENT_SCHEME } from '@shared/fragments'
-import { injectArtifactChrome } from '../media'
+import { injectArtifactChrome, injectArtifactTokens } from '../media'
 import { SERVED_TYPES, isFragmentId, readFragmentAsset } from './fragment-store'
 import { injectFragmentSdk } from './fragment-sdk'
 
@@ -16,7 +16,7 @@ import { injectFragmentSdk } from './fragment-sdk'
  * variables the artifacts receive), so a fragment looks like it belongs to the app
  * and follows the light/dark theme.
  */
-const CSP = [
+export const FRAGMENT_CSP = [
   "default-src 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
@@ -29,6 +29,15 @@ const CSP = [
   "frame-src 'none'",
   "object-src 'none'",
 ].join('; ')
+
+/**
+ * The page as the phone's web view gets it: the same SDK and scrollbar as on the desktop, plus the
+ * design tokens — on the desktop the tab hands those to the iframe from outside, and nothing does
+ * that on the phone. The theme still arrives by message (see fragment-phone.ts).
+ */
+export function phoneFragmentHtml(html: string): string {
+  return injectArtifactTokens(injectArtifactChrome(injectFragmentSdk(html)))
+}
 
 function notFound(): Response {
   return new Response('not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
@@ -64,7 +73,7 @@ export async function handleFragmentRequest(request: Request): Promise<Response>
     status: 200,
     headers: {
       'Content-Type': type,
-      'Content-Security-Policy': CSP,
+      'Content-Security-Policy': FRAGMENT_CSP,
       'X-Content-Type-Options': 'nosniff',
       // The files are rewritten in place while the agent edits: no cache.
       'Cache-Control': 'no-store',

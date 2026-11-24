@@ -38,6 +38,7 @@ import { MessageAttachment } from './Attachment'
 import { ImageLightbox } from './ImageLightbox'
 import { AudioPartView, VideoPartView, ArtifactPartView, DocumentPartView } from './parts'
 import { PieceCard } from './pieces/PieceCard'
+import { FragmentCard } from './FragmentCard'
 import { McpProposalCard } from './McpProposalCard'
 import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
@@ -670,6 +671,8 @@ function AssistantImage({ part }: { part: ImagePart }) {
  */
 const SPECIAL_TOOLS = new Set([
   'subagent',
+  // What the agent just made: a card to open it, not a line among the actions.
+  'fragment_create',
   'todowrite',
   'create_skill',
   // MCP connection is a user decision in the card — same as the skill proposal.
@@ -846,6 +849,9 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             // here. One card for the three; what changes is the viewer.
             if (part.piece) {
               return <PieceCard key={part.id} piece={part.piece} />
+            }
+            if (part.tool === 'fragment_create') {
+              return <FragmentCard key={part.id} part={part as ToolPart} />
             }
             if (part.tool === 'subagent') {
               return <SubAgentCard key={part.id} part={part} />

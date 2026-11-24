@@ -28,6 +28,7 @@ import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-syn
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRoutinesStore } from '~/stores/routines-store'
 import { useSourcesStore } from '~/stores/sources-store'
+import { useFragmentsStore } from '~/stores/fragments-store'
 import { usePipelineStore } from '~/stores/pipeline-store'
 import { useLiveStore } from '~/stores/live-store'
 
@@ -184,6 +185,18 @@ export function useCompanion() {
       void useSourcesStore.getState().refresh()
     })
 
+    // fragments:changed → a fragment was written, renamed, pinned or removed on the desktop: the list is
+    // read again, and an open fragment reloads itself when its revision moved
+    const unsubFragments = conn.onEvent('fragments:changed', () => {
+      if (useFragmentsStore.getState().loaded) void useFragmentsStore.getState().refresh()
+    })
+
+    // fragments:permission-ask → a page asked again for something the person has not allowed: its ask comes back
+    const unsubFragmentAsk = conn.onEvent('fragments:permission-ask', (event) => {
+      const msg = event as { fragmentId?: string }
+      if (msg?.fragmentId) useFragmentsStore.getState().noteAsk(msg.fragmentId)
+    })
+
     // session:mode-change → active modes per chat changed on the desktop
     const unsubModes = conn.onEvent('session:mode-change', (event) => {
       const msg = event as { overrides?: SessionModeOverrides }
@@ -257,6 +270,8 @@ export function useCompanion() {
       unsubModels()
       unsubRotation()
       unsubSources()
+      unsubFragments()
+      unsubFragmentAsk()
       unsubModes()
       unsubTools()
       unsubSessionPrefs()

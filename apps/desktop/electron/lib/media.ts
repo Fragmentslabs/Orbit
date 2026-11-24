@@ -999,7 +999,7 @@ const ARTIFACT_TOKENS_MARK = '<!-- orbit-tokens -->'
  * `@layer orbit-tokens`, and a layered declaration loses to an unlayered one — the page
  * that defines its own palette keeps winning, as on the desktop.
  */
-function injectArtifactTokens(html: string): string {
+export function injectArtifactTokens(html: string): string {
   if (html.includes(ARTIFACT_TOKENS_MARK)) return html
   const block = `${ARTIFACT_TOKENS_MARK}\n<style>\n${ARTIFACT_TOKENS_CSS}\n</style>\n`
   const at = [...html.matchAll(/<\/head\s*>/gi)][0]?.index

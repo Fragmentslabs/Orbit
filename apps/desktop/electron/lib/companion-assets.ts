@@ -38,6 +38,11 @@ import { getSlides, resolveSlidesFile } from './slides/slides-store'
 import { readWebImage } from './web-images/store'
 import { resolveFontFile } from './fonts/store'
 import { resolveWorkspaceFile } from './companion-files'
+import { SERVED_TYPES, isFragmentId, readFragmentAsset } from './fragments/fragment-store'
+import { FRAGMENT_CSP, phoneFragmentHtml } from './fragments/fragment-protocol'
+import { FRAGMENT_HOST_CSP, FRAGMENT_HOST_FILE, fragmentHostHtml } from './fragments/fragment-phone'
+import { COVER_FILE_RE, ensureFragmentCover } from './fragments/fragment-cover'
+import { handleFragmentCall } from './fragments/fragment-bridge'
 import { isAssetScope, createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { FONT_SCHEME } from '@shared/media'
 
@@ -104,6 +109,8 @@ interface ResolvedAsset {
   file?: string
   contentType: string
   cache: string
+  /** Extra response headers (the fragment's closed content security policy). */
+  headers?: Record<string, string>
 }
 
 /**
@@ -346,6 +353,43 @@ async function resolveAsset(
       return { file, contentType: contentTypeOf(file), cache: CACHE_REWRITABLE }
     }
 
+    case 'fragment': {
+      if (!isFragmentId(id)) return null
+      // The bare address and the host page: the iframe that holds the fragment (see fragment-phone.ts).
+      if (!relative) return { redirect: FRAGMENT_HOST_FILE, contentType: '', cache: CACHE_REWRITABLE }
+      if (relative === FRAGMENT_HOST_FILE) {
+        return {
+          buffer: Buffer.from(fragmentHostHtml(), 'utf8'),
+          contentType: CONTENT_TYPES['.html'],
+          cache: CACHE_REWRITABLE,
+          headers: { 'Content-Security-Policy': FRAGMENT_HOST_CSP },
+        }
+      }
+      // The picture of the page for the phone's list (taken once per revision and theme, served as an image).
+      const cover = COVER_FILE_RE.exec(relative)
+      if (cover) {
+        const port = base ? new URL(base).port : ''
+        if (!port) return null
+        const theme = cover[1] === 'dark' ? 'dark' : 'light'
+        const url = `http://127.0.0.1:${port}/api/file/fragment/${encodeURIComponent(id)}/${token}/${FRAGMENT_HOST_FILE}`
+        const file = await ensureFragmentCover(id, theme, url)
+        return file ? { file, contentType: 'image/png', cache: 'private, max-age=3600' } : null
+      }
+      let rel: string
+      try {
+        rel = decodeURIComponent(relative)
+      } catch {
+        return null
+      }
+      const asset = await readFragmentAsset(id, rel)
+      if (!asset) return null
+      const contentType = SERVED_TYPES[asset.ext] ?? 'application/octet-stream'
+      // The same closed policy as the desktop's scheme: no network, no CDN. The only way out is `window.orbit`.
+      const headers = { 'Content-Security-Policy': FRAGMENT_CSP, 'X-Content-Type-Options': 'nosniff' }
+      const body = asset.ext === 'html' ? Buffer.from(phoneFragmentHtml(asset.data.toString('utf8')), 'utf8') : asset.data
+      return { ...bufferAsset(body, contentType, base), headers }
+    }
+
     case 'font': {
       const file = resolveFontFile(id)
       if (!file) return null
@@ -359,6 +403,10 @@ async function resolveAsset(
     }
   }
 }
+
+/** The host page's read endpoint while a cover is being taken, and the only methods it answers. */
+const FRAGMENT_CALL_FILE = '__orbit-call'
+const FRAGMENT_COVER_READS: ReadonlySet<string> = new Set(['store.get', 'store.keys'])
 
 /** The `Range` as `<video>`/`<audio>` ask for it: start and end in bytes. */
 function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
@@ -397,6 +445,25 @@ export async function serveAsset(
     return
   }
 
+  // A read the host page makes while the desktop takes the picture of a fragment (see fragment-cover.ts): only
+  // what a preview may do, answered through the same broker, authorized by the signed folder.
+  if (scope === 'fragment' && relative === FRAGMENT_CALL_FILE) {
+    const query = new URL(req.url ?? '', 'http://x').searchParams
+    const method = query.get('m') ?? ''
+    let params: unknown = {}
+    try {
+      params = JSON.parse(query.get('p') ?? '{}')
+    } catch {
+      /* an unreadable params object is an empty one */
+    }
+    const result = FRAGMENT_COVER_READS.has(method)
+      ? await handleFragmentCall({ fragmentId: id, method, params })
+      : { ok: false, error: { code: 'preview', message: 'This is a read-only preview.' } }
+    res.writeHead(200, headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }))
+    res.end(JSON.stringify(result))
+    return
+  }
+
   const base = options.rewriteFonts === false ? null : `http://${req.headers.host ?? 'localhost'}`
   const asset = await resolveAsset(scope, id, relative, base, token)
   if (!asset) {
@@ -420,6 +487,7 @@ export async function serveAsset(
       'Content-Type': asset.contentType,
       'Content-Length': String(asset.buffer.length),
       'Cache-Control': asset.cache,
+      ...(asset.headers ?? {}),
     }))
     res.end(head ? undefined : asset.buffer)
     return
@@ -452,6 +520,7 @@ export async function serveAsset(
     'Content-Type': asset.contentType,
     'Content-Length': String(length),
     'Cache-Control': asset.cache,
+    ...(asset.headers ?? {}),
     ...(range ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
   }))
 

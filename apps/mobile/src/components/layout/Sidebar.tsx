@@ -18,12 +18,12 @@ import {
   BrainCircuit,
   BarChart3,
   Puzzle,
+  LayoutGrid,
   Images,
   Settings,
   LogOut,
   Plus,
   Folder,
-  FolderOpen,
   Loader2,
   Check,
   Square,
@@ -426,8 +426,8 @@ export function Sidebar() {
     { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
     { label: t('sidebar.usage'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.media'), icon: Images, view: 'media' },
+    { label: t('sidebar.fragments'), icon: LayoutGrid, view: 'fragments' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
-    { label: t('sidebar.folders'), icon: FolderOpen, view: 'folders', codeOnly: true },
   ]
 
   const footerItems: NavItem[] = [

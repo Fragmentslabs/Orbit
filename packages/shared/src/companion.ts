@@ -10,6 +10,7 @@ import type { AnalyticsRange, UsageSummaryRequest } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type { MemoryEvent } from './memory'
 import type { CreateWorktreeResult, WorktreeList } from './worktrees'
+import type { FragmentCallResult, FragmentCapability } from './fragments'
 import type { LiveEventMessage } from './live'
 import type {
   NewPipelineInput,
@@ -861,6 +862,82 @@ export interface SetSessionDirectoryRequest {
   directory: string
 }
 
+// --- Fragments on the phone -------------------------------------------------
+
+/** One fragment as the phone lists it. `url` is the signed address of the page that hosts it in the web view. */
+export interface FragmentPhoneEntry {
+  id: string
+  name: string
+  /** Lucide icon name, kebab-case. */
+  icon: string
+  /** Fixed at the top of the list (the same flag on the desktop and on the phone, no mark on the card). */
+  pinned: boolean
+  revision: number
+  updatedAt: number
+  requests: FragmentCapability[]
+  grants: FragmentCapability[]
+  /** What `http` would reach, and which MCP tools `mcp` would use: the person reads it before allowing. */
+  hosts: string[]
+  mcp: { server: string; tools: string[] }[]
+  /** Imported and never reviewed: it cannot be granted anything until it is (turning off is always fine). */
+  untrusted: boolean
+  /** The chat that builds it, when there is one. */
+  sessionId?: string
+  url: string
+}
+
+export interface FragmentsListRequest {
+  type: 'fragments:list'
+}
+
+/** A `window.orbit` call of a fragment shown on the phone. The desktop's broker decides: the same
+ *  declared-and-granted rule, the same budgets. The phone never grants anything. */
+export interface FragmentsCallRequest {
+  type: 'fragments:call'
+  fragmentId: string
+  method: string
+  params?: unknown
+}
+
+export type FragmentsCallResponse = FragmentCallResult
+
+/** The person's click on "Allow" (or the switch turned off): the same rules as the desktop's, because it is the
+ *  same function there. `granted` is what the fragment holds afterwards; an untrusted import stays refused. */
+export interface FragmentsGrantRequest {
+  type: 'fragments:grant'
+  fragmentId: string
+  capability: FragmentCapability
+  on: boolean
+}
+
+/** The page asked again for a capability the person has not allowed: the ask comes back on the phone too. */
+export interface FragmentsPermissionAskEvent {
+  type: 'fragments:permission-ask'
+  fragmentId: string
+  capability: FragmentCapability
+}
+
+/** Fixes the fragment at the top of the list, or lets it go: one flag, the same on the desktop and on the phone. */
+export interface FragmentsPinRequest {
+  type: 'fragments:pin'
+  fragmentId: string
+  pinned: boolean
+}
+
+/** Deletes the fragment (the person's choice, after confirming on the phone): its files, data and notifications. */
+export interface FragmentsRemoveRequest {
+  type: 'fragments:remove'
+  fragmentId: string
+}
+
+/** A fragment was created, rewritten, renamed or removed on the desktop: the phone reads again. */
+export interface FragmentsChangedEvent {
+  type: 'fragments:changed'
+  fragmentId: string
+  revision?: number
+  removed?: boolean
+}
+
 export interface RevertSessionRequest {
   type: 'sessions:revert'
   sessionId: string
@@ -1204,6 +1281,11 @@ export type CompanionRequest =
   | GitInitRequest
   | GitPullRequest
   | GitPushRequest
+  | FragmentsListRequest
+  | FragmentsCallRequest
+  | FragmentsPinRequest
+  | FragmentsRemoveRequest
+  | FragmentsGrantRequest
   | WorktreeListRequest
   | WorktreeCreateRequest
   | WorktreeRemoveRequest
@@ -1369,6 +1451,8 @@ export type CompanionEvent =
   | SessionPrefsChangeEvent
   | RotationChangeEvent
   | SourcesChangedEvent
+  | FragmentsChangedEvent
+  | FragmentsPermissionAskEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent
   | MessageQueueChangeEvent

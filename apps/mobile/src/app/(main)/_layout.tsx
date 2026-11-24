@@ -39,6 +39,9 @@ export default function MainLayout() {
               <Stack.Screen name="files/index" />
               <Stack.Screen name="files/view" />
 
+              <Stack.Screen name="fragments/index" />
+              <Stack.Screen name="fragments/[id]" />
+
               <Stack.Screen name="routines/index" />
               <Stack.Screen name="routines/new" />
               <Stack.Screen name="routines/[id]" />

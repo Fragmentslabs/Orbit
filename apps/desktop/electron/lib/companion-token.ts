@@ -74,6 +74,8 @@ export type AssetScope =
   | 'font'
   /** A file of a session's working folder (`id` = encoded root + relative path). */
   | 'workspace'
+  /** A fragment: its files and the page that hosts it in the phone's web view. */
+  | 'fragment'
 
 const SCOPES: readonly AssetScope[] = [
   'media',
@@ -86,6 +88,7 @@ const SCOPES: readonly AssetScope[] = [
   'web',
   'font',
   'workspace',
+  'fragment',
 ]
 
 export function isAssetScope(value: string): value is AssetScope {

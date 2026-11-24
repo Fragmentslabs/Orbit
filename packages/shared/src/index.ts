@@ -43,3 +43,6 @@ export * from './voice-call'
 export * from './start-suggestions'
 export * from './welcome-title'
 export * from './worktrees'
+// Only what the phone needs of the fragments: the rest is the desktop's.
+export { FRAGMENT_CAPABILITIES, FRAGMENT_PHONE_HOST_FILE } from './fragments'
+export type { FragmentCallResult, FragmentCapability } from './fragments'

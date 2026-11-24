@@ -6,17 +6,17 @@ import type {
   FragmentPermissionAskEvent,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
-import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { handleFragmentCall } from './fragment-bridge'
+import { deleteFragment } from './fragment-delete'
+import { grantFragmentCapability } from './fragment-grant'
 import { getFragmentData, getFragmentDetails } from './fragment-details'
 import {
-  cancelAllFor,
   cancelNotification,
   listNotifications,
   startFragmentNotifications,
 } from './fragment-notify'
 import { listRevisions, revertToBefore } from './fragment-history'
-import { getProvenance, isFragmentUntrusted } from './fragment-provenance'
+import { getProvenance } from './fragment-provenance'
 import { registerFragmentShareIpc } from './share/fragment-share-ipc'
 import {
   appendFragmentLog,
@@ -24,8 +24,6 @@ import {
   getFragment,
   isFragmentId,
   listFragments,
-  removeFragment,
-  setGrant,
   updateFragmentMeta,
 } from './fragment-store'
 
@@ -48,6 +46,9 @@ export function registerFragmentIpc(): void {
   fragmentEvents.on('permission-ask', (event: FragmentPermissionAskEvent) =>
     sendToWindows('fragment:permission-ask', event),
   )
+
+  // A fragment went away (from the desktop or from a phone): every open window drops it.
+  fragmentEvents.on('removed', (event: { fragmentId: string }) => sendToWindows('fragment:removed', event))
 
   registerFragmentShareIpc()
   // Notifications scheduled by fragments tick while Orbit is open, mounted or not.
@@ -79,20 +80,8 @@ export function registerFragmentIpc(): void {
   )
   ipcMain.handle('fragment:call', (_event, input: FragmentCallInput) => handleFragmentCall(input))
 
-  // The ONLY place a capability is granted: a click of the user in the tab.
-  ipcMain.handle('fragment:grant', async (_event, id: string, capability: string, on: boolean) => {
-    if (!isFragmentId(id)) return null
-    const cap = FRAGMENT_CAPABILITIES.find((c) => c === capability)
-    if (!cap) return null
-    // An imported fragment nobody reviewed cannot be granted anything yet (turning off is always fine).
-    if (on === true && (await isFragmentUntrusted(id))) return null
-    const manifest = await setGrant(id, cap, on === true)
-    // Revoking "notify" cancels what the fragment had scheduled: the permission takes its
-    // consequences with it, instead of leaving reminders the page can no longer manage.
-    if (manifest && cap === 'notify' && on === false) await cancelAllFor(id)
-    if (manifest) sendToWindows('fragment:updated', { fragmentId: id, revision: manifest.revision } satisfies FragmentUpdatedEvent)
-    return manifest
-  })
+  // The ONLY place a capability is granted: a click of the user (see fragment-grant.ts, which the phone uses too).
+  ipcMain.handle('fragment:grant', (_event, id: string, capability: string, on: boolean) => grantFragmentCapability(id, capability, on))
 
   // Name, pins, model and the editing chat: the person's choices, never the agent's.
   ipcMain.handle('fragment:update', (_event, id: string, patch: FragmentMetaPatch) => {
@@ -100,14 +89,7 @@ export function registerFragmentIpc(): void {
     return updateFragmentMeta(id, patch)
   })
 
-  ipcMain.handle('fragment:remove', async (_event, id: string) => {
-    const removed = await removeFragment(id)
-    if (removed) {
-      await cancelAllFor(id)
-      sendToWindows('fragment:removed', { fragmentId: id })
-    }
-    return removed
-  })
+  ipcMain.handle('fragment:remove', (_event, id: string) => deleteFragment(id))
 
   // The notifications this fragment scheduled (the details panel lists them; the page reads them too).
   ipcMain.handle('fragment:notifications', (_event, id: string) =>
