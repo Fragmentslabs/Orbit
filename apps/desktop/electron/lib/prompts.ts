@@ -18,6 +18,7 @@ import { buildSkillIndex, flatten, skillIndexLine, type SkillEntry } from './ski
 import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
 import { overlayOpenContext, overlayOpenContextLine } from './overlay/open-context'
+import { panelContextLine } from './panel-state'
 import { folderInMainRepository } from './worktrees/main'
 import { conversationOriginBlock } from './subchats'
 import { readJson } from './storage'
@@ -1122,6 +1123,13 @@ export async function buildPromptSections(
     parts.push(OVERLAY_INSTRUCTION)
     const opened = overlayOpenContextLine(overlayOpenContext())
     if (opened) parts.push(opened)
+  }
+  into('panel')
+  // What is open on screen, for every chat (not only a design or a motion one): the line is empty
+  // when nothing is open, and a worker has no screen to talk about.
+  if (input.orchestrationRole !== 'worker') {
+    const open = panelContextLine(input.sessionId)
+    if (open) parts.push(open)
   }
   into('audio')
   // Audio: only whoever talks to the user needs to explain a disabled feature.

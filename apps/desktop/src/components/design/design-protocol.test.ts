@@ -301,4 +301,16 @@ describe("stepOrder", () => {
     expect(stepOrder(3, 0, "up")).toBeNull()
     expect(stepOrder(3, 2, "down")).toBeNull()
   })
+
+  it("tells the model the whole canvas was pointed at, with its artboards", () => {
+    const text = formatDesignQuoteText(
+      { kind: "design", name: "logo", path: "/p/design/logo", file: "", scope: "canvas", boards: ['Main.html ("Home")', "Menu.html"] },
+      "make them all dark",
+    )
+    expect(text).toContain('Design canvas referenced by the user — canvas "logo"')
+    expect(text).toContain('Artboards: Main.html ("Home"); Menu.html')
+    expect(text).toContain("the whole canvas")
+    expect(text).toContain("make them all dark")
+    expect(text).not.toContain("artboard ,")
+  })
 })

@@ -51,4 +51,6 @@ export interface PanelSnapshot {
   activeTabId: string | null
   tabs: PanelSnapshotTab[]
   updatedAt: number
+  /** This is the panel on screen right now (the chat being looked at, or the draft before it has one). */
+  onScreen?: boolean
 }

@@ -137,7 +137,11 @@ export interface DesignQuote {
   kind: "design"
   name: string
   path?: string
+  /** Artboard file; empty when the quote is the whole canvas. */
   file: string
+  /** `canvas` = the whole canvas was pointed at (see DesignQuotePayload). */
+  scope?: "canvas"
+  boards?: string[]
   boardTitle?: string
   elementPath?: number[]
   tag?: string
@@ -1081,6 +1085,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           q.kind === "design" &&
           q.name === quote.name &&
           q.file === quote.file &&
+          q.scope === quote.scope &&
           (q.elementPath ?? []).join(">") === (quote.elementPath ?? []).join(">")
         // The same widget pointed at again replaces its previous chip instead of stacking
         // two identical requests.
@@ -1298,10 +1303,11 @@ function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): v
       memoryId: t.memoryId,
       routineId: t.routineId,
     }))
-    const key = JSON.stringify({ activeTabId, snapshotTabs })
+    const onScreen = sessionId === state.uiBucket
+    const key = JSON.stringify({ activeTabId, snapshotTabs, onScreen })
     if (lastPanelSnapshots.get(sessionId) === key) continue
     lastPanelSnapshots.set(sessionId, key)
-    const snapshot: PanelSnapshot = { sessionId, activeTabId, tabs: snapshotTabs, updatedAt: Date.now() }
+    const snapshot: PanelSnapshot = { sessionId, activeTabId, tabs: snapshotTabs, updatedAt: Date.now(), onScreen }
     // The store is also imported in tests (node, without DOM): without a renderer, without
     // a snapshot — and that is fine, the tool only answers what arrived.
     if (typeof window === 'undefined') return

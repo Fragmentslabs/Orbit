@@ -172,7 +172,10 @@ export async function registerDesign(
 ): Promise<{ id: string; url: string; created: boolean }> {
   const dir = path.resolve(folder)
   const entries = await load()
-  const id = designIdFor(dir)
+  // An entry healed to this folder keeps the id it was born with (see healDesignFolder), so the
+  // folder's own id may not be the one on record: look for the folder first.
+  const sameFolder = Object.entries(entries).find(([, entry]) => path.resolve(entry.folder).toLowerCase() === dir.toLowerCase())
+  const id = sameFolder?.[0] ?? designIdFor(dir)
   const existing = entries[id]
   if (existing) {
     let changed = false
@@ -214,6 +217,53 @@ export async function unregisterDesign(id: string): Promise<void> {
   delete entries[id]
   await persist()
   unwatchDesign(id)
+}
+
+/**
+ * Where a canvas that lived in Orbit's own storage would be NOW: the registry stores absolute
+ * paths, so a profile that moved (another user-data folder, a restored backup, a renamed app)
+ * leaves every entry pointing at the old location while the folders sit under the new one.
+ * Pure: the caller checks that the candidate exists. null = the path was never in the storage.
+ */
+export function relocatedUnderStorage(oldFolder: string, storageRoot: string): string | null {
+  const normalized = oldFolder.replace(/\\/g, '/')
+  const marker = '/orbit-data/design/'
+  const at = normalized.lastIndexOf(marker)
+  if (at < 0) return null
+  const rest = normalized.slice(at + marker.length).split('/').filter(Boolean)
+  if (rest.length === 0 || rest.includes('..')) return null
+  const candidate = path.resolve(storageRoot, ...rest)
+  return candidate === path.resolve(oldFolder) ? null : candidate
+}
+
+async function isDirectory(target: string): Promise<boolean> {
+  return (await fsp.stat(target).catch(() => null))?.isDirectory() ?? false
+}
+
+/**
+ * The canvas folder is gone from where the registry says: when it moved with Orbit's storage,
+ * point the entry at the new place (keeping its id, so tabs and gallery tiles stay valid).
+ * Returns whether the canvas folder exists afterwards.
+ */
+export async function healDesignFolder(id: string): Promise<boolean> {
+  const entry = await getDesign(id)
+  if (!entry) return false
+  if (await isDirectory(entry.folder)) return true
+  const moved = relocatedUnderStorage(entry.folder, chatDesignsRoot())
+  if (!moved || !(await isDirectory(moved))) return false
+  entry.folder = moved
+  await persist()
+  unwatchDesign(id)
+  watchDesign(id, moved)
+  notifyChanged(id, null)
+  return true
+}
+
+/** What the tab shows when the canvas cannot be read: says WHICH folder the registry points at,
+ *  because "404" alone leaves nobody knowing whether the file, the folder or the entry is gone. */
+async function missingMessage(folder: string): Promise<string> {
+  if (await isDirectory(folder)) return 'file moved or deleted'
+  return `The folder of this design no longer exists: ${folder}. It was deleted, moved or restored from a backup, and Orbit's list still points there.`
 }
 
 /** Canvas folders that Orbit itself keeps (chat mode) — deletable without
@@ -566,6 +616,7 @@ export function registerDesignProtocol(): void {
       }
       return (await fetchRemoteAsset('design', id, rel, request)) ?? respond('not found', 'text/plain; charset=utf-8', 404)
     }
+    if (!(await isDirectory(entry.folder))) await healDesignFolder(id)
     const file = resolveDesignFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)
     const ext = path.extname(file).toLowerCase()
@@ -576,7 +627,7 @@ export function registerDesignProtocol(): void {
       // Orbit's font library goes into EVERY artboard (see
       // injectDesignRuntime): the installed family is used by name.
       const artboard = await injectedDocument(file, await allFontFacesCss())
-      if (!artboard) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
+      if (!artboard) return respond(await missingMessage(entry.folder), 'text/plain; charset=utf-8', 404)
       // `no-cache` = may store, but always revalidates: the canvas is edited with the
       // tab open and serving the old version would look like the reload is not working.
       // With the ETag of the injected document, a remount without changes becomes a 304.
@@ -588,7 +639,7 @@ export function registerDesignProtocol(): void {
       .stat(file)
       .then((stat) => (stat.isFile() ? stat.size : null))
       .catch(() => null)
-    if (size === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
+    if (size === null) return respond(await missingMessage(entry.folder), 'text/plain; charset=utf-8', 404)
     const stream = Readable.toWeb(fs.createReadStream(file)) as unknown as ReadableStream
     return respond(size > 0 ? stream : new Uint8Array(0), type, 200, { 'Content-Length': String(size) })
   })

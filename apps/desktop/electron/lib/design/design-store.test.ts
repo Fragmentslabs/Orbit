@@ -34,7 +34,9 @@ const {
   designIdForName,
   designIdForPath,
   getDesign,
+  healDesignFolder,
   readDesignBoard,
+  relocatedUnderStorage,
   registerDesign,
   registerDesignProtocol,
   removeDesignBoard,
@@ -305,5 +307,46 @@ describe('watcher', () => {
 
     const payload = sent.find((item) => item.id === id)
     expect(payload?.files).toContain('Main.html')
+  })
+})
+
+describe('a canvas whose folder is not where the registry says', () => {
+  const storage = path.join(tempRoot, 'orbit-data', 'design')
+
+  it('finds the new location of a canvas that lived in the storage of another profile', () => {
+    expect(relocatedUnderStorage('/Users/old/Library/Application Support/Orbit/orbit-data/design/s1/logo', storage)).toBe(
+      path.resolve(storage, 's1', 'logo'),
+    )
+    expect(relocatedUnderStorage('C:\\Users\\old\\AppData\\orbit-data\\design\\s1\\logo', storage)).toBe(
+      path.resolve(storage, 's1', 'logo'),
+    )
+    // Never in the storage (a project folder), or already there, or trying to climb out of it.
+    expect(relocatedUnderStorage('/Users/me/project/design/logo', storage)).toBeNull()
+    expect(relocatedUnderStorage(path.join(storage, 's1', 'logo'), storage)).toBeNull()
+    expect(relocatedUnderStorage('/x/orbit-data/design/../../etc', storage)).toBeNull()
+  })
+
+  it('points the entry at the folder that moved, keeping its id and answering the scheme', async () => {
+    const real = path.join(storage, 's9', 'moved')
+    await mkdir(real, { recursive: true })
+    await writeFile(path.join(real, 'canvas.json'), '{"v":1,"boards":{},"order":[]}', 'utf8')
+    const old = path.join(tempRoot, 'old-profile', 'orbit-data', 'design', 's9', 'moved')
+    const { id } = await registerDesign(old, { sessionId: 's9' })
+
+    const handler = registered.handlers.get('orbit-design')
+    const res = await handler!(new Request(`orbit-design://${id}/canvas.json`))
+    expect(res.status).toBe(200)
+    expect((await getDesign(id))?.folder).toBe(path.resolve(real))
+    // Registering the real folder now reuses the entry instead of making a second one.
+    expect((await registerDesign(real)).id).toBe(id)
+  })
+
+  it('says which folder is gone when nothing can be found', async () => {
+    const gone = path.join(tempRoot, 'projects', 'design', 'vanished')
+    const { id } = await registerDesign(gone)
+    expect(await healDesignFolder(id)).toBe(false)
+    const res = await registered.handlers.get('orbit-design')!(new Request(`orbit-design://${id}/canvas.json`))
+    expect(res.status).toBe(404)
+    expect(await res.text()).toContain(path.resolve(gone))
   })
 })

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { panelDesignPreview } from '../panel-browser'
 import { readDesignCanvas } from './design-canvas'
 import { refreshDesignCover } from './design-gallery'
-import { getDesign, registerDesign } from './design-store'
+import { getDesign, healDesignFolder, registerDesign } from './design-store'
 
 /**
  * Reopens a canvas that is ALREADY in the registry — the chat card, the Media tile.
@@ -13,8 +13,12 @@ import { getDesign, registerDesign } from './design-store'
 export async function reopenDesign(id: string): Promise<boolean> {
   const entry = await getDesign(id)
   if (!entry) return false
-  await registerDesign(entry.folder, {}).catch(() => {})
-  panelDesignPreview({ id, title: path.basename(entry.folder), path: entry.folder })
+  // A folder that moved with Orbit's storage is found again; one that is really gone still opens
+  // the tab, which then says which folder is missing (a silent no-op would look like a dead click).
+  await healDesignFolder(id).catch(() => false)
+  const folder = (await getDesign(id))?.folder ?? entry.folder
+  await registerDesign(folder, {}).catch(() => {})
+  panelDesignPreview({ id, title: path.basename(folder), path: folder })
   return true
 }
 

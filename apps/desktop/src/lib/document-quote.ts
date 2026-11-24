@@ -29,6 +29,7 @@ const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 export function quoteChipLabel(quote: PanelQuote): string {
   if (quote.kind === "widget") return `Widget · ${quote.name} · ${quote.size}`
   if (quote.kind === "design") {
+    if (quote.scope === "canvas") return `Design · ${quote.name} · canvas`
     const what = quote.elementPath?.length ? `<${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""}` : (quote.boardTitle ?? quote.file)
     return `Design · ${quote.file} · ${what}`
   }
@@ -46,7 +47,7 @@ export function quoteChipLabel(quote: PanelQuote): string {
  *  composition path — what the person needs to know WHAT is attached. */
 export function quoteChipTitle(quote: PanelQuote): string {
   if (quote.kind === "widget") return quote.fragmentName ? `${quote.name} — ${quote.fragmentName}` : quote.name
-  if (quote.kind === "design") return quote.text || quote.html || quote.file
+  if (quote.kind === "design") return quote.text || quote.html || quote.file || quote.name
   return quote.kind === "motion" ? quote.file : quote.text
 }
 
@@ -70,6 +71,8 @@ function quotePayload(quote: PanelQuote): QuotePayload {
       kind: "design",
       name: quote.name,
       file: quote.file,
+      ...(quote.scope ? { scope: quote.scope } : {}),
+      ...(quote.boards?.length ? { boards: quote.boards } : {}),
       ...(quote.path ? { path: quote.path } : {}),
       ...(quote.boardTitle ? { boardTitle: quote.boardTitle } : {}),
       ...(quote.elementPath?.length ? { elementPath: quote.elementPath } : {}),

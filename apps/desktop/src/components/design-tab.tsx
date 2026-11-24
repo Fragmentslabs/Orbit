@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  AtSign,
   Code2,
   Copy,
   ClipboardPaste,
@@ -460,8 +461,12 @@ function DesignEditor({
   const load = useCallback(() => {
     if (!designId) return
     fetch(`${DESIGN_SCHEME}://${designId}/canvas.json?r=${Date.now()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          // The scheme says WHY (which folder is gone); a bare status says nothing.
+          const reason = (await res.text().catch(() => "")).trim()
+          throw new Error(reason && reason.length < 400 ? reason : `HTTP ${res.status}`)
+        }
         return res.json() as Promise<DesignCanvasFile>
       })
       .then((canvas) => {
@@ -1119,6 +1124,27 @@ function DesignEditor({
         : {}),
     })
   }, [addQuote, info, path, title])
+
+  /** Right click → "Reference in chat" on an artboard: the whole artboard, no element. */
+  const referenceFrame = useCallback(
+    (file: string) => {
+      const board = boardsRef.current.find((b) => b.file === file)
+      addQuote({ kind: "design", name: title, ...(path ? { path } : {}), file, ...(board?.title ? { boardTitle: board.title } : {}) })
+    },
+    [addQuote, path, title],
+  )
+
+  /** Right click on the empty canvas → "Reference the canvas": every artboard, as one thing. */
+  const referenceCanvas = useCallback(() => {
+    addQuote({
+      kind: "design",
+      name: title,
+      ...(path ? { path } : {}),
+      file: "",
+      scope: "canvas",
+      boards: boardsRef.current.slice(0, 40).map((b) => (b.title ? `${b.file} ("${b.title}")` : b.file)),
+    })
+  }, [addQuote, path, title])
 
   // --------------------------------------------- messages from the bridge
   const blurInspector = useCallback(() => {
@@ -2496,11 +2522,17 @@ function DesignEditor({
   const contextItems = (m: { scope: "element" | "frame" | "canvas"; file: string; at?: { x: number; y: number } }): DesignMenuItem[] => {
     const canPaste = sharedClip !== null
     if (m.scope === "canvas") {
-      return [{ label: t("design.ctx.pasteHere"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste(m.at) }]
+      return [
+        { label: t("design.ctx.referenceCanvas"), icon: AtSign, onSelect: referenceCanvas },
+        { separator: true },
+        { label: t("design.ctx.pasteHere"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste(m.at) },
+      ]
     }
     if (m.scope === "frame") {
       const frameHidden = hiddenBoards.has(m.file)
       return [
+        { label: t("design.ctx.referenceFrame"), icon: AtSign, onSelect: () => referenceFrame(m.file) },
+        { separator: true },
         { label: t("design.ctx.copyFrame"), icon: Copy, shortcut: `${mod}C`, onSelect: () => void copySelected() },
         { label: t("design.ctx.paste"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste() },
         { separator: true },
@@ -2531,6 +2563,8 @@ function DesignEditor({
     const isHidden = Boolean(sel?.path && nodeAt(selTree, sel.path)?.hidden)
     const hasEl = Boolean(sel?.path && sel.path.length > 0)
     return [
+      { label: t("design.ctx.referenceElement"), icon: AtSign, disabled: !hasEl, onSelect: comment },
+      { separator: true },
       { label: t("design.ctx.copy"), icon: Copy, shortcut: `${mod}C`, disabled: !hasEl, onSelect: () => void copySelected() },
       { label: t("design.ctx.cut"), icon: Scissors, shortcut: `${mod}X`, disabled: !hasEl, onSelect: () => void cutSelected() },
       { label: t("design.ctx.paste"), icon: ClipboardPaste, shortcut: `${mod}V`, disabled: !canPaste, onSelect: () => void paste() },
