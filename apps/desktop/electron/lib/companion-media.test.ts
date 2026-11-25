@@ -206,7 +206,8 @@ describe('rewriteMessage / rewriteMessages', () => {
 
 describe('piece tools without an id in the result', () => {
   const tool = (over: Record<string, unknown>) =>
-    ({ id: 'p1', type: 'tool', state: 'completed', ...over }) as MessagePart
+    // `tool` is required by ToolPart (every case below overrides it) and 'done' is the finished state.
+    ({ id: 'p1', type: 'tool', tool: '', state: 'done', ...over }) as MessagePart
 
   it('reads what the call addresses: the report name, the title or the path', () => {
     const lookup = (part: MessagePart) => (part.type === 'tool' ? pieceLookupOf(part) : null)
