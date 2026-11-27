@@ -18,7 +18,7 @@ vi.mock("@/src/stores/provider-store", () => ({
 }))
 vi.mock("@/src/stores/model-rotation-store", () => ({ useModelRotationStore: { getState: () => ({}) } }))
 
-const { inheritSessionConfig } = await import("./inherit-session-config")
+const { captureSessionConfig, inheritSessionConfig } = await import("./inherit-session-config")
 const { useSessionModelPrefs, sessionModelFor } = await import("./session-model-prefs")
 const { useSessionReasoning, sessionReasoningFor } = await import("./session-reasoning")
 const { usePermissionPrefs, permissionFor } = await import("./permission-prefs")
@@ -59,5 +59,28 @@ describe("inheritSessionConfig (/init and forks)", () => {
     inheritSessionConfig("s_origem", "s_init")
     useSessionModelPrefs.getState().selectModel("s_init", "anthropic", "opus")
     expect(sessionModelFor("s_origem")).toEqual({ providerId: "deepseek", modelId: "v4-pro" })
+  })
+
+  it("a draft that follows the last chat keeps that model when /init opens its chat (captured before the session exists)", () => {
+    // The last chat used Y; the new chat of a new project has no choice of its own and SHOWS Y.
+    sessions.list = [{ id: "s_ultimo", updatedAt: 10 }]
+    useSessionModelPrefs.getState().selectModel("s_ultimo", "deepseek", "v4-pro")
+    useSessionReasoning.getState().setPref("s_ultimo", { enabled: true, variantId: "high" })
+    expect(sessionModelFor(undefined)).toEqual({ providerId: "deepseek", modelId: "v4-pro" })
+
+    const inherit = captureSessionConfig(undefined)
+    // Creating the session makes IT the most recent chat, with no choice of its own.
+    sessions.list = [{ id: "s_init", updatedAt: 20 }, { id: "s_ultimo", updatedAt: 10 }]
+    inherit("s_init")
+    expect(sessionModelFor("s_init")).toEqual({ providerId: "deepseek", modelId: "v4-pro" })
+    expect(sessionReasoningFor("s_init", "deepseek", "v4-pro")).toEqual({ enabled: true, variantId: "high" })
+  })
+
+  it("reading AFTER the session exists is what used to give the global default", () => {
+    sessions.list = [{ id: "s_ultimo", updatedAt: 10 }]
+    useSessionModelPrefs.getState().selectModel("s_ultimo", "deepseek", "v4-pro")
+    sessions.list = [{ id: "s_init", updatedAt: 20 }, { id: "s_ultimo", updatedAt: 10 }]
+    inheritSessionConfig(undefined, "s_init")
+    expect(sessionModelFor("s_init")).toEqual({ providerId: "default-provider", modelId: "default-model" })
   })
 })
